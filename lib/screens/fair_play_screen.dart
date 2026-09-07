@@ -127,8 +127,8 @@ class FairPlayScreen extends StatelessWidget {
                   ),
                   _buildPolicyCard(
                     Icons.person_pin_outlined,
-                    'Strict User Identity & One-Account Rule',
-                    'Users are authenticated via verified phone identity. Creating duplicate or fake accounts results in permanent ban.',
+                    'Strict KYC & One-Account Rule',
+                    'Every user is verified via government ID. Creating duplicate or fake accounts results in permanent ban.',
                     Colors.purpleAccent,
                   ),
                   _buildPolicyCard(

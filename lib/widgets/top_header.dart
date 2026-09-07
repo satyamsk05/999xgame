@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/api_service.dart';
 import '../theme/app_colors.dart';
+import 'shimmer_loading.dart';
 
 class TopHeader extends StatelessWidget {
   final String username;
@@ -10,19 +12,53 @@ class TopHeader extends StatelessWidget {
   final String avatarPath;
   final VoidCallback onAddMoneyPressed;
   final VoidCallback onProfilePressed;
+  final bool isLoading;
 
   const TopHeader({
     super.key,
-    this.username = 'Player',
+    this.username = 'Ashu K',
     this.userTag = 'Profile',
-    this.balance = 0.0,
-    this.avatarPath = 'assets/avatar/avatar_1.png',
+    this.balance = 1250.0,
+    this.avatarPath = '/avatars/avatar_1.png',
     required this.onAddMoneyPressed,
     required this.onProfilePressed,
+    this.isLoading = false,
   });
+
+  static String _cleanPath(String? p) {
+    if (p == null || p.isEmpty) return '/avatars/avatar_1.png';
+    return p;
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return Container(
+        padding: const EdgeInsets.only(top: 18.0, bottom: 12.0, left: 16.0, right: 16.0),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            ShimmerBox(width: 58, height: 58, borderRadius: 29),
+            SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ShimmerBox(width: 110, height: 16, borderRadius: 8),
+                  SizedBox(height: 6),
+                  ShimmerBox(width: 60, height: 14, borderRadius: 6),
+                ],
+              ),
+            ),
+            ShimmerBox(width: 135, height: 42, borderRadius: 12),
+          ],
+        ),
+      );
+    }
+
+    final cleanAvatarPath = _cleanPath(avatarPath);
+
     return Container(
       padding: const EdgeInsets.only(top: 18.0, bottom: 12.0, left: 16.0, right: 16.0),
       child: Row(
@@ -50,19 +86,7 @@ class TopHeader extends StatelessWidget {
                 ],
               ),
               child: ClipOval(
-                child: Image.asset(
-                  avatarPath,
-                  width: 60,
-                  height: 60,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Center(
-                    child: Icon(
-                      Icons.person,
-                      size: 38,
-                      color: Colors.purple.shade900,
-                    ),
-                  ),
-                ),
+                child: _buildAvatarWithCandidates(cleanAvatarPath),
               ),
             ),
           ),
@@ -156,7 +180,7 @@ class TopHeader extends StatelessWidget {
                   children: [
                     // Left Wallet Icon
                     SvgPicture.asset(
-                      'assets/nav_icon/wallet.svg',
+                      'Assets/nav_icon/wallet.svg',
                       width: 22,
                       height: 22,
                       colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
@@ -203,4 +227,37 @@ class TopHeader extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildAvatarWithCandidates(String primaryPath) {
+    if (primaryPath.startsWith('http://') || primaryPath.startsWith('https://') || primaryPath.startsWith('/')) {
+      final fullUrl = primaryPath.startsWith('/') ? '${ApiService.serverDomain}$primaryPath' : primaryPath;
+      return Image.network(
+        fullUrl,
+        width: 60,
+        height: 60,
+        fit: BoxFit.cover,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) return child;
+          return const ShimmerBox(width: 60, height: 60, borderRadius: 30);
+        },
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: AppColors.avatarBg,
+          child: const Icon(Icons.person, color: Colors.white70, size: 36),
+        ),
+      );
+    }
+
+    final fileName = primaryPath.split('/').last.isEmpty ? 'avatar_1.png' : primaryPath.split('/').last;
+    return Image.asset(
+      'Assets/Avatar/$fileName',
+      width: 60,
+      height: 60,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Container(
+        color: AppColors.avatarBg,
+        child: const Icon(Icons.person, color: Colors.white70, size: 36),
+      ),
+    );
+  }
+
 }

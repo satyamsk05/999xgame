@@ -83,20 +83,58 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-app.get('/api/banners', (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    data: [
-      { id: 'b1', title: 'Welcome Bonus ₹500', imageUrl: 'assets/banners/banner_1.png' },
-      { id: 'b2', title: '7 Up Down Leaderboard', imageUrl: 'assets/banners/banner_2.png' },
-    ],
-  });
+app.get('/api/banners', async (req, res) => {
+  try {
+    const dbRes = await query(`SELECT * FROM promotions WHERE status = 'ACTIVE' ORDER BY created_at DESC`);
+    const banners = dbRes.rows.map((row) => ({
+      id: row.id,
+      tag: row.tag || 'DEPOSIT',
+      title: row.title,
+      subtitle: row.subtitle || 'DEPOSIT -> GET BONUS',
+      buttonText: row.button_text || 'DEPOSIT NOW',
+      imageUrl: row.image_url || '/banners/deposit_banner.png',
+      targetScreen: row.target_screen || '/add-cash',
+    }));
+
+    return res.status(200).json({
+      status: 'success',
+      data: banners.length > 0 ? banners : [
+        {
+          id: 'promo_default_180',
+          tag: 'DEPOSIT',
+          title: 'DEPOSIT BONUS\n180% BONUS',
+          subtitle: 'DEPOSIT -> GET BONUS',
+          buttonText: 'DEPOSIT NOW',
+          imageUrl: '/banners/deposit_banner.png',
+          targetScreen: '/add-cash',
+        },
+      ],
+    });
+  } catch (err) {
+    return res.status(200).json({
+      status: 'success',
+      data: [
+        {
+          id: 'promo_default_180',
+          tag: 'DEPOSIT',
+          title: 'DEPOSIT BONUS\n180% BONUS',
+          subtitle: 'DEPOSIT -> GET BONUS',
+          buttonText: 'DEPOSIT NOW',
+          imageUrl: '/banners/deposit_banner.png',
+          targetScreen: '/add-cash',
+        },
+      ],
+    });
+  }
 });
+
 
 // Mount Controllers
 app.use('/api/auth', authController);
 app.use('/api/user', userController);
+app.use('/api/app', userController);
 app.use('/api/games', gameController);
+
 app.use('/api/wallet', walletController);
 app.use('/api/deposits', depositController);
 app.use('/api/admin/deposits', adminDepositController);

@@ -27,11 +27,14 @@ io.on('connection', (socket) => {
   });
 });
 
+const { startScheduler } = require('../games/seven-up-down/seven_up_down.scheduler');
+
 server.listen(config.port, () => {
   logger.info(`Ingames Backend Server running on port ${config.port}`, {
     env: config.nodeEnv,
     port: config.port,
   });
+  startScheduler(io);
 });
 
 // Graceful Shutdown

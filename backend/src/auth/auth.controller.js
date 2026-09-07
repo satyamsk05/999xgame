@@ -48,16 +48,29 @@ router.post('/loggin/verify', async (req, res) => {
       phone: user.phone,
     });
 
-    // Return authenticated user state
+    // Return authenticated user state (Canonical + Backward Compatible)
     return res.status(200).json({
       status: 'success',
       message: 'WhatsApp authentication verified successfully',
       token: appJwtToken,
       data: {
+        token: appJwtToken,
+        user: {
+          id: user.id,
+          phone: user.phone,
+          username: user.username,
+          avatarPath: user.avatar_path || '/avatars/avatar_1.png',
+        },
+        wallet: {
+          depositBalance: wallet.depositBalance,
+          winningsBalance: wallet.winningsBalance,
+          rewardsBalance: wallet.rewardsBalance,
+          totalBalance: wallet.totalBalance,
+        },
         id: user.id,
         phone: user.phone,
         username: user.username,
-        avatarPath: user.avatar_path || 'assets/avatar/avatar_1.png',
+        avatarPath: user.avatar_path || '/avatars/avatar_1.png',
         depositBalance: wallet.depositBalance,
         winningsBalance: wallet.winningsBalance,
         rewardsBalance: wallet.rewardsBalance,

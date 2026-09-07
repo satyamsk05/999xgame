@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../services/dashboard_sync_manager.dart';
 
 class ReferralData {
   final String name;
@@ -31,26 +32,103 @@ class ShareScreen extends StatefulWidget {
 }
 
 class _ShareScreenState extends State<ShareScreen> {
-  final List<ReferralData> _referrals = const [
-    ReferralData(
-      name: 'Dh animation',
-      date: '09 Dec',
-      amount: '₹15',
-      avatarPath: 'assets/avatar/avatar_1.png',
-    ),
-    ReferralData(
-      name: 'Harshthakur',
-      date: '08 Dec',
-      amount: '₹15',
-      avatarPath: 'assets/avatar/avatar_2.png',
-    ),
-    ReferralData(
-      name: 'RAHUL',
-      date: '07 Dec',
-      amount: '₹15',
-      avatarPath: 'assets/avatar/avatar_3.png',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    DashboardSyncManager.dashboardData.addListener(_onSyncDataChanged);
+  }
+
+  void _onSyncDataChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    DashboardSyncManager.dashboardData.removeListener(_onSyncDataChanged);
+    super.dispose();
+  }
+
+  Map<String, dynamic> get _referralMap {
+    final data = DashboardSyncManager.dashboardData.value;
+    if (data['referral'] is Map<String, dynamic>) {
+      return data['referral'] as Map<String, dynamic>;
+    }
+    return {};
+  }
+
+  int get _totalEarnings {
+    final ref = _referralMap;
+    return (ref['totalEarnings'] as num?)?.toInt() ?? 30;
+  }
+
+  int get _perReferralTarget {
+    final ref = _referralMap;
+    return (ref['perReferralTarget'] as num?)?.toInt() ?? 1000;
+  }
+
+  int get _signUpBonus {
+    final steps = _referralMap['rewardSteps'];
+    if (steps is Map) {
+      return (steps['signUp'] as num?)?.toInt() ?? 15;
+    }
+    return 15;
+  }
+
+  int get _addCashBonus {
+    final steps = _referralMap['rewardSteps'];
+    if (steps is Map) {
+      return (steps['addCash'] as num?)?.toInt() ?? 55;
+    }
+    return 55;
+  }
+
+  int get _playGamesBonus {
+    final steps = _referralMap['rewardSteps'];
+    if (steps is Map) {
+      return (steps['playGames'] as num?)?.toInt() ?? 930;
+    }
+    return 930;
+  }
+
+  List<ReferralData> get _referrals {
+    final listRaw = _referralMap['recentReferrals'];
+    if (listRaw is List && listRaw.isNotEmpty) {
+      final List<ReferralData> result = [];
+      for (var r in listRaw) {
+        if (r is Map) {
+          result.add(
+            ReferralData(
+              name: r['name']?.toString() ?? 'User',
+              date: r['date']?.toString() ?? '',
+              amount: r['amount']?.toString() ?? '₹15',
+              avatarPath: r['avatarPath']?.toString() ?? 'Assets/Avatar/avatar_1.png',
+            ),
+          );
+        }
+      }
+      if (result.isNotEmpty) return result;
+    }
+    return const [
+      ReferralData(
+        name: 'Dh animation',
+        date: '09 Dec',
+        amount: '₹15',
+        avatarPath: 'Assets/Avatar/avatar_1.png',
+      ),
+      ReferralData(
+        name: 'Harshthakur',
+        date: '08 Dec',
+        amount: '₹15',
+        avatarPath: 'Assets/Avatar/avatar_2.png',
+      ),
+      ReferralData(
+        name: 'RAHUL',
+        date: '07 Dec',
+        amount: '₹15',
+        avatarPath: 'Assets/Avatar/avatar_3.png',
+      ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -127,7 +205,7 @@ class _ShareScreenState extends State<ShareScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '₹30',
+                          '₹$_totalEarnings',
                           style: GoogleFonts.inter(
                             color: Colors.white,
                             fontSize: 34,
@@ -382,7 +460,7 @@ class _ShareScreenState extends State<ShareScreen> {
                   ),
                 ),
                 TextSpan(
-                  text: '₹1,000',
+                  text: '₹${_perReferralTarget.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
                   style: GoogleFonts.inter(
                     color: const Color(0xFF00E676), // Vibrant Green
                     fontSize: 22,
@@ -403,7 +481,7 @@ class _ShareScreenState extends State<ShareScreen> {
               // Step 1: ₹15 signs up
               Expanded(
                 child: _buildReferralStepItem(
-                  amount: '₹15',
+                  amount: '₹$_signUpBonus',
                   label: 'signs up',
                   showInfo: false,
                   iconWidget: _buildPhoneHandIcon(),
@@ -426,7 +504,7 @@ class _ShareScreenState extends State<ShareScreen> {
               // Step 2: ₹55 adds cash
               Expanded(
                 child: _buildReferralStepItem(
-                  amount: '₹55',
+                  amount: '₹$_addCashBonus',
                   label: 'adds cash',
                   showInfo: true,
                   iconWidget: _buildCashHandIcon(),
@@ -449,7 +527,7 @@ class _ShareScreenState extends State<ShareScreen> {
               // Step 3: ₹930 play games
               Expanded(
                 child: _buildReferralStepItem(
-                  amount: '₹930',
+                  amount: '₹$_playGamesBonus',
                   label: 'play games',
                   showInfo: true,
                   iconWidget: _buildGamepadHandIcon(),

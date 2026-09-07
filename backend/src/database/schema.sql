@@ -71,7 +71,8 @@ CREATE TABLE IF NOT EXISTS game_rounds (
     started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     betting_closed_at TIMESTAMP WITH TIME ZONE,
     ended_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_game_round_number UNIQUE(game_id, round_number)
 );
 
 CREATE TABLE IF NOT EXISTS bets (
@@ -126,6 +127,7 @@ CREATE TABLE IF NOT EXISTS withdrawals (
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PROCESSING', 'SUCCESS', 'REJECTED')),
     payout_method VARCHAR(50) NOT NULL DEFAULT 'UPI',
     payout_address_or_upi VARCHAR(256) NOT NULL,
+    idempotency_key VARCHAR(100) UNIQUE,
     requested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     processing_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
@@ -166,8 +168,20 @@ ON CONFLICT (id) DO UPDATE SET
     title = EXCLUDED.title;
 
 -- Ensure existing tables receive new financial columns if created in prior versions
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='wallet_ledger' AND column_name='before_balance') THEN
+        ALTER TABLE wallet_ledger RENAME COLUMN before_balance TO balance_before;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='wallet_ledger' AND column_name='after_balance') THEN
+        ALTER TABLE wallet_ledger RENAME COLUMN after_balance TO balance_after;
+    END IF;
+END $$;
+
 ALTER TABLE wallets ADD COLUMN IF NOT EXISTS available_balance BIGINT NOT NULL DEFAULT 0 CHECK (available_balance >= 0);
 ALTER TABLE wallets ADD COLUMN IF NOT EXISTS reserved_balance BIGINT NOT NULL DEFAULT 0 CHECK (reserved_balance >= 0);
+ALTER TABLE wallet_ledger ADD COLUMN IF NOT EXISTS balance_before BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE wallet_ledger ADD COLUMN IF NOT EXISTS balance_after BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE wallet_ledger ADD COLUMN IF NOT EXISTS direction VARCHAR(10) DEFAULT 'CREDIT';
 ALTER TABLE wallet_ledger ADD COLUMN IF NOT EXISTS reference_type VARCHAR(50) DEFAULT 'DEPOSIT';
 ALTER TABLE wallet_ledger ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'COMPLETED';
@@ -218,6 +232,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_reason TEXT;
 CREATE TABLE IF NOT EXISTS promotions (
     id VARCHAR(64) PRIMARY KEY,
     title VARCHAR(150) NOT NULL,
+    subtitle VARCHAR(255) DEFAULT 'DEPOSIT -> GET BONUS',
+    tag VARCHAR(50) DEFAULT 'DEPOSIT',
+    button_text VARCHAR(50) DEFAULT 'DEPOSIT NOW',
+    image_url VARCHAR(255) DEFAULT '/banners/deposit_banner.png',
+    target_screen VARCHAR(100) DEFAULT '/add-cash',
     description TEXT,
     type VARCHAR(30) NOT NULL DEFAULT 'CUSTOM',
     bonus_amount BIGINT NOT NULL DEFAULT 0,
@@ -230,5 +249,16 @@ CREATE TABLE IF NOT EXISTS promotions (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE promotions ADD COLUMN IF NOT EXISTS subtitle VARCHAR(255) DEFAULT 'DEPOSIT -> GET BONUS';
+ALTER TABLE promotions ADD COLUMN IF NOT EXISTS tag VARCHAR(50) DEFAULT 'DEPOSIT';
+ALTER TABLE promotions ADD COLUMN IF NOT EXISTS button_text VARCHAR(50) DEFAULT 'DEPOSIT NOW';
+ALTER TABLE promotions ADD COLUMN IF NOT EXISTS image_url VARCHAR(255) DEFAULT '/banners/deposit_banner.png';
+ALTER TABLE promotions ADD COLUMN IF NOT EXISTS target_screen VARCHAR(100) DEFAULT '/add-cash';
+
+INSERT INTO promotions (id, title, subtitle, tag, button_text, type, bonus_amount, min_deposit, status)
+VALUES ('promo_default_180', 'DEPOSIT BONUS' || E'\n' || '180% BONUS', 'DEPOSIT -> GET BONUS', 'DEPOSIT', 'DEPOSIT NOW', 'WELCOME', 18000, 10000, 'ACTIVE')
+ON CONFLICT (id) DO NOTHING;
+
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action, created_at DESC);
+

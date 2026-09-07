@@ -28,42 +28,57 @@ class CustomBottomNavBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: SizedBox(
-          height: 64,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _NavBarItem(
-                index: 0,
-                isSelected: selectedIndex == 0,
-                label: 'Home',
-                size: 26,
-                onTap: () => onItemSelected(0),
-              ),
-              _NavBarItem(
-                index: 1,
-                isSelected: selectedIndex == 1,
-                label: 'Share',
-                size: 26,
-                onTap: () => onItemSelected(1),
-              ),
-              _NavBarItem(
-                index: 2,
-                isSelected: selectedIndex == 2,
-                label: 'Add Cash',
-                size: 26,
-                onTap: () => onItemSelected(2),
-              ),
-              _NavBarItem(
-                index: 3,
-                isSelected: selectedIndex == 3,
-                label: 'Profile',
-                size: 26,
-                onTap: () => onItemSelected(3),
-              ),
-            ],
+          child: SizedBox(
+            height: 64,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: _NavBarItem(
+                      index: 0,
+                      isSelected: selectedIndex == 0,
+                      label: 'Home',
+                      size: 26,
+                      onTap: () => onItemSelected(0),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: _NavBarItem(
+                      index: 1,
+                      isSelected: selectedIndex == 1,
+                      label: 'Share',
+                      size: 26,
+                      onTap: () => onItemSelected(1),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: _NavBarItem(
+                      index: 2,
+                      isSelected: selectedIndex == 2,
+                      label: 'Add Cash',
+                      size: 26,
+                      onTap: () => onItemSelected(2),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: _NavBarItem(
+                      index: 3,
+                      isSelected: selectedIndex == 3,
+                      label: 'Profile',
+                      size: 26,
+                      onTap: () => onItemSelected(3),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
       ),
     );
   }

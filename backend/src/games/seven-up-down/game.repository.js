@@ -103,7 +103,16 @@ async function settleRoundInDb(roundId, winningBetType) {
     const settlements = [];
 
     for (const bet of bets) {
-      const isWinner = (bet.bet_type === winningBetType);
+      let isWinner = (bet.bet_type === winningBetType);
+      if (!isWinner && bet.bet_type.startsWith('NUMBER_')) {
+        const num = parseInt(bet.bet_type.replace('NUMBER_', ''), 10);
+        const roundRes = await client.query('SELECT result FROM game_rounds WHERE id = $1', [roundId]);
+        const resObj = roundRes.rows[0]?.result || {};
+        if (resObj.diceSum === num) {
+          isWinner = true;
+        }
+      }
+
       const stakePaise = parseInt(bet.stake, 10);
       const mult = parseFloat(bet.payout_multiplier);
       const winAmountPaise = isWinner ? Math.floor(stakePaise * mult) : 0;
@@ -160,8 +169,81 @@ async function settleRoundInDb(roundId, winningBetType) {
   }
 }
 
+/**
+ * Fetch recent finished/active game rounds for history
+ */
+async function getRecentRoundsFromDb(limit = 50) {
+  const res = await query(
+    `SELECT id as "roundId", round_number as "roundNumber", status, result, created_at as "createdAt", ended_at as "endedAt"
+     FROM game_rounds
+     WHERE game_id = 'seven_up_down'
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [limit]
+  );
+  return res.rows.map(row => ({
+    roundId: row.roundId,
+    roundNumber: row.roundNumber,
+    status: row.status,
+    dice1: row.result?.dice1 ?? null,
+    dice2: row.result?.dice2 ?? null,
+    diceSum: row.result?.diceSum ?? null,
+    winningBetType: row.result?.winningBetType ?? null,
+    createdAt: row.createdAt,
+    endedAt: row.endedAt,
+  }));
+}
+
+/**
+ * Fetch round by ID from DB
+ */
+async function getRoundByIdFromDb(roundId) {
+  const res = await query(
+    `SELECT id as "roundId", round_number as "roundNumber", status, result, created_at as "createdAt", ended_at as "endedAt"
+     FROM game_rounds
+     WHERE id = $1`,
+    [roundId]
+  );
+  if (res.rows.length === 0) return null;
+  const row = res.rows[0];
+  return {
+    roundId: row.roundId,
+    roundNumber: row.roundNumber,
+    status: row.status,
+    dice1: row.result?.dice1 ?? null,
+    dice2: row.result?.dice2 ?? null,
+    diceSum: row.result?.diceSum ?? null,
+    winningBetType: row.result?.winningBetType ?? null,
+    createdAt: row.createdAt,
+    endedAt: row.endedAt,
+  };
+}
+
+/**
+ * Fetch user bets for a given round
+ */
+async function getUserBetsForRoundInDb(roundId, userId) {
+  const res = await query(
+    `SELECT id, round_id as "roundId", bet_type as "betType", stake, payout_multiplier as "payoutMultiplier", win_amount as "winAmount", status, created_at as "createdAt"
+     FROM bets
+     WHERE round_id = $1 AND user_id = $2
+     ORDER BY created_at ASC`,
+    [roundId, userId]
+  );
+  return res.rows.map(row => ({
+    id: row.id,
+    roundId: row.roundId,
+    betType: row.betType,
+    stake: parseInt(row.stake || 0, 10) / 100,
+    winAmount: parseInt(row.winAmount || 0, 10) / 100,
+    status: row.status,
+    createdAt: row.createdAt,
+  }));
+}
+
 function getMultiplier(betType) {
   if (betType === 'SEVEN') return 5.0;
+  if (betType.startsWith('NUMBER_')) return 6.0;
   return 2.0;
 }
 
@@ -170,4 +252,8 @@ module.exports = {
   updateRoundInDb,
   placeBetInDb,
   settleRoundInDb,
+  getRecentRoundsFromDb,
+  getRoundByIdFromDb,
+  getUserBetsForRoundInDb,
 };
+

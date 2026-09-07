@@ -4,6 +4,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 const userRepo = require('./user.repository');
 const walletRepo = require('../wallet/wallet.repository');
 const logger = require('../utils/logger');
+const { query } = require('../database/db');
 
 // Get Authenticated User Profile from PostgreSQL
 router.get('/profile', authMiddleware, async (req, res, next) => {
@@ -21,7 +22,7 @@ router.get('/profile', authMiddleware, async (req, res, next) => {
         id: user.id,
         username: user.username,
         phone: user.phone,
-        avatarPath: user.avatar_path || 'assets/avatar/avatar_1.png',
+        avatarPath: user.avatar_path || '/avatars/avatar_1.png',
         depositBalance: wallet.depositBalance,
         winningsBalance: wallet.winningsBalance,
         rewardsBalance: wallet.rewardsBalance,
@@ -32,6 +33,71 @@ router.get('/profile', authMiddleware, async (req, res, next) => {
     next(err);
   }
 });
+
+// GET /dashboard-header (Full structured response for Flutter dashboard header)
+router.get('/dashboard-header', authMiddleware, async (req, res, next) => {
+  try {
+    const user = await userRepo.getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'User not found' });
+    }
+
+    const wallet = await walletRepo.getWalletByUserId(req.user.id);
+    let games = [];
+    try {
+      const gamesRes = await query('SELECT * FROM games ORDER BY created_at ASC');
+      games = gamesRes.rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        imagePath: `/games/${row.id}.png`,
+        gameUrl: `/games/${row.id}/index.html`,
+        accentColor: row.id === 'classic_dice' ? '#00E676' : (row.id === 'double' ? '#FFD700' : (row.id === '7updown' ? '#FF4081' : '#7C4DFF')),
+        isAvailable: row.status === 'LIVE',
+      }));
+    } catch (_) {}
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        profile: {
+          id: user.id,
+          username: user.username,
+          phone: user.phone,
+          avatarUrl: user.avatar_path || '/avatars/avatar_1.png',
+          balance: wallet.totalBalance,
+        },
+        wallet: {
+          depositBalance: wallet.depositBalance,
+          winningsBalance: wallet.winningsBalance,
+          rewardsBalance: wallet.rewardsBalance,
+          totalBalance: wallet.totalBalance,
+          availableBalance: wallet.availableBalance,
+        },
+        onlinePlayers: {
+          totalOnline: 89156,
+          avatars: [
+            '/avatars/avatar_1.png',
+            '/avatars/avatar_2.png',
+            '/avatars/avatar_3.png',
+            '/avatars/avatar_7.png',
+            '/avatars/avatar_8.png',
+            '/avatars/avatar_9.png',
+          ],
+        },
+        games: games.length > 0 ? games : [
+          { id: 'classic_dice', title: 'Classic Dice', imagePath: '/games/classic_dice.png', accentColor: '#00E676', gameUrl: '/games/seven_up_down/index.html', isAvailable: true },
+          { id: 'double', title: 'Double', imagePath: '/games/double.png', accentColor: '#FFD700', gameUrl: '/games/seven_up_down/index.html', isAvailable: true },
+          { id: '7updown', title: '7 Up Down', imagePath: '/games/7updown.png', accentColor: '#FF4081', gameUrl: '/games/seven_up_down/index.html', isAvailable: true },
+          { id: 'mines', title: 'Mines', imagePath: '/games/mines.png', accentColor: '#7C4DFF', gameUrl: '/games/seven_up_down/index.html', isAvailable: false },
+        ],
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+
 
 // Update User Profile (Username & Avatar)
 router.post('/update-profile', authMiddleware, async (req, res, next) => {

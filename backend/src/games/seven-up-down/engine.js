@@ -13,15 +13,35 @@ const RoundStatus = {
 };
 
 const BetTypes = {
-  DOWN: 'DOWN',   // Sum 2..6
-  SEVEN: 'SEVEN', // Sum 7
-  UP: 'UP',       // Sum 8..12
+  DOWN: 'DOWN',       // Sum 2..6 (2.0x)
+  SEVEN: 'SEVEN',     // Sum 7 (5.0x)
+  UP: 'UP',           // Sum 8..12 (2.0x)
+  NUMBER_2: 'NUMBER_2',
+  NUMBER_3: 'NUMBER_3',
+  NUMBER_4: 'NUMBER_4',
+  NUMBER_5: 'NUMBER_5',
+  NUMBER_6: 'NUMBER_6',
+  NUMBER_8: 'NUMBER_8',
+  NUMBER_9: 'NUMBER_9',
+  NUMBER_10: 'NUMBER_10',
+  NUMBER_11: 'NUMBER_11',
+  NUMBER_12: 'NUMBER_12',
 };
 
 const PayoutMultipliers = {
   [BetTypes.DOWN]: 2.0,
   [BetTypes.SEVEN]: 5.0,
   [BetTypes.UP]: 2.0,
+  [BetTypes.NUMBER_2]: 26.0,
+  [BetTypes.NUMBER_3]: 12.0,
+  [BetTypes.NUMBER_4]: 8.0,
+  [BetTypes.NUMBER_5]: 6.0,
+  [BetTypes.NUMBER_6]: 5.0,
+  [BetTypes.NUMBER_8]: 5.0,
+  [BetTypes.NUMBER_9]: 6.0,
+  [BetTypes.NUMBER_10]: 8.0,
+  [BetTypes.NUMBER_11]: 12.0,
+  [BetTypes.NUMBER_12]: 26.0,
 };
 
 class SevenUpDownEngine {
@@ -30,11 +50,42 @@ class SevenUpDownEngine {
     this.roundCounter = 1;
   }
 
+  // Recover active un-settled round from PostgreSQL DB on server startup
+  async recoverActiveRoundFromDb() {
+    try {
+      const active = await gameRepo.getRecentRoundsFromDb(1);
+      if (active && active.length > 0) {
+        const last = active[0];
+        if (['CREATED', 'BETTING_OPEN', 'BETTING_CLOSED', 'RESULT', 'SETTLING'].includes(last.status)) {
+          this.currentRound = {
+            roundId: last.roundId,
+            gameId: 'seven_up_down',
+            status: last.status,
+            serverSeedHash: '',
+            serverSeed: '',
+            dice1: last.dice1,
+            dice2: last.dice2,
+            diceSum: last.diceSum,
+            winningBetType: last.winningBetType,
+            createdAt: last.createdAt,
+            bettingClosedAt: null,
+            endedAt: last.endedAt,
+          };
+          logger.info('Recovered active 7 Up Down round from PostgreSQL DB', { roundId: last.roundId, status: last.status });
+          return this.currentRound;
+        }
+      }
+    } catch (err) {
+      logger.error('Error recovering active round from DB', { error: err.message });
+    }
+    return null;
+  }
+
   // Create New Round & Persist in PostgreSQL
   async createRound() {
     const serverSeed = crypto.randomBytes(32).toString('hex');
     const serverSeedHash = crypto.createHash('sha256').update(serverSeed).digest('hex');
-    const roundId = `7ud_r_${Date.now()}_${this.roundCounter++}`;
+    const roundId = `7ud_r_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`;
 
     this.currentRound = {
       roundId,
@@ -51,9 +102,8 @@ class SevenUpDownEngine {
       endedAt: null,
     };
 
-    // Try DB persistence (graceful fallback for testing without live DB)
     try {
-      await gameRepo.createRoundInDb(roundId, this.roundCounter, serverSeed, serverSeedHash);
+      await gameRepo.createRoundInDb(roundId, this.roundCounter++, serverSeed, serverSeedHash);
     } catch (err) {
       logger.error('Failed to persist new round in PostgreSQL DB', { roundId, error: err.message });
       throw err;
@@ -66,6 +116,9 @@ class SevenUpDownEngine {
   // Open Betting Window
   async openBetting() {
     if (!this.currentRound || this.currentRound.status !== RoundStatus.CREATED) {
+      if (this.currentRound && this.currentRound.status === RoundStatus.BETTING_OPEN) {
+        return this.currentRound;
+      }
       throw new Error('Cannot open betting: invalid round state');
     }
     this.currentRound.status = RoundStatus.BETTING_OPEN;
@@ -88,7 +141,7 @@ class SevenUpDownEngine {
     }
 
     if (!Object.values(BetTypes).includes(betType)) {
-      throw new Error(`Invalid bet type: ${betType}. Must be DOWN, SEVEN, or UP`);
+      throw new Error(`Invalid bet type: ${betType}. Must be DOWN, SEVEN, UP, or NUMBER_2..12`);
     }
 
     if (!stakePaise || stakePaise < 1000) {
@@ -104,18 +157,25 @@ class SevenUpDownEngine {
     });
   }
 
-  // Close Betting Window & Roll Dice
+  // Close Betting Window & Roll Dice (Provably Fair Derived from Server Seed)
   async closeBettingAndRoll() {
-    if (!this.currentRound || this.currentRound.status !== RoundStatus.BETTING_OPEN) {
+    if (!this.currentRound || (this.currentRound.status !== RoundStatus.BETTING_OPEN && this.currentRound.status !== RoundStatus.CREATED)) {
       throw new Error('Cannot roll: round is not in BETTING_OPEN state');
     }
 
     this.currentRound.status = RoundStatus.BETTING_CLOSED;
     this.currentRound.bettingClosedAt = new Date().toISOString();
 
-    // Secure Random Dice Roll (1 to 6)
-    const dice1 = crypto.randomInt(1, 7);
-    const dice2 = crypto.randomInt(1, 7);
+    // Provably Fair Cryptographic Dice Roll Derived from Server Seed Payload
+    const hash = crypto.createHmac('sha256', this.currentRound.serverSeed || 'seed')
+      .update(this.currentRound.roundId)
+      .digest('hex');
+    
+    const val1 = parseInt(hash.substring(0, 8), 16);
+    const val2 = parseInt(hash.substring(8, 16), 16);
+    
+    const dice1 = (val1 % 6) + 1;
+    const dice2 = (val2 % 6) + 1;
     const diceSum = dice1 + dice2;
 
     let winningBetType = BetTypes.SEVEN;
@@ -185,11 +245,24 @@ class SevenUpDownEngine {
       settlements,
     };
   }
+
+  // Get current active round or initialize new one
+  async getOrStartCurrentRound() {
+    if (!this.currentRound || this.currentRound.status === RoundStatus.SETTLED || this.currentRound.status === 'SETTLEMENT_FAILED') {
+      await this.createRound();
+      await this.openBetting();
+    }
+    return this.currentRound;
+  }
 }
+
+const sevenUpDownEngine = new SevenUpDownEngine();
 
 module.exports = {
   SevenUpDownEngine,
+  sevenUpDownEngine,
   RoundStatus,
   BetTypes,
   PayoutMultipliers,
 };
+

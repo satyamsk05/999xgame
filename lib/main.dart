@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -26,6 +29,11 @@ import 'widgets/promo_banner.dart';
 import 'screens/login_screen.dart';
 import 'screens/html5_game_screen.dart';
 import 'services/api_service.dart';
+import 'services/supabase_service.dart';
+import 'services/dashboard_sync_manager.dart';
+import 'core/storage/token_manager.dart';
+import 'features/wallet/data/wallet_api.dart';
+import 'widgets/network_error_widget.dart';
 
 class CustomMouseScrollBehavior extends MaterialScrollBehavior {
   const CustomMouseScrollBehavior();
@@ -39,8 +47,10 @@ class CustomMouseScrollBehavior extends MaterialScrollBehavior {
       };
 }
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SupabaseService.initialize();
+  await TokenManager.init();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -84,14 +94,14 @@ class InGamesHomeScreen extends StatefulWidget {
 }
 
 class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
-  bool _isLoggedIn = false;
+  bool _isLoggedIn = TokenManager.isAuthenticated;
   int _currentNavIndex = 0;
   double _depositBalance = 0.0;
   double _winningsBalance = 0.0;
   final double _rewardsBalance = 0.0;
   String _userName = 'Player';
   String _phoneNumber = '';
-  String _currentAvatarPath = 'assets/avatar/avatar_1.png';
+  String _currentAvatarPath = 'Assets/Avatar/avatar_1.png';
   bool _isProfilePageActive = false;
   bool _isWithdrawPageActive = false;
   bool _isSettingsPageActive = false;
@@ -102,54 +112,98 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
   bool _isContactUsPageActive = false;
   bool _isFairPlayPageActive = false;
   bool _isHtml5GameActive = false;
-  String _selectedGameTitle = '7 Up Down (Dice)';
+  String _selectedGameTitle = 'Classic Dice';
   double _selectedEntryFee = 10.0;
-  double _selectedPrizePool = 18.0;
+  double _selectedPrizePool = 20.0;
   String _selectedGameUrl = '/games/seven_up_down/index.html';
   String _transactionsFilter = 'All';
+  bool _isOffline = false;
+  Timer? _networkPingTimer;
 
   @override
   void initState() {
     super.initState();
-    _fetchUserData();
+    DashboardSyncManager.init();
+    if (_isLoggedIn) {
+      _fetchUserData();
+    }
+    _startNetworkMonitoring();
+  }
+
+  @override
+  void dispose() {
+    _networkPingTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startNetworkMonitoring() {
+    _networkPingTimer?.cancel();
+    _networkPingTimer = Timer.periodic(const Duration(seconds: 8), (timer) async {
+      if (!mounted || !_isLoggedIn) return;
+      if (kIsWeb) return;
+      try {
+        final result = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 4));
+        if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
+          if (_isOffline && mounted) {
+            setState(() {
+              _isOffline = false;
+            });
+            _fetchUserData();
+          }
+          return;
+        }
+      } catch (_) {
+        if (!_isOffline && mounted) {
+          setState(() {
+            _isOffline = true;
+          });
+        }
+      }
+    });
   }
 
   Future<void> _fetchUserData() async {
-    final profile = await ApiService.getUserProfile();
-    if (profile != null && profile['data'] != null) {
-      final d = profile['data'];
+    DashboardSyncManager.syncWithServer();
+    try {
+      final profile = await WalletApi.getUserProfile();
       if (mounted) {
         setState(() {
-          _depositBalance = (d['depositBalance'] as num?)?.toDouble() ?? 0.0;
-          _winningsBalance = (d['winningsBalance'] as num?)?.toDouble() ?? 0.0;
-          if (d['username'] != null && d['username'].toString().isNotEmpty) {
-            _userName = d['username'].toString();
+          _depositBalance = (profile['depositBalance'] as num?)?.toDouble() ?? 0.0;
+          _winningsBalance = (profile['winningsBalance'] as num?)?.toDouble() ?? 0.0;
+          if (profile['username'] != null && profile['username'].toString().isNotEmpty) {
+            _userName = profile['username'].toString();
           }
-          if (d['phone'] != null) {
-            _phoneNumber = d['phone'].toString();
+          if (profile['phoneNumber'] != null) {
+            _phoneNumber = profile['phoneNumber'].toString();
+          }
+          if (profile['avatarPath'] != null && profile['avatarPath'].toString().isNotEmpty) {
+            _currentAvatarPath = ProfileScreen.normalizeAvatarPath(profile['avatarPath'].toString());
           }
         });
       }
-    }
+    } catch (_) {}
 
-    final txs = await ApiService.getTransactions();
-    if (txs != null && mounted) {
-      setState(() {
-        _transactionsList.clear();
-        for (var t in txs) {
-          _transactionsList.add(
-            TransactionItemData(
-              id: t['id']?.toString() ?? '',
-              title: t['title']?.toString() ?? 'Transaction',
-              amount: (t['amount'] as num?)?.toDouble() ?? 0.0,
-              isCredit: t['isCredit'] == true,
-              timestamp: DateTime.tryParse(t['timestamp']?.toString() ?? '') ?? DateTime.now(),
-              category: t['category']?.toString() ?? 'General',
-            ),
-          );
-        }
-      });
-    }
+    try {
+      final txRes = await WalletApi.getTransactions();
+      final items = txRes['items'] as List<dynamic>? ?? [];
+      if (mounted) {
+        setState(() {
+          _transactionsList.clear();
+          for (var t in items) {
+            _transactionsList.add(
+              TransactionItemData(
+                id: t['id']?.toString() ?? '',
+                title: t['title']?.toString() ?? 'Transaction',
+                amount: (t['amount'] as num?)?.toDouble() ?? 0.0,
+                isCredit: t['isCredit'] == true,
+                timestamp: DateTime.tryParse(t['timestamp']?.toString() ?? '') ?? DateTime.now(),
+                category: t['category']?.toString() ?? 'General',
+              ),
+            );
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   final List<TransactionItemData> _transactionsList = [];
@@ -211,6 +265,9 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
               if (user['username'] != null) {
                 _userName = user['username'].toString();
               }
+              if (user['avatarPath'] != null && user['avatarPath'].toString().isNotEmpty) {
+                _currentAvatarPath = ProfileScreen.normalizeAvatarPath(user['avatarPath'].toString());
+              }
             }
           });
           _fetchUserData();
@@ -254,37 +311,71 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                 !_isHtml5GameActive)
               SafeArea(
                 bottom: false,
-                child: Column(
-                  children: [
-                    TopHeader(
-                      username: _userName,
-                      userTag: 'Profile',
-                      balance: _totalBalance,
-                      avatarPath: _currentAvatarPath,
-                      onAddMoneyPressed: () {
-                        setState(() {
-                          _isProfilePageActive = false;
-                          _currentNavIndex = 2;
-                        });
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: DashboardSyncManager.isSyncing,
+                  builder: (context, syncing, child) {
+                    return ValueListenableBuilder<Map<String, dynamic>>(
+                      valueListenable: DashboardSyncManager.dashboardData,
+                      builder: (context, data, child) {
+                        final profileMap = data['profile'] as Map<String, dynamic>? ?? {};
+                        final onlineMap = data['onlinePlayers'] as Map<String, dynamic>? ?? {};
+
+                        final name = (profileMap['username'] != null && profileMap['username'].toString().isNotEmpty)
+                            ? profileMap['username'].toString()
+                            : _userName;
+                        final bal = (profileMap['balance'] as num?)?.toDouble() ?? _totalBalance;
+                        final av = (profileMap['avatarUrl'] != null && profileMap['avatarUrl'].toString().isNotEmpty)
+                            ? profileMap['avatarUrl'].toString()
+                            : _currentAvatarPath;
+                        final countVal = onlineMap['totalOnline'];
+
+                        final isHeaderLoading = syncing && data.isEmpty;
+
+                        return Column(
+                          children: [
+                            TopHeader(
+                              username: name,
+                              userTag: 'Profile',
+                              balance: bal,
+                              avatarPath: av,
+                              isLoading: isHeaderLoading,
+                              onAddMoneyPressed: () {
+                                setState(() {
+                                  _isProfilePageActive = true;
+                                });
+                              },
+                              onProfilePressed: () {
+                                setState(() {
+                                  _isProfilePageActive = true;
+                                });
+                              },
+                            ),
+                            OnlineTicker(
+                              onlineCount: countVal != null ? '$countVal online' : '89,156 online',
+                              isLoading: isHeaderLoading,
+                            ),
+                            const SizedBox(height: 4),
+                          ],
+                        );
                       },
-                      onProfilePressed: () {
-                        setState(() {
-                          _isProfilePageActive = true;
-                        });
-                      },
-                    ),
-                    const OnlineTicker(
-                      onlineCount: '89,156 online',
-                    ),
-                    const SizedBox(height: 4),
-                  ],
+                    );
+                  },
                 ),
               ),
 
             // Main Screen Content
             Expanded(
-              child: _isHtml5GameActive
-                  ? Html5GameScreen(
+              child: _isOffline
+                  ? NetworkErrorWidget(
+                      onRetry: () {
+                        setState(() {
+                          _isOffline = false;
+                        });
+                        _fetchUserData();
+                      },
+                    )
+                  : _isHtml5GameActive
+                      ? Html5GameScreen(
                       gameTitle: _selectedGameTitle,
                       entryFee: _selectedEntryFee,
                       prizePool: _selectedPrizePool,
@@ -349,10 +440,9 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                                           onAddCashTap: () {
                                             setState(() {
                                               _isSettingsPageActive = false;
-                                              _isProfilePageActive = false;
                                               _isWithdrawPageActive = false;
                                               _isTransactionsPageActive = false;
-                                              _currentNavIndex = 2;
+                                              _isProfilePageActive = true;
                                             });
                                           },
                                           onTransactionHistoryTap: () {
@@ -428,6 +518,11 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                                     _currentNavIndex = 2;
                                   });
                                 },
+                                onContactSupportTap: () {
+                                  setState(() {
+                                    _isHelpCentrePageActive = true;
+                                  });
+                                },
                                 onAvatarChanged: (newPath) async {
                                   setState(() {
                                     _currentAvatarPath = newPath;
@@ -455,12 +550,16 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                                     _isSettingsPageActive = true;
                                   });
                                 },
-                                onLogoutTap: () {
-                                  setState(() {
-                                    _isProfilePageActive = false;
-                                    _isLoggedIn = false;
-                                  });
-                                },
+                                onLogoutTap: () async {
+                                   await TokenManager.clearSession();
+                                   await SupabaseService.signOut();
+                                   if (mounted) {
+                                     setState(() {
+                                       _isProfilePageActive = false;
+                                       _isLoggedIn = false;
+                                     });
+                                   }
+                                 },
                               ),
                             )
                           : _isWithdrawPageActive
@@ -595,6 +694,35 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
     });
   }
 
+  void _showComingSoon(String gameTitle) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.rocket_launch_rounded, color: Color(0xFFFFC107), size: 20),
+            const SizedBox(width: 10),
+            Text(
+              '$gameTitle - Coming Soon! 🚀',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF260435),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: Color(0xFFFFC107), width: 1.5),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Widget _buildHomeTab() {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -608,83 +736,86 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
               });
             },
           ),
-          const SizedBox(height: 8),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 265,
-            child: ListView(
-              clipBehavior: Clip.none,
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.only(top: 10, left: 16.0, right: 16.0, bottom: 5),
-              children: [
-                GameCard(
-                  data: const GameCardData(
-                    title: '7 Up Down (Dice)',
-                    category: 'Dice • HOT 🔥',
-                    imagePath: 'assets/images/7updown.png',
-                    playersOnline: '4,520 playing',
-                    accentColor: Color(0xFF00E676),
-                  ),
-                  onTap: () => _launchHtml5Game('7 Up Down (Dice)', 10.0, 20.0, '/games/seven_up_down/index.html'),
+          const SizedBox(height: 18),
+          ValueListenableBuilder<bool>(
+            valueListenable: DashboardSyncManager.isSyncing,
+            builder: (context, syncing, child) {
+              return ValueListenableBuilder<Map<String, dynamic>>(
+                valueListenable: DashboardSyncManager.dashboardData,
+                builder: (context, data, child) {
+                  final gamesListRaw = data['games'] as List<dynamic>? ?? [];
+
+                  if ((syncing && data.isEmpty) || gamesListRaw.isEmpty) {
+                    return SizedBox(
+                      height: 260,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: 3,
+                        itemBuilder: (ctx, i) => const GameCard(
+                          data: GameCardData(
+                            title: '',
+                            imagePath: '',
+                          ),
+                          onTap: _noop,
+                          isLoading: true,
+                        ),
+                      ),
+                    );
+                  }
+
+              return SizedBox(
+                height: 270,
+                child: ListView.builder(
+                  clipBehavior: Clip.none,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 5),
+                  itemCount: gamesListRaw.length,
+                  itemBuilder: (ctx, index) {
+                    final gameObj = gamesListRaw[index] as Map<String, dynamic>? ?? {};
+                    final title = gameObj['title']?.toString() ?? 'Game';
+                    final imagePath = gameObj['imagePath']?.toString() ?? 'Assets/images/classic_dice.png';
+                    final gameUrl = gameObj['gameUrl']?.toString() ?? '/games/seven_up_down/index.html';
+                    final isAvailable = gameObj['isAvailable'] == true;
+
+                    Color accentColor = const Color(0xFF00E676);
+                    if (gameObj['accentColor'] != null) {
+                      final hex = gameObj['accentColor'].toString().replaceAll('#', '');
+                      if (hex.length == 6) {
+                        accentColor = Color(int.parse('FF$hex', radix: 16));
+                      }
+                    }
+
+                    return GameCard(
+                      data: GameCardData(
+                        id: gameObj['id']?.toString() ?? '',
+                        title: title,
+                        imagePath: imagePath,
+                        accentColor: accentColor,
+                        gameUrl: gameUrl,
+                      ),
+                      onTap: () {
+                        if (isAvailable || gameObj['id'] == 'classic_dice' || gameObj['id'] == '7updown') {
+                          _launchHtml5Game(title, 10.0, 20.0, gameUrl);
+                        } else {
+                          _showComingSoon(title);
+                        }
+                      },
+                    );
+                  },
                 ),
-                GameCard(
-                  data: const GameCardData(
-                    title: 'Dragon Vs Tiger',
-                    category: 'Cards • NEW 🚀',
-                    imagePath: 'assets/images/dtgame.png',
-                    playersOnline: '3,120 playing',
-                    accentColor: Color(0xFFFF1744),
-                  ),
-                  onTap: () => _launchHtml5Game('Dragon Vs Tiger', 10.0, 20.0, '/games/seven_up_down/index.html'),
-                ),
-                GameCard(
-                  data: const GameCardData(
-                    title: 'Fruit Slice Ninja',
-                    category: 'Arcade • HTML5',
-                    imagePath: 'assets/images/promo.jpg',
-                    playersOnline: '1,420 playing',
-                    accentColor: Color(0xFF00E676),
-                  ),
-                  onTap: () => _launchHtml5Game('Fruit Slice Ninja', 10.0, 18.0, '/games/fruit_slice/index.html'),
-                ),
-                GameCard(
-                  data: const GameCardData(
-                    title: 'Ludo Express',
-                    category: 'Board • HTML5',
-                    imagePath: 'assets/images/ludo.jpg',
-                    playersOnline: '3,890 playing',
-                    accentColor: Color(0xFFFFB300),
-                  ),
-                  onTap: () => _launchHtml5Game('Ludo Express', 20.0, 36.0, '/games/fruit_slice/index.html'),
-                ),
-                GameCard(
-                  data: const GameCardData(
-                    title: 'Call Break Pro',
-                    category: 'Cards • HTML5',
-                    imagePath: 'assets/images/rummy.jpg',
-                    playersOnline: '890 playing',
-                    accentColor: Color(0xFFE040FB),
-                  ),
-                  onTap: () => _launchHtml5Game('Call Break Pro', 50.0, 90.0, '/games/fruit_slice/index.html'),
-                ),
-                GameCard(
-                  data: const GameCardData(
-                    title: 'Carrom Clash',
-                    category: 'Board • HTML5',
-                    imagePath: 'assets/images/dtgame.png',
-                    playersOnline: '2,150 playing',
-                    accentColor: Color(0xFF00B0FF),
-                  ),
-                  onTap: () => _launchHtml5Game('Carrom Clash', 15.0, 27.0, '/games/fruit_slice/index.html'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
+              );
+            },
+          );
+        },
+      ),
+      const SizedBox(height: 20),
         ],
       ),
     );
   }
+
+  static void _noop() {}
 
 
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 void registerIframeViewFactory(String viewId, String gameUrl) {}
@@ -11,8 +12,6 @@ Widget buildPlatformIframe(String viewId) {
   );
 }
 
-void setupWebMessageListener(void Function(String message) onMessage) {}
+StreamSubscription? setupWebMessageListener(void Function(String message) onMessage) => null;
 
 void openAuth0UniversalLogin(String serverDomain) {}
-
-void openExternalUrl(String url) {}

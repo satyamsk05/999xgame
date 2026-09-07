@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/dashboard_sync_manager.dart';
 
 class WalletScreen extends StatelessWidget {
   final double totalBalance;
@@ -14,9 +15,9 @@ class WalletScreen extends StatelessWidget {
 
   const WalletScreen({
     super.key,
-    this.totalBalance = 0.0,
-    this.depositBalance = 0.0,
-    this.winningsBalance = 0.0,
+    this.totalBalance = 1250.0,
+    this.depositBalance = 800.0,
+    this.winningsBalance = 450.0,
     this.rewardsBalance = 0.0,
     required this.onAddCashTap,
     required this.onWithdrawTap,
@@ -27,6 +28,14 @@ class WalletScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<Map<String, dynamic>>(
+      valueListenable: DashboardSyncManager.dashboardData,
+      builder: (context, syncData, child) {
+        final walletInfo = syncData['wallet'] as Map<String, dynamic>? ?? {};
+        final bestDeal = walletInfo['bestDeal'] as Map<String, dynamic>? ?? {};
+        final dealAmount = (bestDeal['amount'] as num?)?.toInt() ?? 500;
+        final dealCashback = (bestDeal['cashback'] as num?)?.toInt() ?? 75;
+        final dealTag = bestDeal['tag']?.toString() ?? 'BEST DEAL';
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
@@ -501,7 +510,7 @@ class WalletScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '₹500',
+                          '₹$dealAmount',
                           style: GoogleFonts.inter(
                             color: Colors.white,
                             fontSize: 28,
@@ -511,7 +520,7 @@ class WalletScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '+ ₹75 Cashback',
+                          '+ ₹$dealCashback Cashback',
                           style: GoogleFonts.inter(
                             color: const Color(0xFF00E676),
                             fontSize: 14,
@@ -580,7 +589,7 @@ class WalletScreen extends StatelessWidget {
                     ],
                   ),
                   child: Text(
-                    'BEST DEAL',
+                    dealTag,
                     style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontSize: 10,
@@ -597,5 +606,7 @@ class WalletScreen extends StatelessWidget {
         ],
       ),
     );
+  },
+);
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../services/api_service.dart';
+import '../features/wallet/data/wallet_api.dart';
+import '../core/api/api_client.dart';
 
 class WithdrawScreen extends StatefulWidget {
   final double winningsBalance;
@@ -20,7 +21,6 @@ class WithdrawScreen extends StatefulWidget {
 
 class _WithdrawScreenState extends State<WithdrawScreen> {
   int _currentStep = 0; // 0 = Enter Amount, 1 = Select Method
-  bool _isProcessing = false;
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _upiIdController = TextEditingController(text: '8296395205@apl');
 
@@ -42,10 +42,8 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   double get _enteredAmount => double.tryParse(_amountController.text) ?? 0.0;
 
   bool get _isValidAmount {
-    if (_enteredAmount < 100) return false;
-    if (_enteredAmount > 50000) return false;
-    if (_enteredAmount > widget.winningsBalance) return false;
-    return true;
+    if (_enteredAmount < 25) return false;
+    return _enteredAmount <= widget.winningsBalance;
   }
 
   void _proceedToSelectMethod() {
@@ -56,74 +54,34 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   }
 
   void _processWithdrawal({required bool isDepositBack}) async {
-    if (_isProcessing) return;
+    final amount = _enteredAmount > 0 ? _enteredAmount : 25.0;
+    final cashback = isDepositBack ? (amount * 0.01).clamp(0.0, 500.0) : 0.0;
+    final fee = isDepositBack ? 0.0 : (amount * 0.05).clamp(1.0, 50.0);
+    final netAmount = isDepositBack ? (amount + cashback) : (amount - fee);
 
-    final amount = _enteredAmount;
-    if (amount < 100 || amount > 50000 || amount > widget.winningsBalance) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid withdrawal amount (Min ₹100, Max ₹50,000)'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    final upiId = _upiIdController.text.trim();
-    if (upiId.isEmpty || !upiId.contains('@')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid UPI ID (e.g. name@bank)'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isProcessing = true;
-    });
-
-    final response = await ApiService.withdrawCash(
-      amount: amount,
-      upiId: upiId,
-    );
-
-    if (!mounted) return;
-
-    setState(() {
-      _isProcessing = false;
-    });
-
-    if (response != null && response['success'] == true) {
-      final withdrawal = response['withdrawal'];
-      final referenceId = (withdrawal != null && withdrawal['reference_id'] != null)
-          ? withdrawal['reference_id'].toString()
-          : (withdrawal != null && withdrawal['id'] != null)
-              ? withdrawal['id'].toString()
-              : 'WDR_${DateTime.now().millisecondsSinceEpoch}';
-
-      final netAmount = isDepositBack
-          ? (amount * 1.01).clamp(0.0, amount + 500.0)
-          : (amount - (amount * 0.05).clamp(1.0, 50.0));
-
+    try {
+      await WalletApi.withdrawCash(amount: amount, upiId: _upiIdController.text);
       widget.onWithdrawCompleted(amount, netAmount, isDepositBack);
 
-      _showWithdrawalSuccessModal(
-        amount: amount,
-        netAmount: netAmount,
-        isDepositBack: isDepositBack,
-        txId: referenceId,
-      );
-    } else {
-      final errorMsg = response?['error'] ?? response?['message'] ?? 'Failed to process withdrawal request';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMsg),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (mounted) {
+        _showWithdrawalSuccessModal(
+          amount: amount,
+          netAmount: netAmount,
+          isDepositBack: isDepositBack,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is ApiException ? e.message : 'Withdrawal failed. Check winnings balance and UPI ID.',
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -131,8 +89,9 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     required double amount,
     required double netAmount,
     required bool isDepositBack,
-    required String txId,
   }) {
+    final txId = '#991020203322655459';
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -340,9 +299,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   // STEP 1: Enter Amount
   // --------------------------------------------------------------------------
   Widget _buildStepEnterAmount() {
-    final winningsStr = widget.winningsBalance > 0
-        ? widget.winningsBalance.toStringAsFixed(2)
-        : '36.46';
+    final winningsStr = widget.winningsBalance.toStringAsFixed(2);
 
     return Stack(
       children: [

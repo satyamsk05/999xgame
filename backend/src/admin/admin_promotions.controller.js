@@ -18,16 +18,16 @@ router.get('/', async (req, res, next) => {
 /** POST /api/admin/promotions — Create */
 router.post('/', async (req, res, next) => {
   try {
-    const { title, description, type, bonusAmount, minDeposit, validFrom, validUntil } = req.body;
+    const { title, subtitle, tag, buttonText, imageUrl, targetScreen, description, type, bonusAmount, minDeposit, validFrom, validUntil } = req.body;
     const adminId = req.admin?.id || 'admin_sys';
 
     if (!title || !type) return res.status(400).json({ status: 'error', message: 'title and type are required' });
 
     const id = `promo_${crypto.randomUUID().slice(0, 8)}`;
     const result = await query(
-      `INSERT INTO promotions (id, title, description, type, bonus_amount, min_deposit, valid_from, valid_until, created_by, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),NOW()) RETURNING *`,
-      [id, title, description || null, type,
+      `INSERT INTO promotions (id, title, subtitle, tag, button_text, image_url, target_screen, description, type, bonus_amount, min_deposit, valid_from, valid_until, created_by, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),NOW()) RETURNING *`,
+      [id, title, subtitle || 'DEPOSIT -> GET BONUS', tag || 'DEPOSIT', buttonText || 'DEPOSIT NOW', imageUrl || '/banners/deposit_banner.png', targetScreen || '/add-cash', description || null, type,
        bonusAmount ? Math.round(bonusAmount * 100) : 0,
        minDeposit  ? Math.round(minDeposit  * 100) : 0,
        validFrom || null, validUntil || null, adminId]
@@ -48,19 +48,24 @@ router.post('/', async (req, res, next) => {
 router.patch('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { title, description, bonusAmount, minDeposit, validFrom, validUntil } = req.body;
+    const { title, subtitle, tag, buttonText, imageUrl, targetScreen, description, bonusAmount, minDeposit, validFrom, validUntil } = req.body;
 
     const result = await query(
       `UPDATE promotions
-       SET title        = COALESCE($2, title),
-           description  = COALESCE($3, description),
-           bonus_amount = COALESCE($4, bonus_amount),
-           min_deposit  = COALESCE($5, min_deposit),
-           valid_from   = COALESCE($6, valid_from),
-           valid_until  = COALESCE($7, valid_until),
-           updated_at   = NOW()
+       SET title         = COALESCE($2, title),
+           subtitle      = COALESCE($3, subtitle),
+           tag           = COALESCE($4, tag),
+           button_text   = COALESCE($5, button_text),
+           image_url     = COALESCE($6, image_url),
+           target_screen = COALESCE($7, target_screen),
+           description   = COALESCE($8, description),
+           bonus_amount  = COALESCE($9, bonus_amount),
+           min_deposit   = COALESCE($10, min_deposit),
+           valid_from    = COALESCE($11, valid_from),
+           valid_until   = COALESCE($12, valid_until),
+           updated_at    = NOW()
        WHERE id = $1 RETURNING *`,
-      [id, title || null, description || null,
+      [id, title || null, subtitle || null, tag || null, buttonText || null, imageUrl || null, targetScreen || null, description || null,
        bonusAmount ? Math.round(bonusAmount * 100) : null,
        minDeposit  ? Math.round(minDeposit  * 100) : null,
        validFrom || null, validUntil || null]
@@ -69,6 +74,7 @@ router.patch('/:id', async (req, res, next) => {
     res.json({ status: 'success', data: result.rows[0] });
   } catch (err) { next(err); }
 });
+
 
 /** POST /api/admin/promotions/:id/toggle — Enable / Disable */
 router.post('/:id/toggle', async (req, res, next) => {

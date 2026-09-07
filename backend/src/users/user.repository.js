@@ -11,21 +11,23 @@ async function findOrCreateUserByPhone(verifiedPhone) {
   try {
     await client.query('BEGIN');
 
-    // 1. Check if user exists
-    const findRes = await client.query('SELECT * FROM users WHERE phone = $1', [verifiedPhone]);
+    // 1. Check if user exists by phone OR user ID
+    const cleanDigits = verifiedPhone.replace(/[^0-9]/g, '');
+    const userId = `usr_${cleanDigits}`;
+    const findRes = await client.query('SELECT * FROM users WHERE phone = $1 OR id = $2', [verifiedPhone, userId]);
     
     let user;
     if (findRes.rows.length > 0) {
       user = findRes.rows[0];
     } else {
       // 2. Create new user
-      const userId = `usr_${verifiedPhone.replace(/[^0-9]/g, '')}`;
       const defaultUsername = `Player_${verifiedPhone.slice(-4)}`;
       const avatarPath = 'assets/avatar/avatar_1.png';
 
       const insertUserRes = await client.query(
         `INSERT INTO users (id, phone, username, avatar_path, created_at, updated_at)
          VALUES ($1, $2, $3, $4, NOW(), NOW())
+         ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone
          RETURNING *`,
         [userId, verifiedPhone, defaultUsername, avatarPath]
       );
@@ -35,7 +37,8 @@ async function findOrCreateUserByPhone(verifiedPhone) {
       const walletId = `wlt_${userId}`;
       await client.query(
         `INSERT INTO wallets (id, user_id, available_balance, reserved_balance, deposit_balance, winnings_balance, rewards_balance, locked_balance, version, created_at, updated_at)
-         VALUES ($1, $2, 0, 0, 0, 0, 0, 0, 1, NOW(), NOW())`,
+         VALUES ($1, $2, 0, 0, 0, 0, 0, 0, 1, NOW(), NOW())
+         ON CONFLICT (user_id) DO NOTHING`,
         [walletId, userId]
       );
 

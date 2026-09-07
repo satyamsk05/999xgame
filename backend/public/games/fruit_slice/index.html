@@ -1,0 +1,80 @@
+# Comprehensive Bug Fix & Real Game Engine Integration Plan
+
+The user requested to analyze the entire application (games, UI/design, server, state management) to identify bugs and replace all fake simulations with a real working game and wallet engine connected to the Node.js backend.
+
+## Findings & Bug Analysis
+
+1. **Backend Server (`backend/server.js`)**:
+   - `/api/wallet/transactions` exists on server, but `ApiService` in Flutter was missing a `getTransactions()` helper.
+   - 7 Up Down HTML5 game was only posting winnings to `/api/games/claim-winnings` without deducting bet amounts from backend `userState` on entry or per-round bet placement.
+2. **Flutter API Service (`lib/services/api_service.dart`)**:
+   - `ApiService` was defined but never imported or called anywhere in `lib/main.dart` or any screen.
+   - Missing `getTransactions()` method to fetch transactions from server.
+3. **Flutter State Management (`lib/main.dart`)**:
+   - App used static hardcoded local state (`_depositBalance = 800.0`, static `_transactionsList`).
+   - Adding cash, withdrawing, or joining games operated purely in memory without syncing with `server.js`.
+4. **HTML5 Game Screen (`lib/screens/html5_game_screen.dart`)**:
+   - Used a hardcoded simulated 30-second countdown timer and local simulated entry fee deduction.
+   - Did not call `ApiService.joinGame(...)` before starting game or update parent wallet state when game completed.
+5. **HTML5 Games (`backend/public/games/`)**:
+   - `seven_up_down/index.html`: Bet placement only modified local JS variable `userBalance` without sending bet deduction to server `/api/games/join`.
+   - `fruit_slice/index.html`: Claimed winnings on game over, but entry fee was not deducted from server backend first.
+
+---
+
+## Proposed Changes
+
+### Backend Component (`backend/server.js` & HTML5 Games)
+
+#### [MODIFY] [server.js](file:///Users/satyamkumar/Desktop/ingames/backend/server.js)
+- Ensure `/api/games/join` handles generic game entry/bet deductions cleanly.
+- Add endpoint `/api/games/seven-up-down/bet` (or leverage `/api/games/join`) to deduct round bets from backend `userState` and log transaction in `transactionsList`.
+
+#### [MODIFY] [fruit_slice/index.html](file:///Users/satyamkumar/Desktop/ingames/backend/public/games/fruit_slice/index.html)
+- Ensure window message communication with parent Flutter frame passes exact score, prize, and completion events.
+- Ensure post to `/api/games/claim-winnings` sends correct payload.
+
+#### [MODIFY] [seven_up_down/index.html](file:///Users/satyamkumar/Desktop/ingames/backend/public/games/seven_up_down/index.html)
+- On placing bet, call backend API to deduct bet from server `userState`.
+- On round result, claim winnings via `/api/games/claim-winnings` and post message to parent Flutter container to keep balances synced live.
+
+---
+
+### Flutter Service & State Layer
+
+#### [MODIFY] [api_service.dart](file:///Users/satyamkumar/Desktop/ingames/lib/services/api_service.dart)
+- Add `getTransactions()` to fetch live transaction history.
+- Add `claimWinnings(...)` to send game reward claims directly.
+
+#### [MODIFY] [main.dart](file:///Users/satyamkumar/Desktop/ingames/lib/main.dart)
+- Connect app lifecycle to `ApiService`: fetch profile, balance, games list, and transactions on startup.
+- Update `_depositBalance`, `_winningsBalance`, and `_transactionsList` live from server response.
+- Sync `_onAddCashCompleted` and `_onWithdrawCompleted` with `ApiService.addCash` and `ApiService.withdrawCash`.
+
+#### [MODIFY] [html5_game_screen.dart](file:///Users/satyamkumar/Desktop/ingames/lib/screens/html5_game_screen.dart)
+- Remove simulated fake 30-second countdown timer.
+- Call `ApiService.joinGame(...)` on entry to deduct entry fee on server.
+- Listen for `MATCH_FINISHED` message from iframe and trigger `onBalanceUpdated` to refresh wallet balance live from server.
+
+#### [MODIFY] [add_cash_screen.dart](file:///Users/satyamkumar/Desktop/ingames/lib/screens/add_cash_screen.dart)
+- Ensure `_completePayment` calls `ApiService.addCash` so backend database and transactions update in real-time.
+
+#### [MODIFY] [withdraw_screen.dart](file:///Users/satyamkumar/Desktop/ingames/lib/screens/withdraw_screen.dart)
+- Ensure `_processWithdrawal` calls `ApiService.withdrawCash` to update backend database and transactions in real-time.
+
+#### [MODIFY] [transactions_screen.dart](file:///Users/satyamkumar/Desktop/ingames/lib/screens/transactions_screen.dart)
+- Support displaying dynamic transactions list fetched from server.
+
+---
+
+## Verification Plan
+
+### Automated Tests / Verification Commands
+- Check backend server status on `http://localhost:5050` using curl or browser.
+- Run `flutter analyze` or check for Dart syntax issues.
+
+### Manual Verification
+- Test Add Cash: Deposit amount, verify backend `userState` and Flutter wallet top header update.
+- Test Withdraw: Withdraw amount, verify winnings deduction on backend and Flutter wallet.
+- Test Fruit Slice Ninja: Play game, cut fruits, score points, verify entry fee deduction and winning reward addition on backend server and Flutter UI.
+- Test 7 Up Down: Place bets (2-6, 7, 8-12, or specific numbers), roll dice, verify bet deduction on backend server and win payout addition in real-time.

@@ -23,10 +23,13 @@ router.post('/', authMiddleware, async (req, res, next) => {
       });
     }
 
+    const idempotencyKey = req.body.idempotencyKey || req.headers['x-idempotency-key'] || null;
+
     const requestData = await withdrawalRepo.createWithdrawalRequest({
       userId: req.user.id,
       amountRupees: parseFloat(amount),
       upiId: upiId.trim(),
+      idempotencyKey,
     });
 
     res.status(201).json({

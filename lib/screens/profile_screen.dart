@@ -8,6 +8,7 @@ class ProfileScreen extends StatefulWidget {
   final double walletBalance;
   final String avatarPath;
   final VoidCallback onAddCashTap;
+  final VoidCallback? onContactSupportTap;
   final ValueChanged<String>? onAvatarChanged;
   final ValueChanged<String>? onUsernameChanged;
   final VoidCallback? onBackPressed;
@@ -17,11 +18,12 @@ class ProfileScreen extends StatefulWidget {
 
   const ProfileScreen({
     super.key,
-    this.username = 'Player',
-    this.phoneNumber = '',
-    this.walletBalance = 0.0,
-    this.avatarPath = 'assets/avatar/avatar_1.png',
+    this.username = 'Ashu K',
+    this.phoneNumber = '+91727*****82',
+    this.walletBalance = 1250.0,
+    this.avatarPath = 'Assets/Avatar/avatar_1.png',
     required this.onAddCashTap,
+    this.onContactSupportTap,
     this.onAvatarChanged,
     this.onUsernameChanged,
     this.onBackPressed,
@@ -30,18 +32,28 @@ class ProfileScreen extends StatefulWidget {
     this.onLogoutTap,
   });
 
+  static String normalizeAvatarPath(String? path) {
+    if (path == null || path.isEmpty) return 'Assets/Avatar/avatar_1.png';
+    String p = path.replaceAll('assets/avatar/', 'Assets/Avatar/').replaceAll('assets/Avatar/', 'Assets/Avatar/');
+    if (!p.startsWith('Assets/Avatar/')) {
+      final fileName = p.split('/').last;
+      p = 'Assets/Avatar/$fileName';
+    }
+    return p;
+  }
+
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final List<String> _availableAvatars = const [
-    'assets/avatar/avatar_1.png',
-    'assets/avatar/avatar_2.png',
-    'assets/avatar/avatar_3.png',
-    'assets/avatar/avatar_7.png',
-    'assets/avatar/avatar_8.png',
-    'assets/avatar/avatar_9.png',
+    'Assets/Avatar/avatar_1.png',
+    'Assets/Avatar/avatar_2.png',
+    'Assets/Avatar/avatar_3.png',
+    'Assets/Avatar/avatar_7.png',
+    'Assets/Avatar/avatar_8.png',
+    'Assets/Avatar/avatar_9.png',
   ];
 
   void _showAvatarSelectionDialog() {
@@ -150,8 +162,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           child: ClipOval(
                             child: Image.asset(
-                              path,
+                              ProfileScreen.normalizeAvatarPath(path),
                               fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Image.asset(
+                                'Assets/Avatar/avatar_1.png',
+                                fit: BoxFit.cover,
+                              ),
                             ),
                           ),
                         ),
@@ -436,12 +452,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       child: ClipOval(
                         child: Image.asset(
-                          widget.avatarPath,
+                          ProfileScreen.normalizeAvatarPath(widget.avatarPath),
                           width: 78,
                           height: 78,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => const Center(
-                            child: Icon(Icons.person, size: 45, color: Colors.white),
+                          errorBuilder: (context, error, stackTrace) => Image.asset(
+                            'Assets/Avatar/avatar_1.png',
+                            width: 78,
+                            height: 78,
+                            fit: BoxFit.cover,
                           ),
                         ),
                       ),
@@ -585,81 +604,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 16),
 
           // Contact Support Card
-          Container(
-            padding: const EdgeInsets.all(20.0),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF6A1B82),
-                  Color(0xFF430E54),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(20.0),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'NEED ANY HELP?',
-                      style: GoogleFonts.poppins(
-                        color: Colors.white.withValues(alpha: 0.55),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Text(
-                          'Contact Support',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.play_arrow_rounded,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ],
-                    ),
+          GestureDetector(
+            onTap: widget.onContactSupportTap,
+            child: Container(
+              padding: const EdgeInsets.all(20.0),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF6A1B82),
+                    Color(0xFF430E54),
                   ],
                 ),
-
-                // Support Executive Headset Illustration
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.purple.shade900,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.purpleAccent, width: 1.5),
+                borderRadius: BorderRadius.circular(20.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
                   ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.support_agent_rounded,
-                      color: Colors.white,
-                      size: 30,
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'NEED ANY HELP?',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Text(
+                            'Contact Support',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.play_arrow_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                  // Support Executive Headset Illustration
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade900,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.purpleAccent, width: 1.5),
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.support_agent_rounded,
+                        color: Colors.white,
+                        size: 30,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 

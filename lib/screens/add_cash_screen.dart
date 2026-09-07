@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../services/api_service.dart';
+import '../features/wallet/data/wallet_api.dart';
+import '../services/dashboard_sync_manager.dart';
 
 class OfferData {
   final int amount;
@@ -27,31 +27,47 @@ class AddCashScreen extends StatefulWidget {
 
 class _AddCashScreenState extends State<AddCashScreen> {
   final TextEditingController _amountController = TextEditingController();
-  final TextEditingController _utrInputController = TextEditingController();
   int? _selectedOfferIndex;
-  Map<String, dynamic>? _activeDepositOrder;
-  bool _isCreatingOrder = false;
-  bool _isSubmittingUtr = false;
 
-  final List<OfferData> _offers = const [
-    OfferData(amount: 200, cashback: 25),
-    OfferData(amount: 500, cashback: 75),
-    OfferData(amount: 50, cashback: 4),
-    OfferData(amount: 100, cashback: 10),
-  ];
+  List<OfferData> get _offers {
+    final data = DashboardSyncManager.dashboardData.value;
+    final offersRaw = data['addCashOffers'];
+    if (offersRaw is List && offersRaw.isNotEmpty) {
+      final List<OfferData> parsed = [];
+      for (var o in offersRaw) {
+        if (o is Map) {
+          final amt = (o['amount'] as num?)?.toInt() ?? 0;
+          final cb = (o['cashback'] as num?)?.toInt() ?? 0;
+          parsed.add(OfferData(amount: amt, cashback: cb));
+        }
+      }
+      if (parsed.isNotEmpty) return parsed;
+    }
+    return const [
+      OfferData(amount: 200, cashback: 25),
+      OfferData(amount: 500, cashback: 75),
+      OfferData(amount: 50, cashback: 4),
+      OfferData(amount: 100, cashback: 10),
+    ];
+  }
 
   @override
   void initState() {
     super.initState();
+    DashboardSyncManager.dashboardData.addListener(_onSyncDataChanged);
     _amountController.addListener(() {
       if (mounted) setState(() {});
     });
   }
 
+  void _onSyncDataChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    DashboardSyncManager.dashboardData.removeListener(_onSyncDataChanged);
     _amountController.dispose();
-    _utrInputController.dispose();
     super.dispose();
   }
 
@@ -66,93 +82,261 @@ class _AddCashScreenState extends State<AddCashScreen> {
     final enteredAmount = double.tryParse(_amountController.text) ?? 0;
     if (enteredAmount <= 0) return;
 
-    setState(() {
-      _isCreatingOrder = true;
-    });
+    try {
+      final res = await WalletApi.createDepositOrder(amount: enteredAmount, paymentMethod: method);
+      final data = res['data'] as Map<String, dynamic>? ?? {};
+      final depositId = data['depositId']?.toString() ?? 'DEP_PENDING';
 
-    final res = await ApiService.createDepositOrder(amount: enteredAmount, paymentMethod: method);
-
-    setState(() {
-      _isCreatingOrder = false;
-    });
-
-    if (res != null && res['status'] == 'success' && res['data'] != null) {
       setState(() {
-        _activeDepositOrder = Map<String, dynamic>.from(res['data'] as Map);
+        _amountController.clear();
+        _selectedOfferIndex = null;
       });
-    } else {
+
+      if (mounted) {
+        _showDepositSuccessBottomSheet(context, enteredAmount, depositId);
+      }
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              res?['message'] ?? 'Failed to create deposit order. Please try again.',
-              style: GoogleFonts.poppins(),
-            ),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-          ),
+          SnackBar(content: Text('Deposit error: ${e.toString()}')),
         );
       }
     }
   }
 
-  void _submitUtr() async {
-    final order = _activeDepositOrder;
-    if (order == null) return;
-    final depositId = order['depositId'] ?? '';
-    final utr = _utrInputController.text.trim();
+  void _showDepositSuccessBottomSheet(BuildContext context, double amount, String txId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF240435),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: EdgeInsets.only(
+            left: 20.0,
+            right: 20.0,
+            top: 14.0,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24.0,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Top drag indicator pill
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white30,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
 
-    if (utr.length != 12 || !RegExp(r'^\d{12}$').hasMatch(utr)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Please enter a valid 12-digit numeric UTR number', style: GoogleFonts.poppins()),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
+              // Green checkmark icon
+              Container(
+                width: 68,
+                height: 68,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF00E676),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Colors.white,
+                  size: 46,
+                ),
+              ),
+              const SizedBox(height: 18),
 
-    setState(() {
-      _isSubmittingUtr = true;
-    });
+              // Title
+              Text(
+                'Deposit Request Created',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
 
-    final res = await ApiService.submitDepositUtr(depositId: depositId, utr: utr);
+              // Amount
+              Text(
+                '₹${amount.toInt()}',
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 36,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 12),
 
-    setState(() {
-      _isSubmittingUtr = false;
-    });
+              // Subtitle note
+              Text(
+                'It may take upto 24 hours for it to reflect in\nyour wallet',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  color: Colors.white60,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 28),
 
-    if (res != null && res['status'] == 'success' && res['data'] != null) {
-      setState(() {
-        _activeDepositOrder = Map<String, dynamic>.from(res['data'] as Map);
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              res['message'] ?? 'UTR submitted successfully! Pending admin verification.',
-              style: GoogleFonts.poppins(),
-            ),
-            backgroundColor: const Color(0xFF00E676),
-            behavior: SnackBarBehavior.floating,
+              // Transaction ID & Need Help Row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Transaction ID',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white54,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        txId,
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  InkWell(
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Support team notified for $txId',
+                            style: GoogleFonts.poppins(),
+                          ),
+                          backgroundColor: const Color(0xFF5E217C),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF38104D),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFF5E217C)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.help_outline_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Need Help',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 18),
+
+              // Transaction History Button Container
+              InkWell(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Opening Transaction History',
+                        style: GoogleFonts.poppins(),
+                      ),
+                      backgroundColor: const Color(0xFF5E217C),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF38104D),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF5E217C)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Transaction History',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // BACK TO HOME Button
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF4A1063),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 4,
+                  ),
+                  child: Text(
+                    'BACK TO HOME',
+                    style: GoogleFonts.poppins(
+                      color: const Color(0xFF5B127A),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              res?['message'] ?? 'Failed to submit UTR. Please check the UTR number and try again.',
-              style: GoogleFonts.poppins(),
-            ),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
+      },
+    );
   }
 
   void _showPaymentBottomSheet(BuildContext context) {
@@ -190,266 +374,8 @@ class _AddCashScreenState extends State<AddCashScreen> {
     );
   }
 
-  Widget _buildManualUpiPaymentView(BuildContext context) {
-    final order = _activeDepositOrder!;
-    final depositId = order['depositId'] ?? '';
-    final amountRupees = order['amountRupees'] ?? 0;
-    final upiId = order['upiId'] ?? 'pay.ingames@bank';
-    final status = order['status'] ?? 'PENDING';
-    final instructions = (order['instructions'] as List<dynamic>?)?.cast<String>() ?? [];
-
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top Navigation Bar: Back button + Title + Status Badge
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                onPressed: () {
-                  setState(() {
-                    _activeDepositOrder = null;
-                  });
-                },
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-              ),
-              Text(
-                'Manual UPI Deposit',
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.amber),
-                ),
-                child: Text(
-                  status,
-                  style: GoogleFonts.poppins(
-                    color: Colors.amber,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Deposit Order Summary Card
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2C043C),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF6E098E)),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Order ID:',
-                      style: GoogleFonts.poppins(color: Colors.white54, fontSize: 13),
-                    ),
-                    Text(
-                      depositId,
-                      style: GoogleFonts.inter(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Amount Payable:',
-                      style: GoogleFonts.poppins(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
-                    ),
-                    Text(
-                      '₹$amountRupees',
-                      style: GoogleFonts.inter(color: const Color(0xFF00E676), fontSize: 24, fontWeight: FontWeight.w900),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Server UPI ID Card with Copy Button
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF38104D),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFF9E25CB)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Pay to Official UPI ID',
-                      style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      upiId,
-                      style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800),
-                    ),
-                  ],
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: upiId));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('UPI ID copied to clipboard!', style: GoogleFonts.poppins()),
-                        backgroundColor: const Color(0xFF00E676),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.copy_rounded, size: 16, color: Colors.black),
-                  label: Text('COPY', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00E676),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          // Step-by-Step Payment Instructions Card
-          Text(
-            'Payment Instructions 📋',
-            style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF220830),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFF48085F)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: instructions.map((step) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF00E676), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          step,
-                          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13, height: 1.3),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // UTR Input Form Card
-          Text(
-            status == 'UTR_SUBMITTED' ? 'Submitted UTR Reference 📌' : 'Submit 12-Digit UTR Reference',
-            style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: status == 'UTR_SUBMITTED' ? const Color(0xFF220830) : const Color(0xFF38104D),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: status == 'UTR_SUBMITTED' ? const Color(0xFF00E676) : const Color(0xFF5E217C)),
-            ),
-            child: TextField(
-              controller: _utrInputController,
-              enabled: status == 'PENDING' && !_isSubmittingUtr,
-              keyboardType: TextInputType.number,
-              maxLength: 12,
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
-              decoration: InputDecoration(
-                hintText: status == 'UTR_SUBMITTED' ? (order['utr'] ?? 'Submitted') : 'Enter 12-Digit UTR Number',
-                hintStyle: GoogleFonts.poppins(color: Colors.white70, fontSize: 14),
-                border: InputBorder.none,
-                counterText: '',
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Submit UTR Button
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: status == 'UTR_SUBMITTED' ? const Color(0xFF00E676).withValues(alpha: 0.8) : const Color(0xFF00E676),
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              onPressed: (status == 'PENDING' && !_isSubmittingUtr) ? _submitUtr : null,
-              child: _isSubmittingUtr
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2.5),
-                    )
-                  : Text(
-                      status == 'UTR_SUBMITTED' ? 'UTR SUBMITTED — PENDING VERIFICATION' : 'SUBMIT UTR FOR VERIFICATION',
-                      style: GoogleFonts.inter(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w900),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Cancel Deposit Button
-          Center(
-            child: TextButton(
-              onPressed: () {
-                setState(() {
-                  _activeDepositOrder = null;
-                });
-              },
-              child: Text(
-                'Cancel Deposit Request',
-                style: GoogleFonts.poppins(color: Colors.white54, fontSize: 13),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_activeDepositOrder != null) {
-      return _buildManualUpiPaymentView(context);
-    }
-
     final hasInput = _amountController.text.isNotEmpty;
 
     return SingleChildScrollView(
@@ -458,7 +384,7 @@ class _AddCashScreenState extends State<AddCashScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top Header: "Add Cash" title + Total Balance
+          // Top Header: "Add Cash" title + "Total Balance ₹1250.0 💳"
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -495,7 +421,7 @@ class _AddCashScreenState extends State<AddCashScreen> {
                       ),
                       const SizedBox(width: 4),
                       SvgPicture.asset(
-                        'assets/nav_icon/wallet.svg',
+                        'Assets/nav_icon/wallet.svg',
                         width: 16,
                         height: 16,
                         colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
@@ -783,23 +709,17 @@ class _AddCashScreenState extends State<AddCashScreen> {
                 elevation: hasInput ? 8 : 2,
               ),
               onPressed: () => _showPaymentBottomSheet(context),
-              child: _isCreatingOrder
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(color: Colors.black87, strokeWidth: 2.5),
-                    )
-                  : Text(
-                      hasInput
-                          ? 'ADD ₹${_amountController.text}'
-                          : 'ADD CASH',
-                      style: GoogleFonts.inter(
-                        color: hasInput ? Colors.black87 : Colors.white54,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
+              child: Text(
+                hasInput
+                    ? 'ADD ₹${_amountController.text}'
+                    : 'ADD CASH',
+                style: GoogleFonts.inter(
+                  color: hasInput ? Colors.black87 : Colors.white54,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
+              ),
             ),
           ),
 

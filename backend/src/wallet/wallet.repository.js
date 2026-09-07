@@ -22,15 +22,22 @@ async function getWalletByUserId(userId) {
     const w = res.rows[0];
     const avail = parseInt(w.available_balance || 0, 10);
     const resv = parseInt(w.reserved_balance || 0, 10);
+    const dep = parseInt(w.deposit_balance || 0, 10);
+    const win = parseInt(w.winnings_balance || 0, 10);
+    const rew = parseInt(w.rewards_balance || 0, 10);
 
     return {
       availableBalance: avail / 100,
       reservedBalance: resv / 100,
-      depositBalance: avail / 100,
-      winningsBalance: avail / 100,
+      depositBalance: dep / 100,
+      winningsBalance: win / 100,
+      rewardsBalance: rew / 100,
       totalBalance: (avail + resv) / 100,
       availablePaise: avail,
       reservedPaise: resv,
+      depositPaise: dep,
+      winningsPaise: win,
+      rewardsPaise: rew,
     };
   } catch (err) {
     logger.error('PostgreSQL wallet lookup error', { userId, error: err.message });
@@ -53,10 +60,14 @@ async function addCash(userId, amountRupees, paymentMethod) {
 
   const avail = parseInt(result.wallet.available_balance || 0, 10);
   const resv = parseInt(result.wallet.reserved_balance || 0, 10);
+  const dep = parseInt(result.wallet.deposit_balance || 0, 10);
+  const win = parseInt(result.wallet.winnings_balance || 0, 10);
+  const rew = parseInt(result.wallet.rewards_balance || 0, 10);
 
   return {
-    depositBalance: avail / 100,
-    winningsBalance: avail / 100,
+    depositBalance: dep / 100,
+    winningsBalance: win / 100,
+    rewardsBalance: rew / 100,
     totalBalance: (avail + resv) / 100,
   };
 }

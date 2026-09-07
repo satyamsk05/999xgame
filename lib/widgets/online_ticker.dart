@@ -2,14 +2,19 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/api_service.dart';
+import '../services/dashboard_sync_manager.dart';
 import '../theme/app_colors.dart';
+import 'shimmer_loading.dart';
 
 class OnlineTicker extends StatefulWidget {
   final String? onlineCount;
+  final bool isLoading;
 
   const OnlineTicker({
     super.key,
     this.onlineCount,
+    this.isLoading = false,
   });
 
   @override
@@ -23,14 +28,14 @@ class _OnlineTickerState extends State<OnlineTicker>
   Timer? _updateTimer;
   final Random _random = Random();
 
-  final int _currentCount = 1;
-  final List<String> _allAvatars = [
-    'assets/avatar/avatar_1.png',
-    'assets/avatar/avatar_2.png',
-    'assets/avatar/avatar_3.png',
-    'assets/avatar/avatar_7.png',
-    'assets/avatar/avatar_8.png',
-    'assets/avatar/avatar_9.png',
+  int _currentCount = 89156;
+  List<String> _allAvatars = [
+    '/avatars/avatar_1.png',
+    '/avatars/avatar_2.png',
+    '/avatars/avatar_3.png',
+    '/avatars/avatar_7.png',
+    '/avatars/avatar_8.png',
+    '/avatars/avatar_9.png',
   ];
 
   late List<String> _activeAvatars;
@@ -43,11 +48,15 @@ class _OnlineTickerState extends State<OnlineTicker>
   @override
   void initState() {
     super.initState();
+    _loadAvatarsFromSyncManager();
+
     _activeAvatars = [
       _allAvatars[0],
       _allAvatars[1],
       _allAvatars[2],
     ];
+
+    DashboardSyncManager.dashboardData.addListener(_onDashboardDataChanged);
 
     _pulseController = AnimationController(
       vsync: this,
@@ -58,15 +67,16 @@ class _OnlineTickerState extends State<OnlineTicker>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Dynamic update for avatars
-    _updateTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    // Periodic dynamic update for count & continuously rotating all 6 avatars
+    _updateTimer = Timer.periodic(const Duration(milliseconds: 3200), (timer) {
       if (!mounted) return;
       setState(() {
-        if (widget.onlineCount != null && widget.onlineCount!.isNotEmpty) {
-          return;
-        }
+        // Fluctuate count dynamically (+5 to +40 or -5 to -20)
+        final isIncrease = _random.nextDouble() > 0.3;
+        final delta = isIncrease ? _random.nextInt(35) + 5 : -(_random.nextInt(18) + 2);
+        _currentCount = (_currentCount + delta).clamp(85000, 99999);
 
-        // Swap avatar in stack
+        // Swap one avatar position with an unused avatar from all 6 choices
         final replaceIndex = _random.nextInt(3);
         final unusedAvatars = _allAvatars.where((a) => !_activeAvatars.contains(a)).toList();
         if (unusedAvatars.isNotEmpty) {
@@ -77,8 +87,30 @@ class _OnlineTickerState extends State<OnlineTicker>
     });
   }
 
+  void _loadAvatarsFromSyncManager() {
+    final data = DashboardSyncManager.dashboardData.value;
+    final online = data['onlinePlayers'];
+    if (online != null && online['avatars'] is List) {
+      final List<dynamic> list = online['avatars'];
+      if (list.isNotEmpty) {
+        final synced = list.map((e) => e.toString()).toList();
+        if (synced.length >= 3) {
+          _allAvatars = synced;
+        }
+      }
+    }
+  }
+
+  void _onDashboardDataChanged() {
+    if (!mounted) return;
+    setState(() {
+      _loadAvatarsFromSyncManager();
+    });
+  }
+
   @override
   void dispose() {
+    DashboardSyncManager.dashboardData.removeListener(_onDashboardDataChanged);
     _updateTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
@@ -95,6 +127,35 @@ class _OnlineTickerState extends State<OnlineTicker>
     }
     return '${buffer.toString()} online';
   }
+
+  Widget _buildAvatarImage(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('/')) {
+      final fullUrl = path.startsWith('/') ? '${ApiService.serverDomain}$path' : path;
+      return Image.network(
+        fullUrl,
+        width: 24,
+        height: 24,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: const Color(0xFF38084A),
+          child: const Icon(Icons.person, size: 14, color: Colors.white70),
+        ),
+      );
+    }
+
+    final fileName = path.split('/').last.isEmpty ? 'avatar_1.png' : path.split('/').last;
+    return Image.asset(
+      'Assets/Avatar/$fileName',
+      width: 24,
+      height: 24,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Container(
+        color: const Color(0xFF38084A),
+        child: const Icon(Icons.person, size: 14, color: Colors.white70),
+      ),
+    );
+  }
+
 
   Widget _buildMiniAvatar(String assetPath, Color borderColor, double leftOffset, int keyIndex) {
     return Positioned(
@@ -124,15 +185,7 @@ class _OnlineTickerState extends State<OnlineTicker>
             ],
           ),
           child: ClipOval(
-            child: Image.asset(
-              assetPath,
-              width: 24,
-              height: 24,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                color: borderColor,
-              ),
-            ),
+            child: _buildAvatarImage(assetPath),
           ),
         ),
       ),
@@ -141,88 +194,154 @@ class _OnlineTickerState extends State<OnlineTicker>
 
   @override
   Widget build(BuildContext context) {
-    final formattedCount = (widget.onlineCount != null && widget.onlineCount!.isNotEmpty)
-        ? widget.onlineCount!
-        : _formatCount(_currentCount);
+    if (widget.isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 2.0),
+          child: ShimmerBox(
+            width: 210,
+            height: 28,
+            borderRadius: 14.0,
+          ),
+        ),
+      );
+    }
 
-    return Container(
-      width: double.infinity,
-      height: 38,
-      decoration: const BoxDecoration(
-        gradient: AppColors.tickerGradient,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Stacked Overlapping Mini Player Avatars with Dynamic Motion
-          SizedBox(
-            width: 56,
-            height: 24,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                _buildMiniAvatar(_activeAvatars[0], _borderColors[0], 0, 0),
-                _buildMiniAvatar(_activeAvatars[1], _borderColors[1], 15, 1),
-                _buildMiniAvatar(_activeAvatars[2], _borderColors[2], 30, 2),
+    final formattedCount = _formatCount(_currentCount);
+
+    return Center(
+      child: CustomPaint(
+        foregroundPainter: _TickerFadeBorderPainter(
+          borderColor: const Color(0xFF5E177A),
+          strokeWidth: 1.0,
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF38084A).withValues(alpha: 0.0),
+                const Color(0xFF38084A).withValues(alpha: 0.6),
+                const Color(0xFF38084A).withValues(alpha: 0.6),
+                const Color(0xFF38084A).withValues(alpha: 0.0),
               ],
+              stops: const [0.0, 0.15, 0.85, 1.0],
             ),
           ),
-          const SizedBox(width: 10),
-
-          // Dynamic Animated Counter Text with Slide & Fade Motion
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 400),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            transitionBuilder: (Widget child, Animation<double> animation) {
-              return SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0.0, 0.35),
-                  end: Offset.zero,
-                ).animate(animation),
-                child: FadeTransition(
-                  opacity: animation,
-                  child: child,
-                ),
-              );
-            },
-            child: Text(
-              formattedCount,
-              key: ValueKey<String>(formattedCount),
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // Animated Pulsing Green Live Dot (Right Side)
-          AnimatedBuilder(
-            animation: _pulseAnimation,
-            builder: (context, child) {
-              return Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.liveIndicator.withValues(alpha: _pulseAnimation.value),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.liveIndicator.withValues(alpha: _pulseAnimation.value),
-                      blurRadius: 6,
-                      spreadRadius: 2,
-                    ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Stacked Overlapping Mini Player Avatars with Dynamic Motion
+              SizedBox(
+                width: 56,
+                height: 24,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    _buildMiniAvatar(_activeAvatars[0], _borderColors[0], 0, 0),
+                    _buildMiniAvatar(_activeAvatars[1], _borderColors[1], 15, 1),
+                    _buildMiniAvatar(_activeAvatars[2], _borderColors[2], 30, 2),
                   ],
                 ),
-              );
-            },
+              ),
+              const SizedBox(width: 10),
+
+              // Dynamic Animated Counter Text with Slide & Fade Motion
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 400),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0.0, 0.35),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: FadeTransition(
+                      opacity: animation,
+                      child: child,
+                    ),
+                  );
+                },
+                child: Text(
+                  formattedCount,
+                  key: ValueKey<String>(formattedCount),
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Animated Pulsing Green Live Dot (Right Side)
+              AnimatedBuilder(
+                animation: _pulseAnimation,
+                builder: (context, child) {
+                  return Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.liveIndicator.withValues(alpha: _pulseAnimation.value),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.liveIndicator.withValues(alpha: _pulseAnimation.value),
+                          blurRadius: 6,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
+  }
+}
+
+class _TickerFadeBorderPainter extends CustomPainter {
+  final Color borderColor;
+  final double strokeWidth;
+
+  _TickerFadeBorderPainter({
+    required this.borderColor,
+    this.strokeWidth = 1.5,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+
+    final lineShader = LinearGradient(
+      colors: [
+        borderColor.withValues(alpha: 0.0),
+        borderColor.withValues(alpha: 0.25),
+        borderColor.withValues(alpha: 0.25),
+        borderColor.withValues(alpha: 0.0),
+      ],
+      stops: const [0.0, 0.15, 0.85, 1.0],
+    ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    paint.shader = lineShader;
+
+    // Top fade line
+    canvas.drawLine(Offset(0, strokeWidth / 2), Offset(size.width, strokeWidth / 2), paint);
+
+    // Bottom fade line
+    canvas.drawLine(Offset(0, size.height - strokeWidth / 2), Offset(size.width, size.height - strokeWidth / 2), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TickerFadeBorderPainter oldDelegate) {
+    return oldDelegate.borderColor != borderColor || oldDelegate.strokeWidth != strokeWidth;
   }
 }
