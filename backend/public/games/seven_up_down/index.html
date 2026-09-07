@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>7 Up Down - InGames</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      background: radial-gradient(circle at center, #2b0754 0%, #110228 100%);
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      overflow: hidden;
+    }
+
+    /* Top Header Bar */
+    .header-bar {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(12px);
+      padding: 10px 16px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    .game-title {
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #ffd700, #ff8c00);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .status-badge {
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 12px;
+      background: #00e676;
+      color: #000;
+      text-transform: uppercase;
+      box-shadow: 0 0 12px rgba(0, 230, 118, 0.5);
+      transition: all 0.3s ease;
+    }
+    .status-badge.closed {
+      background: #ff5252;
+      color: #fff;
+      box-shadow: 0 0 12px rgba(255, 82, 82, 0.5);
+    }
+    .status-badge.rolling {
+      background: #ffb74d;
+      color: #000;
+      box-shadow: 0 0 12px rgba(255, 183, 77, 0.5);
+    }
+
+    /* History Bar */
+    .history-container {
+      width: 100%;
+      max-width: 440px;
+      margin: 8px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 4px 2px;
+      scrollbar-width: none;
+    }
+    .history-container::-webkit-scrollbar { display: none; }
+    .history-pill {
+      min-width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 800;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .history-pill.down { border-color: #00e676; color: #00e676; }
+    .history-pill.seven { border-color: #ffd700; color: #ffd700; background: rgba(255, 215, 0, 0.2); }
+    .history-pill.up { border-color: #e040fb; color: #e040fb; }
+
+    /* Dice Arena */
+    .dice-arena {
+      width: 100%;
+      max-width: 440px;
+      height: 140px;
+      background: radial-gradient(circle, rgba(124, 58, 237, 0.3) 0%, rgba(20, 5, 45, 0.8) 100%);
+      border-radius: 24px;
+      border: 2px solid rgba(255, 215, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.6), 0 10px 30px rgba(124, 58, 237, 0.3);
+      margin: 8px 0;
+    }
+    .dice-wrapper {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+    .dice {
+      width: 58px;
+      height: 58px;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5), inset 0 0 6px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      font-weight: 900;
+      color: #110228;
+      transition: transform 0.2s ease;
+    }
+    .dice.rolling {
+      animation: shake 0.5s infinite;
+    }
+    @keyframes shake {
+      0% { transform: translate(1px, 1px) rotate(0deg); }
+      20% { transform: translate(-3px, 0px) rotate(10deg); }
+      40% { transform: translate(1px, -1px) rotate(-10deg); }
+      60% { transform: translate(-2px, 2px) rotate(5deg); }
+      80% { transform: translate(2px, 1px) rotate(-5deg); }
+      100% { transform: translate(0px, 0px) rotate(0deg); }
+    }
+    .dice-sum-badge {
+      margin-top: 10px;
+      font-size: 14px;
+      font-weight: 800;
+      color: #ffd700;
+      letter-spacing: 1px;
+    }
+
+    /* Betting Spots Container */
+    .betting-grid {
+      width: 100%;
+      max-width: 440px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      margin: 8px 0;
+    }
+    .bet-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1.5px solid rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      padding: 14px 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+    .bet-card:active {
+      transform: scale(0.96);
+    }
+    .bet-card.selected {
+      border-color: #ffd700;
+      background: rgba(255, 215, 0, 0.15);
+      box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+    }
+    .bet-card.winner {
+      border-color: #00e676;
+      background: rgba(0, 230, 118, 0.25);
+      box-shadow: 0 0 25px rgba(0, 230, 118, 0.6);
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
+    .bet-range {
+      font-size: 16px;
+      font-weight: 900;
+      margin-bottom: 2px;
+    }
+    .bet-card.down .bet-range { color: #00e676; }
+    .bet-card.seven .bet-range { color: #ffd700; }
+    .bet-card.up .bet-range { color: #e040fb; }
+
+    .bet-multiplier {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.7);
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+    .my-staked-amount {
+      margin-top: 6px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #ffffff;
+    }
+
+    /* Chip Selector Bar */
+    .chip-bar {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 10px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      margin-top: 6px;
+    }
+    .chip {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 900;
+      color: #ffffff;
+      border: 3px dashed #ffffff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+    }
+    .chip.c10 { background: #0085ff; }
+    .chip.c50 { background: #00e676; color: #000; }
+    .chip.c100 { background: #e040fb; }
+    .chip.c500 { background: #ffd700; color: #000; }
+    .chip.active {
+      transform: scale(1.18);
+      border-style: solid;
+      box-shadow: 0 0 16px #ffffff;
+    }
+
+    /* Toast Notice */
+    .toast {
+      position: fixed;
+      bottom: 80px;
+      background: rgba(0, 0, 0, 0.85);
+      color: #ffd700;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      border: 1px solid #ffd700;
+      display: none;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header Bar -->
+  <div class="header-bar">
+    <div class="game-title">7 UP DOWN</div>
+    <div id="statusBadge" class="status-badge">BETTING OPEN</div>
+  </div>
+
+  <!-- History Log -->
+  <div class="history-container" id="historyBar">
+    <div class="history-pill up">9</div>
+    <div class="history-pill down">4</div>
+    <div class="history-pill seven">7</div>
+    <div class="history-pill up">11</div>
+    <div class="history-pill down">3</div>
+    <div class="history-pill up">10</div>
+  </div>
+
+  <!-- Dice Rolling Arena -->
+  <div class="dice-arena">
+    <div class="dice-wrapper">
+      <div id="dice1" class="dice">⚂</div>
+      <div id="dice2" class="dice">⚃</div>
+    </div>
+    <div id="diceSumText" class="dice-sum-badge">TOTAL: 7</div>
+  </div>
+
+  <!-- Betting Cards Grid -->
+  <div class="betting-grid">
+    <!-- DOWN Spot -->
+    <div class="bet-card down" onclick="placeBet('DOWN')">
+      <div class="bet-range">2 - 6</div>
+      <div class="bet-multiplier">2.0X</div>
+      <div class="my-staked-amount" id="stakedDown">₹0</div>
+    </div>
+
+    <!-- SEVEN Spot -->
+    <div class="bet-card seven" onclick="placeBet('SEVEN')">
+      <div class="bet-range">LUCKY 7</div>
+      <div class="bet-multiplier">5.0X</div>
+      <div class="my-staked-amount" id="stakedSeven">₹0</div>
+    </div>
+
+    <!-- UP Spot -->
+    <div class="bet-card up" onclick="placeBet('UP')">
+      <div class="bet-range">8 - 12</div>
+      <div class="bet-multiplier">2.0X</div>
+      <div class="my-staked-amount" id="stakedUp">₹0</div>
+    </div>
+  </div>
+
+  <!-- Chip Selector -->
+  <div class="chip-bar">
+    <div class="chip c10 active" onclick="selectChip(10, this)">₹10</div>
+    <div class="chip c50" onclick="selectChip(50, this)">₹50</div>
+    <div class="chip c100" onclick="selectChip(100, this)">₹100</div>
+    <div class="chip c500" onclick="selectChip(500, this)">₹500</div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast">Bet Placed Successfully!</div>
+
+  <script>
+    let selectedChip = 10;
+    let isBettingOpen = true;
+    let stakes = { DOWN: 0, SEVEN: 0, UP: 0 };
+    const socket = io();
+
+    const diceFaces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
+    function selectChip(amount, el) {
+      selectedChip = amount;
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 2200);
+    }
+
+    function placeBet(type) {
+      if (!isBettingOpen) {
+        showToast('Betting is CLOSED for this round!');
+        return;
+      }
+
+      stakes[type] += selectedChip;
+      document.getElementById('staked' + type.charAt(0) + type.slice(1).toLowerCase()).innerText = '₹' + stakes[type];
+      
+      const betCard = document.querySelector('.bet-card.' + type.toLowerCase());
+      betCard.classList.add('selected');
+
+      showToast('Bet ₹' + selectedChip + ' on ' + type);
+
+      // Socket emit bet placement to backend engine
+      socket.emit('PLACE_BET', {
+        betType: type,
+        stake: selectedChip
+      });
+
+      // Post message to parent Flutter app if needed
+      window.parent.postMessage('WALLET_UPDATED', '*');
+    }
+
+    // Socket.io Realtime Game State Sync
+    socket.on('connect', () => {
+      console.log('Connected to 7 Up Down Game Server');
+    });
+
+    socket.on('ROUND_STATE', (data) => {
+      const badge = document.getElementById('statusBadge');
+      if (data.status === 'BETTING_OPEN') {
+        isBettingOpen = true;
+        badge.innerText = 'BETTING OPEN';
+        badge.className = 'status-badge';
+        document.querySelectorAll('.bet-card').forEach(c => c.classList.remove('winner'));
+      } else if (data.status === 'BETTING_CLOSED') {
+        isBettingOpen = false;
+        badge.innerText = 'BETTING CLOSED';
+        badge.className = 'status-badge closed';
+      }
+    });
+
+    socket.on('DICE_RESULT', (data) => {
+      const dice1 = document.getElementById('dice1');
+      const dice2 = document.getElementById('dice2');
+      const sumText = document.getElementById('diceSumText');
+      const badge = document.getElementById('statusBadge');
+
+      badge.innerText = 'ROLLING...';
+      badge.className = 'status-badge rolling';
+
+      dice1.classList.add('rolling');
+      dice2.classList.add('rolling');
+
+      setTimeout(() => {
+        dice1.classList.remove('rolling');
+        dice2.classList.remove('rolling');
+
+        const d1Val = data.dice1 || Math.floor(Math.random() * 6) + 1;
+        const d2Val = data.dice2 || Math.floor(Math.random() * 6) + 1;
+        const sum = d1Val + d2Val;
+
+        dice1.innerText = diceFaces[d1Val - 1];
+        dice2.innerText = diceFaces[d2Val - 1];
+        sumText.innerText = 'TOTAL: ' + sum + ' (' + data.winningBetType + ')';
+
+        // Highlight Winner
+        const winCard = document.querySelector('.bet-card.' + data.winningBetType.toLowerCase());
+        if (winCard) winCard.classList.add('winner');
+
+        // Add to History
+        addHistoryPill(sum, data.winningBetType);
+      }, 1200);
+    });
+
+    function addHistoryPill(sum, winType) {
+      const bar = document.getElementById('historyBar');
+      const pill = document.createElement('div');
+      pill.className = 'history-pill ' + winType.toLowerCase();
+      pill.innerText = sum;
+      bar.insertBefore(pill, bar.firstChild);
+      if (bar.children.length > 10) bar.removeChild(bar.lastChild);
+    }
+
+    // Auto Roll Simulation Loop if standalone preview
+    setInterval(() => {
+      if (Math.random() > 0.7) {
+        const d1 = Math.floor(Math.random() * 6) + 1;
+        const d2 = Math.floor(Math.random() * 6) + 1;
+        const sum = d1 + d2;
+        let winType = 'SEVEN';
+        if (sum < 7) winType = 'DOWN';
+        if (sum > 7) winType = 'UP';
+
+        document.getElementById('dice1').innerText = diceFaces[d1 - 1];
+        document.getElementById('dice2').innerText = diceFaces[d2 - 1];
+        document.getElementById('diceSumText').innerText = 'RESULT: ' + sum + ' (' + winType + ')';
+        
+        document.querySelectorAll('.bet-card').forEach(c => c.classList.remove('winner'));
+        const winCard = document.querySelector('.bet-card.' + winType.toLowerCase());
+        if (winCard) winCard.classList.add('winner');
+      }
+    }, 12000);
+  </script>
+</body>
+</html>

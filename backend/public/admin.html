@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>999x Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/base.css">
+  <link rel="stylesheet" href="/admin/css/components.css">
+  <link rel="stylesheet" href="/admin/css/layout.css">
+</head>
+<body>
+
+<div id="shell">
+
+  <!-- ── Sidebar ─────────────────────────────────── -->
+  <nav id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-mark">9x</div>
+      <div>
+        <div class="brand-name">999x Admin</div>
+        <div class="brand-env">Control Center</div>
+      </div>
+    </div>
+
+    <div class="sidebar-body">
+
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" data-page="dashboard" onclick="App.navigate('dashboard')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+          <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+        </svg>
+        Dashboard
+      </div>
+
+      <div class="nav-section">Operations</div>
+      <div class="nav-item" data-page="users" onclick="App.navigate('users')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+        </svg>
+        Users
+      </div>
+      <div class="nav-item" data-page="deposits" onclick="App.navigate('deposits')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 2v9M5 8l3 3 3-3"/><path d="M2 13h12"/>
+        </svg>
+        Deposits
+        <span class="nav-count" id="badge-deposits">0</span>
+      </div>
+      <div class="nav-item" data-page="withdrawals" onclick="App.navigate('withdrawals')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 14V5M5 8l3-3 3 3"/><path d="M2 3h12"/>
+        </svg>
+        Withdrawals
+        <span class="nav-count" id="badge-withdrawals">0</span>
+      </div>
+
+      <div class="nav-section">Platform</div>
+      <div class="nav-item" data-page="games" onclick="App.navigate('games')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1" y="4" width="14" height="10" rx="2"/>
+          <path d="M4 9h2M5 8v2M10 9h2M8 6v2 M11 7a.5.5 0 10-1 0 .5.5 0 001 0"/>
+        </svg>
+        Games
+      </div>
+      <div class="nav-item" data-page="promotions" onclick="App.navigate('promotions')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 9l5.5-5.5a2 2 0 012.8 0L14 7"/><path d="M8 4l4 4-6 6-4-4z"/>
+        </svg>
+        Promotions
+      </div>
+      <div class="nav-item" data-page="ledger" onclick="App.navigate('ledger')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 2h12v12H2z"/><path d="M5 6h6M5 9h6M5 12h3"/>
+        </svg>
+        Ledger
+      </div>
+      <div class="nav-item" data-page="reports" onclick="App.navigate('reports')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 12l3-4 3 2 3-5 3 3"/>
+        </svg>
+        Reports
+      </div>
+
+      <div class="nav-section">System</div>
+      <div class="nav-item" data-page="notifications" onclick="App.navigate('notifications')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M13 11H3l1-4a4 4 0 018 0l1 4z"/><path d="M6 11v1a2 2 0 004 0v-1"/>
+        </svg>
+        Notifications
+      </div>
+      <div class="nav-item" data-page="security" onclick="App.navigate('security')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 2L3 4v5c0 3 2.5 5 5 6 2.5-1 5-3 5-6V4L8 2z"/>
+        </svg>
+        Security
+      </div>
+      <div class="nav-item" data-page="settings" onclick="App.navigate('settings')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="8" r="2"/>
+          <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4"/>
+        </svg>
+        Settings
+      </div>
+
+    </div>
+
+    <div class="sidebar-footer">999x Gaming Platform</div>
+  </nav>
+
+  <!-- Mobile overlay -->
+  <div id="sidebar-overlay"></div>
+
+  <!-- ── Main ──────────────────────────────────────── -->
+  <div id="main">
+
+    <!-- Topbar -->
+    <header id="topbar">
+      <div class="flex items-center gap-3">
+        <button id="menu-toggle" onclick="toggleSidebar()">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+            <line x1="1" y1="3" x2="13" y2="3"/><line x1="1" y1="7" x2="13" y2="7"/><line x1="1" y1="11" x2="13" y2="11"/>
+          </svg>
+        </button>
+        <span id="page-title">Dashboard</span>
+      </div>
+      <div class="topbar-right">
+        <div class="status-row">
+          <span class="status-dot online" id="conn-dot"></span>
+          <span id="conn-label">Online</span>
+        </div>
+        <button class="btn-refresh" id="btn-refresh" onclick="App.refresh()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="23 4 23 10 17 10"/>
+            <polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+    </header>
+
+    <!-- ── Dashboard ──────────────────────────────── -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-h1">Dashboard</div>
+          <div class="page-sub" id="dash-updated">Loading...</div>
+        </div>
+      </div>
+      <div class="grid-4 mb-6" id="dash-stats"></div>
+      <div class="grid-2">
+        <div>
+          <div class="font-semi mb-4">Current Round</div>
+          <div class="card card-p2" id="dash-round"></div>
+        </div>
+        <div>
+          <div class="font-semi mb-4">Quick Actions</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-ghost" onclick="App.navigate('deposits')">Review Pending Deposits</button>
+            <button class="btn btn-ghost" onclick="App.navigate('withdrawals')">Review Pending Withdrawals</button>
+            <button class="btn btn-ghost" onclick="App.navigate('users')">Manage Users</button>
+            <button class="btn btn-ghost" onclick="App.navigate('reports')">View Reports</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Users ──────────────────────────────────── -->
+    <div class="page" id="page-users">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-h1">Users</div>
+          <div class="page-sub" id="users-meta">Loading...</div>
+        </div>
+      </div>
+      <div class="table-container">
+        <div class="table-header">
+          <div class="table-title">Registered Users</div>
+          <div class="search-field">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" placeholder="Phone or username..." oninput="PageUsers.onSearch(this.value)">
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Phone</th>
+              <th>Available</th>
+              <th>Reserved</th>
+              <th>Status</th>
+              <th>Joined</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+        <div class="pagination">
+          <button class="page-btn" id="users-prev" onclick="PageUsers.page(-1)" disabled>Prev</button>
+          <span class="page-info" id="users-page-info">Page 1</span>
+          <button class="page-btn" id="users-next" onclick="PageUsers.page(1)">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Deposits ───────────────────────────────── -->
+    <div class="page" id="page-deposits">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-h1">Deposits</div>
+          <div class="page-sub" id="dep-meta">Loading...</div>
+        </div>
+        <div class="page-hdr-right">
+          <button class="btn btn-ghost btn-sm" onclick="PageDeposits.load()">Reload</button>
+        </div>
+      </div>
+      <div class="table-container">
+        <div class="table-header">
+          <div class="table-title">Pending UTR Verification</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Amount</th>
+              <th>UTR / Reference</th>
+              <th>Status</th>
+              <th>Submitted</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="dep-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Withdrawals ────────────────────────────── -->
+    <div class="page" id="page-withdrawals">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-h1">Withdrawals</div>
+          <div class="page-sub" id="wdr-meta">Loading...</div>
+        </div>
+        <div class="page-hdr-right">
+          <button class="btn btn-ghost btn-sm" onclick="PageWithdrawals.load()">Reload</button>
+        </div>
+      </div>
+      <div class="table-container">
+        <div class="table-header">
+          <div class="table-title">Pending Withdrawal Queue</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Amount</th>
+              <th>UPI / Address</th>
+              <th>Status</th>
+              <th>Requested</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="wdr-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Games ─────────────────────────────────── -->
+    <div class="page" id="page-games">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-h1">Games</div>
+          <div class="page-sub">Enable, disable and configure games</div>
+        </div>
+      </div>
+      <div id="games-body"></div>
+    </div>
+
+    <!-- ── Promotions ─────────────────────────────── -->
+    <div class="page" id="page-promotions">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-h1">Promotions</div>
+          <div class="page-sub" id="promo-meta">Loading...</div>
+        </div>
+        <div class="page-hdr-right">
+          <button class="btn btn-primary btn-sm" onclick="PagePromotions.openCreate()">Create Promotion</button>
+        </div>
+      </div>
+      <div class="table-container">
+        <div class="table-header"><div class="table-title">Active Promotions</div></div>
+        <table>
+          <thead>
+            <tr><th>Title</th><th>Type</th><th>Bonus</th><th>Min Deposit</th><th>Status</th><th>Expires</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="promo-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Ledger ─────────────────────────────────── -->
+    <div class="page" id="page-ledger">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-h1">Ledger</div>
+          <div class="page-sub">Transaction history per user</div>
+        </div>
+      </div>
+      <div id="ledger-user-info" class="mb-4 text-sm" style="min-height:24px"></div>
+      <div class="table-container">
+        <div class="table-header">
+          <div class="table-title">Transactions</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="search-field">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" placeholder="User ID..." oninput="PageLedger.onSearch(this.value)" style="width:160px">
+            </div>
+            <select class="select" id="ledger-type" onchange="PageLedger.onSearch(document.querySelector('[placeholder=\'User ID...\']').value)" style="width:170px;padding:6px 10px">
+              <option value="">All types</option>
+              <option>DEPOSIT</option>
+              <option>WITHDRAW_RESERVE</option>
+              <option>WITHDRAW_FINALIZE</option>
+              <option>WITHDRAW_RELEASE</option>
+              <option>BET_DEBIT</option>
+              <option>WIN_CREDIT</option>
+              <option>ADMIN_CREDIT</option>
+              <option>ADMIN_DEBIT</option>
+            </select>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Type</th><th>Direction</th><th>Amount</th><th>Reference</th><th>Timestamp</th></tr>
+          </thead>
+          <tbody id="ledger-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Reports ────────────────────────────────── -->
+    <div class="page" id="page-reports">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-h1">Reports</div>
+          <div class="page-sub" id="rep-period">Loading...</div>
+        </div>
+        <div class="page-hdr-right">
+          <input type="date" class="input" id="rep-from" style="width:140px;padding:6px 10px">
+          <input type="date" class="input" id="rep-to"   style="width:140px;padding:6px 10px">
+          <button class="btn btn-ghost btn-sm" onclick="PageReports.fetch()">Apply</button>
+        </div>
+      </div>
+      <div class="grid-3 mb-6" id="rep-summary"></div>
+      <div class="table-container">
+        <div class="table-header"><div class="table-title">Daily Breakdown</div></div>
+        <table>
+          <thead>
+            <tr><th>Date</th><th>Deposits</th><th>Bets</th><th>Staked</th><th>Paid Out</th><th>House Revenue</th></tr>
+          </thead>
+          <tbody id="rep-daily-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Notifications ──────────────────────────── -->
+    <div class="page" id="page-notifications">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-h1">Notifications</div>
+          <div class="page-sub">System alerts and notification channels</div>
+        </div>
+      </div>
+      <div id="notif-body"></div>
+    </div>
+
+    <!-- ── Security ───────────────────────────────── -->
+    <div class="page" id="page-security">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-h1">Security</div>
+          <div class="page-sub" id="audit-meta">Loading...</div>
+        </div>
+        <div class="page-hdr-right">
+          <input type="text" class="input" placeholder="Filter by action..." oninput="PageSecurity.filterAction(this.value)" style="width:180px;padding:6px 10px">
+        </div>
+      </div>
+      <div class="table-container">
+        <div class="table-header"><div class="table-title">Audit Log</div></div>
+        <table>
+          <thead>
+            <tr><th>Log ID</th><th>Action</th><th>Actor</th><th>Details</th><th>Timestamp</th></tr>
+          </thead>
+          <tbody id="audit-tbody"></tbody>
+        </table>
+        <div class="pagination">
+          <button class="page-btn" id="audit-prev" onclick="PageSecurity.page(-1)" disabled>Prev</button>
+          <span class="page-info" id="audit-page-info">Page 1</span>
+          <button class="page-btn" id="audit-next" onclick="PageSecurity.page(1)">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Settings ───────────────────────────────── -->
+    <div class="page" id="page-settings">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-h1">Settings</div>
+          <div class="page-sub">Admin credentials and system configuration</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <div class="card card-p mb-4">
+            <div class="font-semi mb-4">Admin Authentication</div>
+            <div class="field">
+              <label class="field-label">Admin Secret Key</label>
+              <input class="input" type="password" id="setting-secret" placeholder="X-Admin-Secret value">
+            </div>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <button class="btn btn-primary btn-sm" onclick="PageSettings.saveSecret()">Save & Test</button>
+              <button class="btn btn-ghost btn-sm" onclick="PageSettings.clearSecret()">Clear</button>
+            </div>
+            <div id="secret-result" class="text-sm mt-4" style="min-height:18px"></div>
+          </div>
+
+          <div class="card card-p">
+            <div class="font-semi mb-4">Default Secret (development)</div>
+            <div class="alert alert-info text-sm">
+              If no <code>ADMIN_SECRET</code> is set in <code>.env</code>, the default is:<br>
+              <code style="font-family:var(--font-mono);margin-top:6px;display:block">dev_admin_secret_key_999x</code>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card card-p">
+            <div class="font-semi mb-4">Backend Health</div>
+            <div id="health-body"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- #main -->
+</div><!-- #shell -->
+
+<!-- ── Modals ────────────────────────────────────────── -->
+
+<!-- User Detail -->
+<div class="overlay" id="modal-user">
+  <div class="modal modal-lg">
+    <div class="modal-head">
+      <div class="modal-title">User Detail</div>
+      <button class="modal-close" onclick="UI.closeModal('modal-user')">&#x2715;</button>
+    </div>
+    <div id="user-modal-body"></div>
+  </div>
+</div>
+
+<!-- Balance Adjust -->
+<div class="overlay" id="modal-adjust">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Manual Balance Adjustment</div>
+      <button class="modal-close" onclick="UI.closeModal('modal-adjust')">&#x2715;</button>
+    </div>
+    <div class="alert alert-warn mb-4">
+      Adjusting wallet for: <strong id="adj-user"></strong>. This action is permanently logged.
+    </div>
+    <div class="field-row-2">
+      <div class="field">
+        <label class="field-label">Amount (INR)</label>
+        <input class="input" type="number" id="adj-amount" placeholder="e.g. 500" min="1">
+      </div>
+      <div class="field">
+        <label class="field-label">Direction</label>
+        <select class="select" id="adj-direction">
+          <option value="CREDIT">Credit (Add)</option>
+          <option value="DEBIT">Debit (Subtract)</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Reason <span style="color:var(--red)">*</span></label>
+      <textarea class="textarea" id="adj-reason" placeholder="Minimum 5 characters. This is stored in the audit trail."></textarea>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="UI.closeModal('modal-adjust')">Cancel</button>
+      <button class="btn btn-primary" id="adj-submit" onclick="PageUsers.submitAdjust()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Block User -->
+<div class="overlay" id="modal-block">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Block User</div>
+      <button class="modal-close" onclick="UI.closeModal('modal-block')">&#x2715;</button>
+    </div>
+    <div class="alert alert-warn mb-4">The user will be blocked and unable to access the platform.</div>
+    <div class="field">
+      <label class="field-label">Reason <span style="color:var(--red)">*</span></label>
+      <textarea class="textarea" id="block-reason" placeholder="Minimum 5 characters..."></textarea>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="UI.closeModal('modal-block')">Cancel</button>
+      <button class="btn btn-danger" id="block-submit" onclick="PageUsers.submitBlock()">Block User</button>
+    </div>
+  </div>
+</div>
+
+<!-- Deposit Action -->
+<div class="overlay" id="modal-deposit">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="dep-modal-title">Confirm Deposit</div>
+      <button class="modal-close" onclick="UI.closeModal('modal-deposit')">&#x2715;</button>
+    </div>
+    <div class="card card-p2 mb-4">
+      <div class="detail-row"><span class="detail-key">Action</span><span id="dep-modal-q" class="detail-val text-sm"></span></div>
+      <div class="detail-row"><span class="detail-key">Amount</span><span id="dep-modal-amt" class="detail-val amount-pos"></span></div>
+      <div class="detail-row"><span class="detail-key">Deposit ID</span><span id="dep-modal-id" class="detail-val mono text-xs text-dim"></span></div>
+    </div>
+    <div class="field">
+      <label class="field-label">Admin Note (optional)</label>
+      <input class="input" type="text" id="dep-note" placeholder="e.g. UTR verified manually">
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="UI.closeModal('modal-deposit')">Cancel</button>
+      <button class="btn" id="dep-submit" onclick="PageDeposits.submit()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Withdrawal Action -->
+<div class="overlay" id="modal-withdrawal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="wdr-modal-title">Withdrawal Action</div>
+      <button class="modal-close" onclick="UI.closeModal('modal-withdrawal')">&#x2715;</button>
+    </div>
+    <div class="card card-p2 mb-4">
+      <div class="detail-row"><span class="detail-key">Action</span><span id="wdr-modal-q" class="detail-val text-sm"></span></div>
+      <div class="detail-row"><span class="detail-key">Amount</span><span id="wdr-modal-amt" class="detail-val amount-neg"></span></div>
+      <div class="detail-row"><span class="detail-key">Withdrawal ID</span><span id="wdr-modal-id" class="detail-val mono text-xs text-dim"></span></div>
+    </div>
+    <div class="field">
+      <label class="field-label">Admin Note (optional)</label>
+      <input class="input" type="text" id="wdr-note" placeholder="e.g. Payment sent via UPI">
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="UI.closeModal('modal-withdrawal')">Cancel</button>
+      <button class="btn" id="wdr-submit" onclick="PageWithdrawals.submit()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Game Config -->
+<div class="overlay" id="modal-game-config">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Game Configuration</div>
+      <button class="modal-close" onclick="UI.closeModal('modal-game-config')">&#x2715;</button>
+    </div>
+    <div class="field-row-2">
+      <div class="field">
+        <label class="field-label">Min Stake (INR)</label>
+        <input class="input" type="number" id="cfg-min" min="1">
+      </div>
+      <div class="field">
+        <label class="field-label">Max Stake (INR)</label>
+        <input class="input" type="number" id="cfg-max" min="1">
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Entry Fee (INR)</label>
+      <input class="input" type="number" id="cfg-entry" min="0">
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="UI.closeModal('modal-game-config')">Cancel</button>
+      <button class="btn btn-primary" id="cfg-submit" onclick="PageGames.submitConfig()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Promotion Form -->
+<div class="overlay" id="modal-promo">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="promo-modal-title">Create Promotion</div>
+      <button class="modal-close" onclick="UI.closeModal('modal-promo')">&#x2715;</button>
+    </div>
+    <div class="field">
+      <label class="field-label">Title <span style="color:var(--red)">*</span></label>
+      <input class="input" type="text" id="promo-title-inp" placeholder="e.g. Welcome Bonus 50%">
+    </div>
+    <div class="field-row-2">
+      <div class="field">
+        <label class="field-label">Type</label>
+        <select class="select" id="promo-type">
+          <option value="WELCOME">WELCOME</option>
+          <option value="DEPOSIT_BONUS">DEPOSIT_BONUS</option>
+          <option value="REFERRAL">REFERRAL</option>
+          <option value="CUSTOM">CUSTOM</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Bonus Amount (INR)</label>
+        <input class="input" type="number" id="promo-bonus" min="0" placeholder="0">
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Min Deposit Required (INR)</label>
+      <input class="input" type="number" id="promo-min" min="0" placeholder="0">
+    </div>
+    <div class="field-row-2">
+      <div class="field">
+        <label class="field-label">Valid From</label>
+        <input class="input" type="date" id="promo-from">
+      </div>
+      <div class="field">
+        <label class="field-label">Valid Until</label>
+        <input class="input" type="date" id="promo-until">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="UI.closeModal('modal-promo')">Cancel</button>
+      <button class="btn btn-primary" id="promo-submit" onclick="PagePromotions.submit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-root"></div>
+
+<!-- ── Scripts ───────────────────────────────────────── -->
+<script src="/admin/js/utils.js"></script>
+<script src="/admin/js/api.js"></script>
+<script src="/admin/js/pages/dashboard.js"></script>
+<script src="/admin/js/pages/users.js"></script>
+<script src="/admin/js/pages/deposits.js"></script>
+<script src="/admin/js/pages/withdrawals.js"></script>
+<script src="/admin/js/pages/games.js"></script>
+<script src="/admin/js/pages/promotions.js"></script>
+<script src="/admin/js/pages/ledger.js"></script>
+<script src="/admin/js/pages/reports.js"></script>
+<script src="/admin/js/pages/notifications.js"></script>
+<script src="/admin/js/pages/security.js"></script>
+<script src="/admin/js/pages/settings.js"></script>
+<script src="/admin/js/app.js"></script>
+
+</body>
+</html>

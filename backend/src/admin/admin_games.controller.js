@@ -1,0 +1,115 @@
+const express = require('express');
+const router = express.Router();
+const adminMiddleware = require('../middleware/admin.middleware');
+const { query } = require('../database/db');
+const logger = require('../utils/logger');
+
+router.use(adminMiddleware);
+
+/** GET /api/admin/games — All games */
+router.get('/', async (req, res, next) => {
+  try {
+    const res2 = await query('SELECT * FROM games ORDER BY created_at ASC');
+    res.json({ status: 'success', data: res2.rows });
+  } catch (err) { next(err); }
+});
+
+/** POST /api/admin/games/:gameId/toggle — Enable / Disable */
+router.post('/:gameId/toggle', async (req, res, next) => {
+  try {
+    const { gameId } = req.params;
+    const adminId = req.admin?.id || 'admin_sys';
+
+    const cur = await query('SELECT status FROM games WHERE id = $1', [gameId]);
+    if (!cur.rows.length) return res.status(404).json({ status: 'error', message: 'Game not found' });
+
+    const newStatus = cur.rows[0].status === 'LIVE' ? 'DISABLED' : 'LIVE';
+    const updated = await query(
+      'UPDATE games SET status = $1 WHERE id = $2 RETURNING *',
+      [newStatus, gameId]
+    );
+
+    await query(
+      `INSERT INTO audit_logs (id, user_id, action, details, created_at)
+       VALUES ($1, $2, $3, $4::jsonb, NOW())`,
+      [`al_${Date.now()}`, adminId, 'GAME_TOGGLE', JSON.stringify({ gameId, newStatus })]
+    );
+
+    logger.info('Admin toggled game status', { adminId, gameId, newStatus });
+    res.json({ status: 'success', data: updated.rows[0] });
+  } catch (err) { next(err); }
+});
+
+/** PATCH /api/admin/games/:gameId/config — Update stakes/fee */
+router.patch('/:gameId/config', async (req, res, next) => {
+  try {
+    const { gameId } = req.params;
+    const { entryFee, minStake, maxStake } = req.body;
+    const adminId = req.admin?.id || 'admin_sys';
+
+    const updated = await query(
+      `UPDATE games
+       SET entry_fee  = COALESCE($2, entry_fee),
+           min_stake  = COALESCE($3, min_stake),
+           max_stake  = COALESCE($4, max_stake)
+       WHERE id = $1
+       RETURNING *`,
+      [gameId, entryFee ? Math.round(entryFee * 100) : null,
+               minStake ? Math.round(minStake * 100) : null,
+               maxStake ? Math.round(maxStake * 100) : null]
+    );
+    if (!updated.rows.length) return res.status(404).json({ status: 'error', message: 'Game not found' });
+
+    await query(
+      `INSERT INTO audit_logs (id, user_id, action, details, created_at)
+       VALUES ($1, $2, 'GAME_CONFIG_UPDATE', $3::jsonb, NOW())`,
+      [`al_${Date.now()}`, adminId, JSON.stringify({ gameId, entryFee, minStake, maxStake })]
+    );
+
+    res.json({ status: 'success', data: updated.rows[0] });
+  } catch (err) { next(err); }
+});
+
+/** GET /api/admin/games/:gameId/rounds?limit=20 — Recent rounds */
+router.get('/:gameId/rounds', async (req, res, next) => {
+  try {
+    const { gameId } = req.params;
+    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
+
+    const result = await query(
+      `SELECT id, round_number, status, result, started_at, betting_closed_at, ended_at, created_at
+       FROM game_rounds WHERE game_id = $1
+       ORDER BY created_at DESC LIMIT $2`,
+      [gameId, limit]
+    );
+    res.json({ status: 'success', data: result.rows });
+  } catch (err) { next(err); }
+});
+
+/** GET /api/admin/games/:gameId/bets?roundId=&limit=50 — Bets for a round */
+router.get('/:gameId/bets', async (req, res, next) => {
+  try {
+    const { roundId, limit: lim } = req.query;
+    const limit = Math.min(parseInt(lim || '50', 10), 200);
+
+    let sql, params;
+    if (roundId) {
+      sql = `SELECT b.*, u.username, u.phone FROM bets b
+             LEFT JOIN users u ON u.id = b.user_id
+             WHERE b.round_id = $1
+             ORDER BY b.created_at DESC LIMIT $2`;
+      params = [roundId, limit];
+    } else {
+      sql = `SELECT b.*, u.username, u.phone FROM bets b
+             LEFT JOIN users u ON u.id = b.user_id
+             JOIN game_rounds gr ON gr.id = b.round_id AND gr.game_id = $1
+             ORDER BY b.created_at DESC LIMIT $2`;
+      params = [req.params.gameId, limit];
+    }
+
+    const result = await query(sql, params);
+    res.json({ status: 'success', data: result.rows });
+  } catch (err) { next(err); }
+});
+
+module.exports = router;
