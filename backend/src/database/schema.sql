@@ -208,6 +208,7 @@ ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMP WITH TIME
 ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS admin_id VARCHAR(64);
 ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS admin_note TEXT;
 ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(100) UNIQUE;
 
 -- Indexes for High Performance Query Execution & Scale
 CREATE INDEX IF NOT EXISTS idx_bets_user_created ON bets(user_id, created_at DESC);
