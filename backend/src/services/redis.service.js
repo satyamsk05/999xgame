@@ -12,20 +12,14 @@ class MemoryCache {
   set(key, value, ttlSeconds) {
     const valStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
     this.store.set(key, valStr);
-    if (this.ttls.has(key)) {
-      clearTimeout(this.ttls.get(key));
-    }
+    if (this.ttls.has(key)) clearTimeout(this.ttls.get(key));
     if (ttlSeconds) {
-      const timer = setTimeout(() => {
-        this.del(key);
-      }, ttlSeconds * 1000);
+      const timer = setTimeout(() => this.del(key), ttlSeconds * 1000);
       this.ttls.set(key, timer);
     }
   }
 
-  get(key) {
-    return this.store.get(key) || null;
-  }
+  get(key) { return this.store.get(key) || null; }
 
   del(key) {
     if (this.ttls.has(key)) {
@@ -48,15 +42,18 @@ async function initRedis() {
 
   try {
     const redisUrl = process.env.REDIS_URL || `redis://${config.redis.password ? `:${config.redis.password}@` : ''}${config.redis.host}:${config.redis.port}`;
-    redisClient = createClient({ url: redisUrl, socket: { connectTimeout: 3000, reconnectStrategy: (retries) => (retries > 3 ? false : Math.min(retries * 100, 1000)) } });
-
-    redisClient.on('error', (err) => {
-      if (isConnected) {
-        logger.warn('Redis connection error, falling back to memory cache', { error: err.message });
-      }
-      isConnected = false;
+    redisClient = createClient({
+      url: redisUrl,
+      socket: {
+        connectTimeout: 3000,
+        reconnectStrategy: (retries) => (retries > 3 ? false : Math.min(retries * 100, 1000)),
+      },
     });
 
+    redisClient.on('error', (err) => {
+      if (isConnected) logger.warn('Redis connection error, falling back to memory cache', { error: err.message });
+      isConnected = false;
+    });
     redisClient.on('connect', () => {
       isConnected = true;
       logger.info('Connected to Redis server successfully');
@@ -76,11 +73,8 @@ async function set(key, value, ttlSeconds = 300) {
   const valStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
   if (isConnected && redisClient) {
     try {
-      if (ttlSeconds) {
-        await redisClient.set(key, valStr, { EX: ttlSeconds });
-      } else {
-        await redisClient.set(key, valStr);
-      }
+      if (ttlSeconds) await redisClient.set(key, valStr, { EX: ttlSeconds });
+      else await redisClient.set(key, valStr);
       return;
     } catch (err) {
       logger.warn('Redis set error, falling back to memory cache', { key, error: err.message });
@@ -91,46 +85,61 @@ async function set(key, value, ttlSeconds = 300) {
 
 async function get(key) {
   if (isConnected && redisClient) {
-    try {
-      return await redisClient.get(key);
-    } catch (err) {
-      logger.warn('Redis get error, falling back to memory cache', { key, error: err.message });
-    }
+    try { return await redisClient.get(key); }
+    catch (err) { logger.warn('Redis get error, falling back to memory cache', { key, error: err.message }); }
   }
   return memoryCache.get(key);
 }
 
 async function del(key) {
   if (isConnected && redisClient) {
-    try {
-      await redisClient.del(key);
-      return;
-    } catch (err) {
-      logger.warn('Redis del error, falling back to memory cache', { key, error: err.message });
-    }
+    try { await redisClient.del(key); return; }
+    catch (err) { logger.warn('Redis del error, falling back to memory cache', { key, error: err.message }); }
   }
   memoryCache.del(key);
+}
+
+// Atomically read-and-delete a key. This is required for one-time verification
+// sessions: GET followed by DEL has a race where two requests can both consume it.
+async function getAndDelete(key) {
+  if (isConnected && redisClient) {
+    try {
+      if (typeof redisClient.getDel === 'function') return await redisClient.getDel(key);
+      // Redis < 6.2 fallback: a Lua script makes GET+DEL atomic.
+      return await redisClient.eval("local v=redis.call('GET',KEYS[1]); if v then redis.call('DEL',KEYS[1]); end; return v", {
+        keys: [key],
+        arguments: [],
+      });
+    } catch (err) {
+      logger.warn('Redis atomic consume error, falling back to memory cache', { key, error: err.message });
+    }
+  }
+  const value = memoryCache.get(key);
+  if (value !== null) memoryCache.del(key);
+  return value;
 }
 
 async function getJson(key) {
   const val = await get(key);
   if (!val) return null;
-  try {
-    return JSON.parse(val);
-  } catch (_) {
-    return val;
-  }
+  try { return JSON.parse(val); } catch (_) { return val; }
 }
 
-function isAvailable() {
-  return isConnected;
+async function getAndDeleteJson(key) {
+  const val = await getAndDelete(key);
+  if (!val) return null;
+  try { return JSON.parse(val); } catch (_) { return val; }
 }
+
+function isAvailable() { return isConnected; }
 
 module.exports = {
   set,
   get,
   del,
   getJson,
+  getAndDelete,
+  getAndDeleteJson,
   isAvailable,
   memoryCache,
 };
