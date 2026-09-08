@@ -14,6 +14,15 @@ class TopHeader extends StatelessWidget {
   final VoidCallback onProfilePressed;
   final bool isLoading;
 
+  // Server-driven theme values
+  final Color ringColor;
+  final Color profileTagColor;
+  final Color profileTagBg;
+  final Color walletGradientStart;
+  final Color walletGradientEnd;
+  final String currencySymbol;
+  final String addCashLabel;
+
   const TopHeader({
     super.key,
     this.username = 'Ashu K',
@@ -23,6 +32,13 @@ class TopHeader extends StatelessWidget {
     required this.onAddMoneyPressed,
     required this.onProfilePressed,
     this.isLoading = false,
+    this.ringColor = const Color(0xFFE1B219),
+    this.profileTagColor = const Color(0xFFFFD700),
+    this.profileTagBg = const Color(0xFF3B0A4E),
+    this.walletGradientStart = const Color(0xFF00D294),
+    this.walletGradientEnd = const Color(0xFF00A574),
+    this.currencySymbol = '₹',
+    this.addCashLabel = '+',
   });
 
   static String _cleanPath(String? p) {
@@ -74,12 +90,12 @@ class TopHeader extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: AppColors.avatarBg,
                 border: Border.all(
-                  color: AppColors.avatarBorder,
+                  color: ringColor,
                   width: 2.0,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.avatarBorder.withValues(alpha: 0.4),
+                    color: ringColor.withValues(alpha: 0.4),
                     blurRadius: 10,
                     spreadRadius: 1,
                   ),
@@ -116,7 +132,7 @@ class TopHeader extends StatelessWidget {
                     margin: const EdgeInsets.only(top: 2),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF3B0A4E),
+                      color: profileTagBg,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: Colors.white.withValues(alpha: 0.15),
@@ -127,17 +143,17 @@ class TopHeader extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Profile',
+                          userTag,
                           style: GoogleFonts.poppins(
-                            color: const Color(0xFFFFD700),
+                            color: profileTagColor,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(width: 2),
-                        const Icon(
+                        Icon(
                           Icons.play_arrow_rounded,
-                          color: Color(0xFFFFD700),
+                          color: profileTagColor,
                           size: 9.5,
                         ),
                       ],
@@ -157,18 +173,18 @@ class TopHeader extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Color(0xFF00D294),
-                      Color(0xFF00A574),
+                      walletGradientStart,
+                      walletGradientEnd,
                     ],
                   ),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF00A574).withValues(alpha: 0.5),
+                      color: walletGradientEnd.withValues(alpha: 0.5),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -189,7 +205,7 @@ class TopHeader extends StatelessWidget {
 
                     // Balance Text
                     Text(
-                      '₹${balance.toInt()}',
+                      '$currencySymbol${balance.toInt()}',
                       style: GoogleFonts.inter(
                         color: Colors.white,
                         fontSize: 17,
@@ -209,9 +225,9 @@ class TopHeader extends StatelessWidget {
 
                     const SizedBox(width: 10),
 
-                    // Plus Sign (+)
+                    // Add Cash Label
                     Text(
-                      '+',
+                      addCashLabel,
                       style: GoogleFonts.poppins(
                         color: Colors.white,
                         fontSize: 18,

@@ -22,6 +22,12 @@ class ApiService {
     if (avatarPath != null) body['avatarPath'] = avatarPath;
     try { return (await ApiClient.post('/user/update-profile', body)) as Map<String, dynamic>; } catch (_) { return null; }
   }
+
+  static Future<Map<String, dynamic>?> completeOnboarding({required String username, String? dateOfBirth}) async {
+    final body = <String, dynamic>{'username': username};
+    if (dateOfBirth != null) body['dateOfBirth'] = dateOfBirth;
+    try { return (await ApiClient.post('/user/complete-onboarding', body)) as Map<String, dynamic>; } catch (_) { return null; }
+  }
   static Future<List<dynamic>?> getGamesList() async {
     try { return (await ApiClient.get('/games')) as List<dynamic>; } catch (_) { return null; }
   }

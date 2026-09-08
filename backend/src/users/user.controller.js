@@ -61,15 +61,19 @@ router.get('/dashboard-header', authMiddleware, async (req, res, next) => {
       data: {
         profile: {
           id: user.id,
-          username: user.username || 'Player',
+          username: user.username,
           phone: user.phone,
           avatarUrl: user.avatar_path || '/avatars/avatar_1.png',
-          ringColor: '#FFD700',
           balance: wallet.totalBalance,
-          formattedBalance: `₹${wallet.totalBalance.toInt ? wallet.totalBalance.toInt() : Math.floor(wallet.totalBalance)}`,
+          // UI theme config — previously hardcoded in Flutter
+          ringColor: '#E1B219',
           profileTag: 'Profile',
           profileTagColor: '#FFD700',
           profileTagBg: '#3B0A4E',
+          walletGradientStart: '#00D294',
+          walletGradientEnd: '#00A574',
+          currencySymbol: '₹',
+          addCashLabel: '+',
         },
         wallet: {
           depositBalance: wallet.depositBalance,
@@ -77,10 +81,6 @@ router.get('/dashboard-header', authMiddleware, async (req, res, next) => {
           rewardsBalance: wallet.rewardsBalance,
           totalBalance: wallet.totalBalance,
           availableBalance: wallet.availableBalance,
-          formattedBalance: `₹${wallet.totalBalance.toInt ? wallet.totalBalance.toInt() : Math.floor(wallet.totalBalance)}`,
-          currencySymbol: '₹',
-          addCashButtonText: '+',
-          gradientColors: ['#00D294', '#00A574'],
         },
         onlinePlayers: {
           totalOnline: 89214,
@@ -132,4 +132,35 @@ router.post('/update-profile', authMiddleware, async (req, res, next) => {
   }
 });
 
+// Complete Onboarding — save name + DOB and mark user as onboarded (first login only)
+router.post('/complete-onboarding', authMiddleware, async (req, res, next) => {
+  try {
+    const { username, dateOfBirth } = req.body;
+
+    if (!username || username.trim().length < 2) {
+      return res.status(400).json({ status: 'error', message: 'Name must be at least 2 characters.' });
+    }
+
+    const updatedUser = await userRepo.completeOnboarding(
+      req.user.id,
+      username.trim(),
+      dateOfBirth || null
+    );
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Onboarding complete',
+      data: {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        dateOfBirth: updatedUser.date_of_birth,
+        isOnboardingComplete: updatedUser.is_onboarding_complete,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
+

@@ -84,18 +84,19 @@ async function getUserById(userId) {
 }
 
 /**
- * Update Username / Avatar
+ * Update Username / Avatar / DOB
  */
-async function updateUserProfile(userId, username, avatarPath) {
+async function updateUserProfile(userId, username, avatarPath, dateOfBirth) {
   try {
     const res = await query(
       `UPDATE users 
        SET username = COALESCE($2, username),
            avatar_path = COALESCE($3, avatar_path),
+           date_of_birth = COALESCE($4, date_of_birth),
            updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
-      [userId, username, avatarPath]
+      [userId, username, avatarPath, dateOfBirth || null]
     );
     if (res.rows.length === 0) throw new Error('User not found');
     return res.rows[0];
@@ -105,8 +106,34 @@ async function updateUserProfile(userId, username, avatarPath) {
   }
 }
 
+/**
+ * Complete Onboarding — save name + DOB and mark is_onboarding_complete = true atomically
+ */
+async function completeOnboarding(userId, username, dateOfBirth) {
+  try {
+    const res = await query(
+      `UPDATE users
+       SET username = COALESCE($2, username),
+           date_of_birth = COALESCE($3::date, date_of_birth),
+           is_onboarding_complete = TRUE,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [userId, username || null, dateOfBirth || null]
+    );
+    if (res.rows.length === 0) throw new Error('User not found');
+    logger.info('Onboarding completed', { userId, username, dateOfBirth });
+    return res.rows[0];
+  } catch (err) {
+    logger.error('Failed to complete onboarding in PostgreSQL DB', { userId, error: err.message });
+    throw err;
+  }
+}
+
 module.exports = {
   findOrCreateUserByPhone,
   getUserById,
   updateUserProfile,
+  completeOnboarding,
 };
+

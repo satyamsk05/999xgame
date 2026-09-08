@@ -48,18 +48,27 @@ router.post('/loggin/verify', async (req, res) => {
       phone: user.phone,
     });
 
+    // isNewUser = true if onboarding hasn't been completed yet
+    const isOnboardingComplete = !!user.is_onboarding_complete;
+    const isNewUser = !isOnboardingComplete;
+
     // Return authenticated user state (Canonical + Backward Compatible)
     return res.status(200).json({
       status: 'success',
       message: 'WhatsApp authentication verified successfully',
       token: appJwtToken,
+      isNewUser,
       data: {
         token: appJwtToken,
+        isNewUser,
+        isOnboardingComplete,
         user: {
           id: user.id,
           phone: user.phone,
           username: user.username,
           avatarPath: user.avatar_path || '/avatars/avatar_1.png',
+          dateOfBirth: user.date_of_birth || null,
+          isOnboardingComplete,
         },
         wallet: {
           depositBalance: wallet.depositBalance,

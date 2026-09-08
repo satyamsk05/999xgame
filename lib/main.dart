@@ -329,16 +329,42 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                             : _currentAvatarPath;
                         final countVal = onlineMap['totalOnline'];
 
+                        // Parse server-driven UI theme config
+                        Color parseHex(String? hex, Color fallback) {
+                          if (hex == null || hex.isEmpty) return fallback;
+                          try {
+                            return Color(int.parse(hex.replaceFirst('#', '0xFF')));
+                          } catch (_) {
+                            return fallback;
+                          }
+                        }
+
+                        final ringColor = parseHex(profileMap['ringColor'] as String?, const Color(0xFFE1B219));
+                        final profileTagColor = parseHex(profileMap['profileTagColor'] as String?, const Color(0xFFFFD700));
+                        final profileTagBg = parseHex(profileMap['profileTagBg'] as String?, const Color(0xFF3B0A4E));
+                        final walletGradientStart = parseHex(profileMap['walletGradientStart'] as String?, const Color(0xFF00D294));
+                        final walletGradientEnd = parseHex(profileMap['walletGradientEnd'] as String?, const Color(0xFF00A574));
+                        final currencySymbol = (profileMap['currencySymbol'] as String?) ?? '₹';
+                        final addCashLabel = (profileMap['addCashLabel'] as String?) ?? '+';
+                        final userTag = (profileMap['profileTag'] as String?) ?? 'Profile';
+
                         final isHeaderLoading = syncing && data.isEmpty;
 
                         return Column(
                           children: [
                             TopHeader(
                               username: name,
-                              userTag: 'Profile',
+                              userTag: userTag,
                               balance: bal,
                               avatarPath: av,
                               isLoading: isHeaderLoading,
+                              ringColor: ringColor,
+                              profileTagColor: profileTagColor,
+                              profileTagBg: profileTagBg,
+                              walletGradientStart: walletGradientStart,
+                              walletGradientEnd: walletGradientEnd,
+                              currencySymbol: currencySymbol,
+                              addCashLabel: addCashLabel,
                               onAddMoneyPressed: () {
                                 setState(() {
                                   _isProfilePageActive = true;

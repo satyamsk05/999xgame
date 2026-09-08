@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -63,21 +64,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _handlePhoneNext() async {
-    FocusScope.of(context).unfocus();
-
-    final phoneDigits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
-    if (phoneDigits.length != 10) {
-      setState(() {
-        _errorMessage = 'Please enter a valid 10-digit mobile number.';
-      });
-      return;
-    }
-
+  Future<void> _handleGetStarted() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
-      _statusMessage = 'Connecting to verification...';
+      _statusMessage = 'Connecting to WhatsApp verification...';
     });
 
     try {
@@ -110,7 +101,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         setState(() {
           _isLoading = false;
           _statusMessage = null;
-          _currentStep = 1;
+          _currentStep = 0;
           _errorMessage = e is ApiException ? e.message : 'Verification failed. Please try again.';
         });
       }
@@ -151,7 +142,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       try {
         final verifyRes = await AuthApi.verifyLogginToken(token, timeout: const Duration(seconds: 12));
         final appToken = verifyRes['token']?.toString() ?? '';
-        final user = verifyRes['user'] as Map<String, dynamic>? ?? {};
+        // verifyRes is the full JSON body — user is nested under data.user
+        final dataMap = verifyRes['data'] as Map<String, dynamic>? ?? verifyRes;
+        final user = (dataMap['user'] as Map<String, dynamic>?) ??
+            (verifyRes['user'] as Map<String, dynamic>?) ?? {};
 
         if (appToken.isNotEmpty) {
           _sessionData = verifyRes;
@@ -164,10 +158,16 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
             avatarPath: user['avatarPath']?.toString(),
           );
 
-          if (user['username'] != null && user['username'].toString().isNotEmpty) {
-            _nameController.text = user['username'].toString();
+          // Check if this is a returning user who already completed onboarding
+          final isNewUser = dataMap['isNewUser'] == true ||
+              verifyRes['isNewUser'] == true ||
+              !(user['isOnboardingComplete'] == true);
+
+          final uname = user['username']?.toString() ?? '';
+          if (uname.isNotEmpty && uname != 'Player') {
+            _nameController.text = uname;
           } else {
-            _nameController.text = 'Player';
+            _nameController.text = '';
           }
 
           if (mounted) {
@@ -175,12 +175,20 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               _isVerifyingActive = false;
               _isLoading = false;
               _statusMessage = null;
-              _currentStep = 3; // Move to Enter Age Screen
+              // New user → show onboarding; returning user → skip to Welcome
+              _currentStep = isNewUser ? 3 : 5;
             });
+          }
+
+          // Returning user: immediately trigger onLoginSuccess after brief welcome
+          if (!isNewUser) {
+            _startWelcomeTransition();
           }
           return;
         }
       } catch (e) {
+        // Log error for debugging (visible in flutter logs)
+        debugPrint('[LoginVerify] Error in verification loop: $e');
         await Future.delayed(const Duration(milliseconds: 1500));
       }
     }
@@ -203,14 +211,32 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   Future<void> _handleNameNext() async {
     FocusScope.of(context).unfocus();
     final name = _nameController.text.trim();
-    if (name.isNotEmpty) {
-      try {
-        await ApiService.updateUserProfile(username: name);
-      } catch (_) {}
+    if (name.length < 2) {
+      setState(() {
+        _errorMessage = 'Please enter your name (at least 2 characters).';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // Calculate date of birth from selected age
+      final dob = DateTime(DateTime.now().year - _selectedAge, 1, 1);
+      final dobStr = '${dob.year}-${dob.month.toString().padLeft(2, '0')}-01';
+
+      // Complete onboarding: save name + DOB, mark user as onboarded
+      await ApiService.completeOnboarding(username: name, dateOfBirth: dobStr);
+    } catch (_) {
+      // Non-fatal: proceed even if API call fails
     }
 
     if (mounted) {
       setState(() {
+        _isLoading = false;
         _currentStep = 5; // Move to Welcome Screen
       });
     }
@@ -302,11 +328,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                               icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
                               onPressed: () {
                                 setState(() {
-                                  if (_currentStep == 2) {
-                                    _currentStep = 1;
-                                  } else {
-                                    _currentStep--;
-                                  }
+                                  // From verifying, go back to GetStarted (step 0) since phone screen is removed
+                                  _currentStep = 0;
+                                  _isVerifyingActive = false;
+                                  _isLoading = false;
                                 });
                               },
                             )
@@ -321,7 +346,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                         const SizedBox(height: 8),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: _buildStepIndicator(_currentStep - 1, 3),
+                          // Only 2 real steps shown: Verifying(0), Age(1), Name(2)
+                          child: _buildStepIndicator(_currentStep - 2, 2),
                         ),
                       ],
                     ],
@@ -432,15 +458,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
                 // Full Width White Capsule Button
                 GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _currentStep = 1;
-                    });
-                  },
+                  onTap: _isLoading ? null : _handleGetStarted,
                   child: Container(
                     height: 53,
                     decoration: BoxDecoration(
-                      color: Colors.black,
+                      color: _isLoading ? Colors.black.withValues(alpha: 0.5) : Colors.black,
                       borderRadius: BorderRadius.circular(26.5),
                       boxShadow: [
                         BoxShadow(
@@ -455,15 +477,21 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const SizedBox(width: 24),
-                        Text(
-                          'Get Started',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
+                        if (_isLoading)
+                          const SizedBox(
+                            width: 22, height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        else
+                          Text(
+                            'Continue with WhatsApp',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 22),
+                        _buildWhatsAppIcon(size: 22, color: Colors.white),
                       ],
                     ),
                   ),
@@ -620,7 +648,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 28.0),
             child: GestureDetector(
-              onTap: _isLoading ? null : _handlePhoneNext,
+              onTap: _isLoading ? null : _handleGetStarted,
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 200),
                 opacity: isValidPhone ? 1.0 : 0.5,
@@ -1090,8 +1118,34 @@ class _PurpleWaveBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _WaveBackgroundPainter(),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Base painted waves
+        CustomPaint(
+          painter: _WaveBackgroundPainter(),
+        ),
+        // Blur overlay — softens the wave shapes into a dreamy frosted look
+        BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            color: Colors.transparent,
+          ),
+        ),
+        // Subtle dark overlay after blur to restore depth & contrast
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFF0C011A).withValues(alpha: 0.25),
+                const Color(0xFF0C011A).withValues(alpha: 0.45),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
