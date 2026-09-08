@@ -1,21 +1,14 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ingames/main.dart';
 
 void main() {
-  testWidgets('InGames home screen smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('InGames login screen smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(const InGamesApp());
 
-    // Verify that player name and online status render
-    expect(find.text('Ashu K'), findsOneWidget);
-    expect(find.text('89,156 online'), findsOneWidget);
+    // The app starts unauthenticated in a fresh test environment, so the
+    // stable login-screen copy is the correct smoke-test contract.
+    expect(find.text('Play'), findsOneWidget);
+    expect(find.text('Fast. Secure. More Fun.'), findsOneWidget);
   });
 }
