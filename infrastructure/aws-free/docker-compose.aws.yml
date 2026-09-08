@@ -40,8 +40,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       DB_SSL: "false"
-    expose:
-      - "5050"
+    ports:
+      - "127.0.0.1:5050:5050"
     depends_on:
       postgres:
         condition: service_healthy
