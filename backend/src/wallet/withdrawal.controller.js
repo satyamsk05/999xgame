@@ -3,16 +3,27 @@ const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const withdrawalRepo = require('./withdrawal.repository');
 
+function parseExactRupeeAmount(value) {
+  if (typeof value === 'number' && !Number.isFinite(value)) return null;
+  const text = String(value ?? '').trim();
+  if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return null;
+  const [rupees, paise = ''] = text.split('.');
+  const amountPaise = Number(rupees) * 100 + Number((paise + '00').slice(0, 2));
+  if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) return null;
+  return amountPaise / 100;
+}
+
 /**
  * POST /api/withdrawals — Initiate Manual Withdrawal Request (Funds Atomically Reserved)
  */
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
     const { amount, upiId } = req.body;
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+    const amountRupees = parseExactRupeeAmount(amount);
+    if (amountRupees === null) {
       return res.status(400).json({
         status: 'error',
-        message: 'Valid numeric withdrawal amount is required',
+        message: 'Valid withdrawal amount is required with at most 2 decimal places',
       });
     }
 
@@ -23,8 +34,6 @@ router.post('/', authMiddleware, async (req, res, next) => {
       });
     }
 
-    // sec 16: accept a client-supplied request id so a retried create maps to a
-    // deterministic WITHDRAW_CREATE:{id} key (DB-unique) and never double-reserves.
     const clientRequestId = req.body.clientRequestId
       || req.body.idempotencyKey
       || req.headers['x-client-request-id']
@@ -33,7 +42,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
 
     const requestData = await withdrawalRepo.createWithdrawalRequest({
       userId: req.user.id,
-      amountRupees: parseFloat(amount),
+      amountRupees,
       upiId: upiId.trim(),
       clientRequestId,
     });
