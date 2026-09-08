@@ -17,12 +17,8 @@ const config = {
   minimumAppVersion: process.env.MINIMUM_APP_VERSION || '1.0.0',
   onlineTickerRingColors: csv(process.env.ONLINE_TICKER_RING_COLORS, ['#FFC107', '#FF9800', '#4FC3F7']),
   onlineTickerAvatars: csv(process.env.ONLINE_TICKER_AVATARS, [
-    '/avatars/avatar_1.png',
-    '/avatars/avatar_2.png',
-    '/avatars/avatar_3.png',
-    '/avatars/avatar_7.png',
-    '/avatars/avatar_8.png',
-    '/avatars/avatar_9.png',
+    '/avatars/avatar_1.png', '/avatars/avatar_2.png', '/avatars/avatar_3.png',
+    '/avatars/avatar_7.png', '/avatars/avatar_8.png', '/avatars/avatar_9.png',
   ]),
   db: {
     host: process.env.DB_HOST || 'localhost',
@@ -77,8 +73,9 @@ function validateConfig() {
     if (!process.env.JWT_SECRET || config.jwtSecret === 'dev_jwt_secret_key_999x') errors.push('JWT_SECRET must be explicitly set to a strong value in production.');
     if (!process.env.ADMIN_JWT_SECRET || config.adminJwtSecret === 'dev_admin_jwt_secret_key_999x') errors.push('ADMIN_JWT_SECRET must be explicitly set to a strong value in production.');
     if (config.jwtSecret.length < 32 || config.adminJwtSecret.length < 32) errors.push('JWT_SECRET and ADMIN_JWT_SECRET must each be at least 32 characters in production.');
-    if (!config.db.host || !config.db.name || !config.db.user || !config.db.password) errors.push('DB_HOST, DB_NAME, DB_USER and DB_PASSWORD must be set in production.');
+    if (!process.env.DB_HOST || !process.env.DB_NAME || !process.env.DB_USER || !process.env.DB_PASSWORD) errors.push('DB_HOST, DB_NAME, DB_USER and DB_PASSWORD must be explicitly set in production.');
     if (config.db.password === 'postgres') errors.push('DB_PASSWORD must not use the insecure default value in production.');
+    if (!process.env.REDIS_URL && (!process.env.REDIS_HOST || process.env.REDIS_HOST === 'localhost')) errors.push('REDIS_URL or a non-localhost REDIS_HOST must be explicitly configured in production.');
     if (config.adminBreakGlass.enabled && (!config.adminBreakGlass.secret || config.adminBreakGlass.secret === 'dev_admin_secret_key_999x' || config.adminBreakGlass.secret.length < 32)) errors.push('ADMIN_BREAK_GLASS_SECRET must be a strong dedicated secret when break-glass is enabled.');
     if (!process.env.CORS_ORIGIN || config.corsOrigin.length === 0 || config.corsOrigin.includes('*')) errors.push('CORS_ORIGIN must be restricted to explicit origins in production.');
     if (config.trustProxy !== true) errors.push('TRUST_PROXY=true is required when running behind an AWS load balancer/proxy.');
