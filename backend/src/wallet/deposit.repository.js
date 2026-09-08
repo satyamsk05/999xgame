@@ -9,7 +9,7 @@ const financialService = require('../services/financial.service');
  */
 async function createDepositOrder({ userId, amountRupees, paymentMethod = 'UPI' }) {
   const amountRupeeNum = parseFloat(amountRupees);
-  if (isNaN(amountRupeeNum) || amountRupeeNum <= 0) {
+  if (!Number.isFinite(amountRupeeNum) || amountRupeeNum <= 0) {
     throw new Error('Valid deposit amount is required');
   }
 
@@ -46,7 +46,7 @@ async function createDepositOrder({ userId, amountRupees, paymentMethod = 'UPI' 
       amountRupees: amountPaise / 100,
       amountPaise,
       currency: row.currency,
-      status: row.status, // Strictly 'PENDING'
+      status: row.status,
       paymentMethod: row.payment_method,
       upiId,
       merchantName,
@@ -66,9 +66,7 @@ async function createDepositOrder({ userId, amountRupees, paymentMethod = 'UPI' 
   }
 }
 
-/**
- * Get Deposit Order by Deposit ID or ID
- */
+/** Get Deposit Order by Deposit ID or ID */
 async function getDepositById(depositId, userId = null) {
   try {
     let sql = 'SELECT * FROM deposits WHERE (deposit_id = $1 OR id = $1)';
@@ -87,10 +85,7 @@ async function getDepositById(depositId, userId = null) {
   }
 }
 
-/**
- * Submit UTR for Deposit Order (Transitions PENDING -> UTR_SUBMITTED)
- * ZERO auto-credit. Wallet balance is untouched.
- */
+/** Submit UTR for Deposit Order (PENDING -> UTR_SUBMITTED). ZERO auto-credit. */
 async function submitDepositUtr({ depositId, userId, utr }) {
   if (!utr || typeof utr !== 'string' || !/^\d{12}$/.test(utr.trim())) {
     const err = new Error('Invalid UTR format. UTR must be exactly 12 numeric digits.');
@@ -99,8 +94,6 @@ async function submitDepositUtr({ depositId, userId, utr }) {
   }
 
   const cleanUtr = utr.trim();
-
-  // 1. Fetch deposit to check current status & ownership
   const deposit = await getDepositById(depositId, userId);
   if (!deposit) {
     const err = new Error('Deposit order not found');
@@ -114,7 +107,6 @@ async function submitDepositUtr({ depositId, userId, utr }) {
     throw err;
   }
 
-  // 1b. Check if UTR is already used by another deposit
   const existingUtr = await query('SELECT id FROM deposits WHERE utr = $1', [cleanUtr]);
   if (existingUtr.rows.length > 0) {
     const dupErr = new Error('UTR / Reference ID has already been submitted for another deposit.');
@@ -122,7 +114,6 @@ async function submitDepositUtr({ depositId, userId, utr }) {
     throw dupErr;
   }
 
-  // 2. Perform atomic update in DB
   try {
     const res = await query(
       `UPDATE deposits
@@ -152,7 +143,7 @@ async function submitDepositUtr({ depositId, userId, utr }) {
       amountRupees: row.amount / 100,
       amountPaise: row.amount,
       currency: row.currency,
-      status: row.status, // Strictly 'UTR_SUBMITTED'
+      status: row.status,
       utr: row.utr,
       submittedAt: row.submitted_at,
       paymentMethod: row.payment_method,
@@ -169,11 +160,11 @@ async function submitDepositUtr({ depositId, userId, utr }) {
   }
 }
 
-/**
- * Admin: Fetch list of deposits pending manual verification (UTR_SUBMITTED or PENDING)
- */
+/** Admin: Fetch deposits pending manual verification. */
 async function getPendingDepositsForAdmin({ limit = 50, offset = 0 } = {}) {
   try {
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
+    const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
     const res = await query(
       `SELECT d.*, u.phone as user_phone, u.username as user_username
        FROM deposits d
@@ -181,7 +172,7 @@ async function getPendingDepositsForAdmin({ limit = 50, offset = 0 } = {}) {
        WHERE d.status IN ('UTR_SUBMITTED', 'PENDING')
        ORDER BY d.created_at DESC
        LIMIT $1 OFFSET $2`,
-      [limit, offset]
+      [safeLimit, safeOffset]
     );
 
     return res.rows.map((row) => ({
@@ -205,14 +196,14 @@ async function getPendingDepositsForAdmin({ limit = 50, offset = 0 } = {}) {
 }
 
 /**
- * Admin: Confirm Deposit Order and credit user wallet in PostgreSQL (Atomic)
+ * Admin: Confirm Deposit Order and credit user wallet in PostgreSQL (Atomic).
+ * A deposit MUST have a submitted UTR before money can be credited.
  */
 async function confirmDepositByAdmin({ depositId, adminId = 'admin_sys', adminNote = '' }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
 
-    // 1. Lock row FOR UPDATE to prevent race conditions & double credits
     const findRes = await client.query(
       `SELECT * FROM deposits WHERE deposit_id = $1 OR id = $1 FOR UPDATE`,
       [depositId]
@@ -238,13 +229,21 @@ async function confirmDepositByAdmin({ depositId, adminId = 'admin_sys', adminNo
       throw err;
     }
 
-    const amountPaise = parseInt(deposit.amount, 10);
+    // Never allow an admin to turn an unverified PENDING order into wallet money.
+    if (deposit.status !== 'UTR_SUBMITTED' || !deposit.utr) {
+      const err = new Error('Cannot confirm deposit until a valid UTR has been submitted.');
+      err.statusCode = 409;
+      err.code = 'UTR_REQUIRED';
+      throw err;
+    }
 
-    // 2. Execute atomic wallet credit via financial service USING THE SAME CLIENT.
-    //    Passing the transactional `client` (not the userId) guarantees the credit
-    //    runs inside THIS BEGIN/COMMIT. No separate transaction is opened, so a
-    //    wallet credit can never be committed without the deposit being CONFIRMED
-    //    (and vice-versa). Deterministic idempotency key prevents double credit.
+    const amountPaise = parseInt(deposit.amount, 10);
+    if (!Number.isInteger(amountPaise) || amountPaise <= 0) {
+      const err = new Error('Deposit has an invalid amount and cannot be confirmed.');
+      err.statusCode = 409;
+      throw err;
+    }
+
     const creditResult = await financialService.creditWallet(client, amountPaise, {
       userId: deposit.user_id,
       type: 'DEPOSIT',
@@ -254,23 +253,25 @@ async function confirmDepositByAdmin({ depositId, adminId = 'admin_sys', adminNo
       metadata: { adminId, adminNote, utr: deposit.utr, depositRowId: deposit.id },
     });
 
-    // Fail-safe: if the ledger already recorded this confirmation key while the
-    // deposit row was still not CONFIRMED, that is an inconsistent state. Do not
-    // silently proceed — abort so the transaction rolls back and it can be audited.
     if (creditResult && creditResult.duplicate) {
       const err = new Error('Deposit confirmation already recorded in ledger but deposit was not CONFIRMED. Manual reconciliation required.');
       err.statusCode = 409;
       throw err;
     }
 
-    // 3. Update deposit status to CONFIRMED
     const updateRes = await client.query(
       `UPDATE deposits
        SET status = 'CONFIRMED', confirmed_at = NOW(), admin_id = $2, admin_note = $3, updated_at = NOW()
-       WHERE id = $1
+       WHERE id = $1 AND status = 'UTR_SUBMITTED'
        RETURNING *`,
       [deposit.id, adminId, adminNote]
     );
+
+    if (updateRes.rows.length === 0) {
+      const err = new Error('Deposit status changed before confirmation.');
+      err.statusCode = 409;
+      throw err;
+    }
 
     await client.query('COMMIT');
 
@@ -288,7 +289,7 @@ async function confirmDepositByAdmin({ depositId, adminId = 'admin_sys', adminNo
       userId: row.user_id,
       amountRupees: row.amount / 100,
       amountPaise: row.amount,
-      status: row.status, // Strictly 'CONFIRMED'
+      status: row.status,
       utr: row.utr,
       confirmedAt: row.confirmed_at,
       adminId: row.admin_id,
@@ -307,16 +308,12 @@ async function confirmDepositByAdmin({ depositId, adminId = 'admin_sys', adminNo
   }
 }
 
-/**
- * Admin: Reject Deposit Order (ZERO wallet credit)
- */
+/** Admin: Reject Deposit Order (ZERO wallet credit). */
 async function rejectDepositByAdmin({ depositId, adminId = 'admin_sys', adminNote = '' }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
 
-    // Lock the deposit row to eliminate the read-then-update (TOCTOU) race where a
-    // concurrent confirm and reject could both proceed.
     const findRes = await client.query(
       `SELECT * FROM deposits WHERE deposit_id = $1 OR id = $1 FOR UPDATE`,
       [depositId]
@@ -365,7 +362,7 @@ async function rejectDepositByAdmin({ depositId, adminId = 'admin_sys', adminNot
       userId: row.user_id,
       amountRupees: parseInt(row.amount, 10) / 100,
       amountPaise: parseInt(row.amount, 10),
-      status: row.status, // Strictly 'REJECTED'
+      status: row.status,
       utr: row.utr,
       rejectedAt: row.rejected_at,
       adminId: row.admin_id,
@@ -388,5 +385,3 @@ module.exports = {
   confirmDepositByAdmin,
   rejectDepositByAdmin,
 };
-
-
