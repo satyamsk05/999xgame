@@ -1,26 +1,19 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:socket_io_client/socket_io_client.dart' as socket_io;
 import '../core/storage/token_manager.dart';
 import 'api_service.dart';
 
 /// Authoritative realtime synchronization for the Flutter client.
-///
-/// Socket.IO is only a realtime transport. Wallet balances, game state and
-/// other financial data are re-read from the backend after reconnect or
-/// settlement events, so missed socket events cannot become source of truth.
 class RealtimeSyncService {
   static final RealtimeSyncService instance = RealtimeSyncService._();
   RealtimeSyncService._();
 
-  IO.Socket? _socket;
+  socket_io.Socket? _socket;
   bool _running = false;
   bool _refreshInFlight = false;
   Timer? _manualReconnectTimer;
 
-  /// Assigned by the dashboard layer so a realtime invalidation can trigger
-  /// the normal authoritative dashboard refresh without creating an import
-  /// cycle between the two services.
   Future<void> Function()? onAuthoritativeRefresh;
 
   final ValueNotifier<bool> isConnected = ValueNotifier<bool>(false);
@@ -52,9 +45,9 @@ class RealtimeSyncService {
       final token = TokenManager.token;
       if (token == null || token.isEmpty) return;
 
-      final socket = IO.io(
+      final socket = socket_io.io(
         ApiService.serverDomain,
-        IO.OptionBuilder()
+        socket_io.OptionBuilder()
             .setTransports(['websocket'])
             .setAuth({'token': token})
             .enableReconnection()
@@ -140,8 +133,7 @@ class RealtimeSyncService {
       final callback = onAuthoritativeRefresh;
       if (callback != null) await callback();
     } catch (_) {
-      // Never replace authoritative data with a local guess. Reconnect and
-      // future game events will trigger another refresh.
+      // Never replace authoritative data with a local guess.
     } finally {
       _refreshInFlight = false;
     }
