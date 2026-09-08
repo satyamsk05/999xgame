@@ -9,13 +9,12 @@ permissions:
 
 jobs:
   restore:
-    if: github.sha == '428a3505e57fd23e423c3c35ed6652b7aadd23c4'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Restore and patch files
+      - name: Restore and patch files if needed
         run: |
           git checkout 5ddbc7cfd5f4c57282d3fc4169f155967ddffe17 -- backend/src/games/game.controller.js backend/tests/7updown_api.test.js
           python3 - <<'PY'
@@ -40,6 +39,10 @@ jobs:
           s = s.replace("      server.close();\n      done(err);", "      await gameManager.stopAll().catch(() => {});\n      server.close();\n      done(err);", 1)
           p.write_text(s)
           PY
+          if git diff --quiet -- backend/src/games/game.controller.js backend/tests/7updown_api.test.js; then
+            echo "Files already restored; nothing to commit."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/games/game.controller.js backend/tests/7updown_api.test.js
