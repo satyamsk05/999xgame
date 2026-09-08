@@ -1,11 +1,29 @@
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
+function csv(value, fallback = []) {
+  const source = value == null || value === '' ? fallback : value.split(',');
+  return source.map((item) => String(item).trim()).filter(Boolean);
+}
+
 const config = {
   port: parseInt(process.env.PORT || '5050', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   logLevel: process.env.LOG_LEVEL || 'info',
-  corsOrigin: process.env.CORS_ORIGIN || '*',
+  corsOrigin: csv(process.env.CORS_ORIGIN, ['http://localhost:3000']),
+  trustProxy: process.env.TRUST_PROXY === 'true',
+  bodyLimit: process.env.BODY_LIMIT || '1mb',
+  maintenanceMode: process.env.MAINTENANCE_MODE === 'true',
+  minimumAppVersion: process.env.MINIMUM_APP_VERSION || '1.0.0',
+  onlineTickerRingColors: csv(process.env.ONLINE_TICKER_RING_COLORS, ['#FFC107', '#FF9800', '#4FC3F7']),
+  onlineTickerAvatars: csv(process.env.ONLINE_TICKER_AVATARS, [
+    '/avatars/avatar_1.png',
+    '/avatars/avatar_2.png',
+    '/avatars/avatar_3.png',
+    '/avatars/avatar_7.png',
+    '/avatars/avatar_8.png',
+    '/avatars/avatar_9.png',
+  ]),
   db: {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432', 10),
@@ -20,12 +38,7 @@ const config = {
     password: process.env.REDIS_PASSWORD || '',
   },
   jwtSecret: process.env.JWT_SECRET || 'dev_jwt_secret_key_999x',
-  // Dedicated secret for ADMIN tokens. Falls back to JWT_SECRET only in dev; production
-  // validation below requires a strong, explicitly provided value.
-  adminJwtSecret:
-    process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'dev_admin_jwt_secret_key_999x',
-  // Legacy master secret. NO LONGER used for normal admin auth. Retained only so the
-  // isolated, default-disabled break-glass mechanism can compare against a dedicated value.
+  adminJwtSecret: process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'dev_admin_jwt_secret_key_999x',
   adminSecret: process.env.ADMIN_SECRET || 'dev_admin_secret_key_999x',
   jwt: {
     issuer: process.env.JWT_ISSUER || '999xgame',
@@ -35,8 +48,6 @@ const config = {
     userTtlSeconds: parseInt(process.env.JWT_TTL_SECONDS || String(7 * 24 * 3600), 10),
     adminTtlSeconds: parseInt(process.env.ADMIN_JWT_TTL_SECONDS || String(12 * 3600), 10),
   },
-  // Emergency break-glass admin access — DISABLED by default (sec 6). When enabled it
-  // requires a dedicated secret and is audited loudly. Never a normal login path.
   adminBreakGlass: {
     enabled: process.env.ADMIN_BREAK_GLASS_ENABLED === 'true',
     secret: process.env.ADMIN_BREAK_GLASS_SECRET || '',
@@ -63,37 +74,20 @@ function validateConfig() {
   const isProd = config.nodeEnv === 'production';
 
   if (isProd) {
-    // Secrets (sec 63): production must fail closed on missing/weak secrets.
-    if (!process.env.JWT_SECRET || config.jwtSecret === 'dev_jwt_secret_key_999x') {
-      errors.push('JWT_SECRET must be explicitly set to a strong value in production.');
-    }
-    if (!process.env.ADMIN_JWT_SECRET || config.adminJwtSecret === 'dev_admin_jwt_secret_key_999x') {
-      errors.push('ADMIN_JWT_SECRET must be explicitly set to a strong value in production.');
-    }
-    if (config.jwtSecret.length < 32 || config.adminJwtSecret.length < 32) {
-      errors.push('JWT_SECRET and ADMIN_JWT_SECRET must each be at least 32 characters in production.');
-    }
-    // Database credentials are mandatory (PostgreSQL is the only authoritative store).
-    if (!config.db.host || !config.db.name || !config.db.user || !config.db.password) {
-      errors.push('DB_HOST, DB_NAME, DB_USER and DB_PASSWORD must be set in production.');
-    }
-    if (config.db.password === 'postgres') {
-      errors.push('DB_PASSWORD must not use the insecure default value in production.');
-    }
-    // Break-glass, if enabled, needs a dedicated secret distinct from the legacy default.
-    if (config.adminBreakGlass.enabled) {
-      if (!config.adminBreakGlass.secret || config.adminBreakGlass.secret === 'dev_admin_secret_key_999x') {
-        errors.push('ADMIN_BREAK_GLASS_SECRET must be set to a dedicated strong secret when break-glass is enabled.');
-      }
-    }
-    if (config.corsOrigin === '*') {
-      errors.push('CORS_ORIGIN must be restricted to explicit origins in production.');
-    }
+    if (!process.env.JWT_SECRET || config.jwtSecret === 'dev_jwt_secret_key_999x') errors.push('JWT_SECRET must be explicitly set to a strong value in production.');
+    if (!process.env.ADMIN_JWT_SECRET || config.adminJwtSecret === 'dev_admin_jwt_secret_key_999x') errors.push('ADMIN_JWT_SECRET must be explicitly set to a strong value in production.');
+    if (config.jwtSecret.length < 32 || config.adminJwtSecret.length < 32) errors.push('JWT_SECRET and ADMIN_JWT_SECRET must each be at least 32 characters in production.');
+    if (!config.db.host || !config.db.name || !config.db.user || !config.db.password) errors.push('DB_HOST, DB_NAME, DB_USER and DB_PASSWORD must be set in production.');
+    if (config.db.password === 'postgres') errors.push('DB_PASSWORD must not use the insecure default value in production.');
+    if (config.adminBreakGlass.enabled && (!config.adminBreakGlass.secret || config.adminBreakGlass.secret === 'dev_admin_secret_key_999x' || config.adminBreakGlass.secret.length < 32)) errors.push('ADMIN_BREAK_GLASS_SECRET must be a strong dedicated secret when break-glass is enabled.');
+    if (!process.env.CORS_ORIGIN || config.corsOrigin.length === 0 || config.corsOrigin.includes('*')) errors.push('CORS_ORIGIN must be restricted to explicit origins in production.');
+    if (config.trustProxy !== true) errors.push('TRUST_PROXY=true is required when running behind an AWS load balancer/proxy.');
+    if (!process.env.PAYMENT_UPI_ID) errors.push('PAYMENT_UPI_ID must be explicitly configured in production.');
+    if (!process.env.PAYMENT_MERCHANT_NAME) errors.push('PAYMENT_MERCHANT_NAME must be explicitly configured in production.');
+    if (!process.env.MINIMUM_APP_VERSION) errors.push('MINIMUM_APP_VERSION must be explicitly configured in production.');
   }
 
-  if (errors.length) {
-    throw new Error(`FATAL configuration error(s):\n- ${errors.join('\n- ')}`);
-  }
+  if (errors.length) throw new Error(`FATAL configuration error(s):\n- ${errors.join('\n- ')}`);
 }
 
 validateConfig();
