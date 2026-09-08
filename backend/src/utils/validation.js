@@ -25,6 +25,7 @@ const BET_TYPES_BY_GAME = {
 const UPI_REGEX = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
 const UTR_REGEX = /^\d{12}$/;
 const IDEMPOTENCY_REGEX = /^[A-Za-z0-9._:\-]{1,100}$/;
+const RUPEE_AMOUNT_REGEX = /^\d+(?:\.\d{1,2})?$/;
 
 function badRequest(message) {
   const err = new Error(message);
@@ -55,9 +56,13 @@ function rupeesToPaise(value, field = 'amount') {
   if (value === null || value === undefined || value === '') {
     throw badRequest(`${field} is required`);
   }
-  const n = typeof value === 'number' ? value : Number(String(value).trim());
+  const text = String(value).trim();
+  if (!RUPEE_AMOUNT_REGEX.test(text)) {
+    throw badRequest(`${field} must be a positive amount with at most 2 decimal places`);
+  }
+  const n = Number(text);
   if (!Number.isFinite(n) || n <= 0) {
-    throw badRequest(`${field} must be a positive number`);
+    throw badRequest(`${field} must be a positive amount`);
   }
   const paise = Math.round(n * 100);
   if (!Number.isInteger(paise) || paise <= 0) {
