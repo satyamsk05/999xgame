@@ -57,9 +57,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Apply remaining source audit fixes
+      - name: Repair login verification block
         working-directory: .
-        run: python3 scripts/apply_audit_fixes.py
+        run: python3 scripts/repair_login_verification.py
 
       - name: Install dependencies
         run: npm ci
