@@ -11,10 +11,7 @@ const { initDb } = require('../database/db');
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: {
-    origin: config.corsOrigin,
-    methods: ['GET', 'POST'],
-  },
+  cors: { origin: config.corsOrigin, methods: ['GET', 'POST'] },
 });
 
 io.use(async (socket, next) => {
@@ -39,25 +36,35 @@ io.use(async (socket, next) => {
   }
 });
 
-app.setOnlineUsersGetter(() => io.engine.clientsCount);
+// Count unique authenticated accounts, not raw TCP/socket connections. This prevents
+// multiple tabs/devices for one user and anonymous sockets from inflating the online ticker.
+function getAuthenticatedOnlineUserCount() {
+  const ids = new Set();
+  for (const socket of io.sockets.sockets.values()) {
+    if (socket.user?.id) ids.add(socket.user.id);
+  }
+  return ids.size;
+}
+
+app.setOnlineUsersGetter(getAuthenticatedOnlineUserCount);
+
+function broadcastOnlineUsers() {
+  io.emit('ONLINE_USERS', { count: getAuthenticatedOnlineUserCount() });
+}
 
 io.on('connection', (socket) => {
-  logger.info('Client connected to Socket.io', { socketId: socket.id, activeUsers: io.engine.clientsCount });
-  io.emit('ONLINE_USERS', { count: io.engine.clientsCount });
+  logger.info('Client connected to Socket.io', { socketId: socket.id, activeUsers: getAuthenticatedOnlineUserCount() });
+  broadcastOnlineUsers();
   socket.on('disconnect', (reason) => {
-    logger.info('Client disconnected', { socketId: socket.id, reason, activeUsers: io.engine.clientsCount });
-    io.emit('ONLINE_USERS', { count: io.engine.clientsCount });
+    logger.info('Client disconnected', { socketId: socket.id, reason, activeUsers: getAuthenticatedOnlineUserCount() });
+    broadcastOnlineUsers();
   });
 });
 
 server.listen(config.port, async () => {
   logger.info(`Ingames Backend Server running on port ${config.port}`, { env: config.nodeEnv, port: config.port });
-
   const dbReady = await initDb();
   if (!dbReady) logger.error('Database not ready at boot — game workers will stay stopped until DB is ready.');
-
-  // IMPORTANT: await status checks before starting workers. Only DB games with LIVE
-  // status are allowed to create rounds; COMING_SOON/DISABLED games stay stopped.
   if (dbReady) {
     try {
       await gameManager.init(io);
@@ -85,4 +92,4 @@ function gracefulShutdown(signal) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-module.exports = { server, io };
+module.exports = { server, io, getAuthenticatedOnlineUserCount };
