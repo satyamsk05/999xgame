@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 import 'realtime_sync_service.dart';
+import '../core/storage/token_manager.dart';
 
 /// Synchronizes non-authoritative dashboard presentation data.
 ///
@@ -40,8 +41,8 @@ class DashboardSyncManager {
 
     final realtime = RealtimeSyncService.instance;
     realtime.onAuthoritativeRefresh = syncWithServer;
-    if (realtime.isConnected.value == false) {
-      await realtime.start();
+    if (TokenManager.isAuthenticated && !realtime.isConnected.value) {
+      unawaited(realtime.start());
     }
 
     await refreshBackendHealth();
@@ -62,6 +63,12 @@ class DashboardSyncManager {
   }
 
   static Future<void> syncWithServer() async {
+    final realtime = RealtimeSyncService.instance;
+    realtime.onAuthoritativeRefresh = syncWithServer;
+    if (TokenManager.isAuthenticated && !realtime.isConnected.value) {
+      unawaited(realtime.start());
+    }
+
     isSyncing.value = true;
     try {
       final response = await ApiService.getDashboardHeader();
