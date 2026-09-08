@@ -103,15 +103,7 @@ async function settleRoundInDb(roundId, winningBetType) {
     const settlements = [];
 
     for (const bet of bets) {
-      let isWinner = (bet.bet_type === winningBetType);
-      if (!isWinner && bet.bet_type.startsWith('NUMBER_')) {
-        const num = parseInt(bet.bet_type.replace('NUMBER_', ''), 10);
-        const roundRes = await client.query('SELECT result FROM game_rounds WHERE id = $1', [roundId]);
-        const resObj = roundRes.rows[0]?.result || {};
-        if (resObj.diceSum === num) {
-          isWinner = true;
-        }
-      }
+      const isWinner = (bet.bet_type === winningBetType);
 
       const stakePaise = parseInt(bet.stake, 10);
       const mult = parseFloat(bet.payout_multiplier);
@@ -243,8 +235,8 @@ async function getUserBetsForRoundInDb(roundId, userId) {
 
 function getMultiplier(betType) {
   if (betType === 'SEVEN') return 5.0;
-  if (betType.startsWith('NUMBER_')) return 6.0;
-  return 2.0;
+  if (betType === 'DOWN' || betType === 'UP') return 2.0;
+  throw new Error(`Invalid bet type: ${betType}`);
 }
 
 module.exports = {

@@ -78,7 +78,7 @@ test('7 Up Down Game Controller API Tests', (t, done) => {
         roundId,
         bets: [
           { betType: 'SEVEN', stakePaise: 1000, idempotencyKey: `batch_1_${Date.now()}` },
-          { betType: 'NUMBER_8', stakePaise: 1000, idempotencyKey: `batch_2_${Date.now()}` },
+          { betType: 'DOWN', stakePaise: 1000, idempotencyKey: `batch_2_${Date.now()}` },
         ],
       }, { Authorization: `Bearer ${token}` });
 

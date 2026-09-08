@@ -61,10 +61,15 @@ router.get('/dashboard-header', authMiddleware, async (req, res, next) => {
       data: {
         profile: {
           id: user.id,
-          username: user.username,
+          username: user.username || 'Player',
           phone: user.phone,
           avatarUrl: user.avatar_path || '/avatars/avatar_1.png',
+          ringColor: '#FFD700',
           balance: wallet.totalBalance,
+          formattedBalance: `₹${wallet.totalBalance.toInt ? wallet.totalBalance.toInt() : Math.floor(wallet.totalBalance)}`,
+          profileTag: 'Profile',
+          profileTagColor: '#FFD700',
+          profileTagBg: '#3B0A4E',
         },
         wallet: {
           depositBalance: wallet.depositBalance,
@@ -72,9 +77,16 @@ router.get('/dashboard-header', authMiddleware, async (req, res, next) => {
           rewardsBalance: wallet.rewardsBalance,
           totalBalance: wallet.totalBalance,
           availableBalance: wallet.availableBalance,
+          formattedBalance: `₹${wallet.totalBalance.toInt ? wallet.totalBalance.toInt() : Math.floor(wallet.totalBalance)}`,
+          currencySymbol: '₹',
+          addCashButtonText: '+',
+          gradientColors: ['#00D294', '#00A574'],
         },
         onlinePlayers: {
-          totalOnline: 89156,
+          totalOnline: 89214,
+          label: 'online',
+          formattedText: '89,214 online',
+          ringColors: ['#FFC107', '#FF9800', '#40C4FF'],
           avatars: [
             '/avatars/avatar_1.png',
             '/avatars/avatar_2.png',
@@ -83,6 +95,7 @@ router.get('/dashboard-header', authMiddleware, async (req, res, next) => {
             '/avatars/avatar_8.png',
             '/avatars/avatar_9.png',
           ],
+          isLive: true,
         },
         games: games.length > 0 ? games : [
           { id: 'classic_dice', title: 'Classic Dice', imagePath: '/games/classic_dice.png', accentColor: '#00E676', gameUrl: '/games/seven_up_down/index.html', isAvailable: true },

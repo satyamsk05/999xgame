@@ -39,11 +39,22 @@ class _OnlineTickerState extends State<OnlineTicker>
   ];
 
   late List<String> _activeAvatars;
-  final List<Color> _borderColors = [
+  List<Color> _borderColors = [
     Colors.amber,
     Colors.orangeAccent,
     Colors.lightBlueAccent,
   ];
+
+  Color _parseHexColor(String hexString, Color fallback) {
+    try {
+      final buffer = StringBuffer();
+      if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
+      buffer.write(hexString.replaceFirst('#', ''));
+      return Color(int.parse(buffer.toString(), radix: 16));
+    } catch (_) {
+      return fallback;
+    }
+  }
 
   @override
   void initState() {
@@ -71,12 +82,10 @@ class _OnlineTickerState extends State<OnlineTicker>
     _updateTimer = Timer.periodic(const Duration(milliseconds: 3200), (timer) {
       if (!mounted) return;
       setState(() {
-        // Fluctuate count dynamically (+5 to +40 or -5 to -20)
         final isIncrease = _random.nextDouble() > 0.3;
         final delta = isIncrease ? _random.nextInt(35) + 5 : -(_random.nextInt(18) + 2);
         _currentCount = (_currentCount + delta).clamp(85000, 99999);
 
-        // Swap one avatar position with an unused avatar from all 6 choices
         final replaceIndex = _random.nextInt(3);
         final unusedAvatars = _allAvatars.where((a) => !_activeAvatars.contains(a)).toList();
         if (unusedAvatars.isNotEmpty) {
@@ -90,12 +99,27 @@ class _OnlineTickerState extends State<OnlineTicker>
   void _loadAvatarsFromSyncManager() {
     final data = DashboardSyncManager.dashboardData.value;
     final online = data['onlinePlayers'];
-    if (online != null && online['avatars'] is List) {
-      final List<dynamic> list = online['avatars'];
-      if (list.isNotEmpty) {
-        final synced = list.map((e) => e.toString()).toList();
-        if (synced.length >= 3) {
-          _allAvatars = synced;
+    if (online != null && online is Map<String, dynamic>) {
+      if (online.containsKey('totalOnline') && online['totalOnline'] is num) {
+        _currentCount = (online['totalOnline'] as num).toInt();
+      }
+      if (online['avatars'] is List) {
+        final List<dynamic> list = online['avatars'];
+        if (list.isNotEmpty) {
+          final synced = list.map((e) => e.toString()).toList();
+          if (synced.length >= 3) {
+            _allAvatars = synced;
+          }
+        }
+      }
+      if (online['ringColors'] is List) {
+        final List<dynamic> colorsList = online['ringColors'];
+        if (colorsList.length >= 3) {
+          _borderColors = [
+            _parseHexColor(colorsList[0].toString(), Colors.amber),
+            _parseHexColor(colorsList[1].toString(), Colors.orangeAccent),
+            _parseHexColor(colorsList[2].toString(), Colors.lightBlueAccent),
+          ];
         }
       }
     }

@@ -215,8 +215,6 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
 
   @override
   Widget build(BuildContext context) {
-    final is7UpDown = widget.gameTitle.toLowerCase().contains('7 up down');
-
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -261,11 +259,6 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Entry Fee: ₹${widget.entryFee.toStringAsFixed(0)} | Prize: ₹${widget.prizePool.toStringAsFixed(0)}',
-                                  style: GoogleFonts.poppins(color: Colors.white70, fontSize: 14),
-                                ),
                               ],
                             ),
                           ))),
@@ -294,9 +287,7 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
                       ),
                       const SizedBox(height: 20),
                       Text(
-                        is7UpDown
-                            ? 'Loading ${widget.gameTitle} Table...'
-                            : 'Deducting Entry Fee ₹${widget.entryFee.toStringAsFixed(0)}...',
+                        'Loading ${widget.gameTitle}...',
                         style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontSize: 16,
@@ -305,9 +296,7 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        is7UpDown
-                            ? 'Preparing live betting table...'
-                            : 'Connecting to HTML5 Game Engine...',
+                        'Connecting to live game engine...',
                         style: GoogleFonts.poppins(
                           color: Colors.white54,
                           fontSize: 13,

@@ -16,32 +16,12 @@ const BetTypes = {
   DOWN: 'DOWN',       // Sum 2..6 (2.0x)
   SEVEN: 'SEVEN',     // Sum 7 (5.0x)
   UP: 'UP',           // Sum 8..12 (2.0x)
-  NUMBER_2: 'NUMBER_2',
-  NUMBER_3: 'NUMBER_3',
-  NUMBER_4: 'NUMBER_4',
-  NUMBER_5: 'NUMBER_5',
-  NUMBER_6: 'NUMBER_6',
-  NUMBER_8: 'NUMBER_8',
-  NUMBER_9: 'NUMBER_9',
-  NUMBER_10: 'NUMBER_10',
-  NUMBER_11: 'NUMBER_11',
-  NUMBER_12: 'NUMBER_12',
 };
 
 const PayoutMultipliers = {
   [BetTypes.DOWN]: 2.0,
   [BetTypes.SEVEN]: 5.0,
   [BetTypes.UP]: 2.0,
-  [BetTypes.NUMBER_2]: 26.0,
-  [BetTypes.NUMBER_3]: 12.0,
-  [BetTypes.NUMBER_4]: 8.0,
-  [BetTypes.NUMBER_5]: 6.0,
-  [BetTypes.NUMBER_6]: 5.0,
-  [BetTypes.NUMBER_8]: 5.0,
-  [BetTypes.NUMBER_9]: 6.0,
-  [BetTypes.NUMBER_10]: 8.0,
-  [BetTypes.NUMBER_11]: 12.0,
-  [BetTypes.NUMBER_12]: 26.0,
 };
 
 class SevenUpDownEngine {
@@ -141,7 +121,7 @@ class SevenUpDownEngine {
     }
 
     if (!Object.values(BetTypes).includes(betType)) {
-      throw new Error(`Invalid bet type: ${betType}. Must be DOWN, SEVEN, UP, or NUMBER_2..12`);
+      throw new Error(`Invalid bet type: ${betType}. Must be DOWN, SEVEN, or UP`);
     }
 
     if (!stakePaise || stakePaise < 1000) {

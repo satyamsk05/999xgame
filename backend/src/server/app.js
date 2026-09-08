@@ -83,6 +83,29 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+app.get('/api/online-ticker', (req, res) => {
+  const realtimeCount = activeSocketCountGetter();
+  const baseOnline = 89214 + (realtimeCount > 0 ? realtimeCount : 0);
+  res.status(200).json({
+    status: 'success',
+    data: {
+      totalOnline: baseOnline,
+      label: 'online',
+      formattedText: `${baseOnline.toLocaleString()} online`,
+      ringColors: ['#FFC107', '#FF9800', '#4FC3F7'],
+      avatars: [
+        '/avatars/avatar_1.png',
+        '/avatars/avatar_2.png',
+        '/avatars/avatar_3.png',
+        '/avatars/avatar_7.png',
+        '/avatars/avatar_8.png',
+        '/avatars/avatar_9.png',
+      ],
+      isLive: true,
+    },
+  });
+});
+
 app.get('/api/banners', async (req, res) => {
   try {
     const dbRes = await query(`SELECT * FROM promotions WHERE status = 'ACTIVE' ORDER BY created_at DESC`);
