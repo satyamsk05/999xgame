@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const authMiddleware = require('../middleware/authMiddleware');
+const { signToken } = require('../auth/jwt');
 const { query } = require('../database/db');
 const logger = require('../utils/logger');
 const { sevenUpDownEngine } = require('./seven-up-down/engine');
@@ -11,6 +12,55 @@ const gameRepo = require('./seven-up-down/game.repository');
 const walletRepo = require('../wallet/wallet.repository');
 const validation = require('../utils/validation');
 const { betLimiter, cashoutLimiter } = require('../middleware/rateLimit');
+
+// Issue a short-lived, game-scoped USER token after the app JWT has authenticated the user.
+// The token is intentionally short-lived and carries the game id so a WebView never needs
+// to receive the long-lived application credential.
+router.post('/session', authMiddleware, async (req, res) => {
+  const { gameId } = req.body || {};
+  const allowedGames = new Set(['seven_up_down', '7updown', 'dragon_tiger', 'crush']);
+
+  if (!allowedGames.has(String(gameId || ''))) {
+    return res.status(400).json({
+      status: 'error',
+      code: 'INVALID_GAME',
+      message: 'A supported gameId is required.',
+    });
+  }
+
+  try {
+    const expiresIn = 5 * 60;
+    const token = signToken(
+      {
+        userId: req.user.id,
+        phone: req.user.phone,
+        scope: 'GAME_SESSION',
+        gameId: String(gameId),
+      },
+      expiresIn,
+    );
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        token,
+        gameId: String(gameId),
+        expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+      },
+    });
+  } catch (err) {
+    logger.error('Failed to create game session token', {
+      userId: req.user && req.user.id,
+      gameId,
+      error: err.message,
+    });
+    return res.status(500).json({
+      status: 'error',
+      code: 'GAME_SESSION_FAILED',
+      message: 'Unable to start the game session.',
+    });
+  }
+});
 
 // Catalog of Games
 router.get('/', async (req, res) => {
@@ -126,12 +176,7 @@ router.post('/7updown/bets', betLimiter, authMiddleware, async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'bets array or betType is required' });
     }
 
-    // Authoritative round the bets attach to — used for deterministic idempotency (sec 21.8).
     const activeRoundId = (sevenUpDownEngine.currentRound && sevenUpDownEngine.currentRound.roundId) || roundId;
-
-    // sec 51: validate + normalize the WHOLE batch up-front so one bad item can never
-    // cause a partial fill (debit item 1, then 400 on item 2). Client numbers are never
-    // trusted — stake resolves to a positive integer number of paise.
     validation.validateIdempotencyKey(idempotencyKey);
     const normalizedBets = betList.map((betItem, i) => {
       const itemStakePaise = validation.resolveStakePaise(
@@ -139,8 +184,6 @@ router.post('/7updown/bets', betLimiter, authMiddleware, async (req, res) => {
         'stake'
       );
       validation.validateBetType(betItem.betType, 'seven_up_down');
-      // Prefer the client key; otherwise derive a STABLE key from request fields so a
-      // retry never produces a second debit (never Date.now()/Math.random()).
       const clientKey = validation.validateIdempotencyKey(betItem.idempotencyKey);
       const itemKey = clientKey || idempotencyKey
         || `sud_${userId}_${activeRoundId}_${betItem.betType}_${itemStakePaise}_${i}`;
@@ -184,7 +227,6 @@ router.post('/dragon_tiger/bets', betLimiter, authMiddleware, async (req, res) =
   try {
     const userId = req.user.id;
     const { betType, stake, stakePaise, idempotencyKey } = req.body;
-    // sec 51: never trust client numbers — resolve to integer paise and check the enum.
     const computedStakePaise = validation.resolveStakePaise({ stakePaise, stake });
     validation.validateBetType(betType, 'dragon_tiger');
     validation.validateIdempotencyKey(idempotencyKey);
@@ -212,7 +254,6 @@ router.post('/crush/bets', betLimiter, authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const { stake, stakePaise, autoCashoutMultiplier, idempotencyKey } = req.body;
-    // sec 51: never trust client numbers — resolve stake to integer paise.
     const computedStakePaise = validation.resolveStakePaise({ stakePaise, stake });
     validation.validateIdempotencyKey(idempotencyKey);
 
@@ -240,10 +281,7 @@ router.post('/crush/bets', betLimiter, authMiddleware, async (req, res) => {
 router.post('/crush/cashout', cashoutLimiter, authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
-    // sec 51: only betId is taken from the client; the payout multiplier is computed
-    // server-side (sec 25). Throws 400 'betId is required' when missing/invalid.
     const { betId } = validation.validateCashoutRequest(req.body);
-
     const result = await crushEngine.cashoutBet({ betId, userId });
 
     return res.status(200).json({
@@ -260,7 +298,6 @@ router.post('/crush/cashout', cashoutLimiter, authMiddleware, async (req, res) =
 // Authenticated User Bet History Endpoint
 router.get('/bet-history', authMiddleware, async (req, res) => {
   try {
-    // Derive the real game identity from the round (sec 27) — never hardcode it.
     const dbRes = await query(
       `SELECT b.id, b.round_id as "roundId", b.bet_type as "betType", 
               b.stake, b.win_amount as "winAmount", b.status, b.created_at as timestamp,
