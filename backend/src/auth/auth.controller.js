@@ -6,11 +6,28 @@ const { signToken } = require('./jwt');
 const logger = require('../utils/logger');
 
 function serializeWallet(wallet = {}) {
-  const availablePaise = parseInt(wallet.available_balance ?? 0, 10) || 0;
-  const reservedPaise = parseInt(wallet.reserved_balance ?? 0, 10) || 0;
-  const depositPaise = parseInt(wallet.deposit_balance ?? 0, 10) || 0;
-  const winningsPaise = parseInt(wallet.winnings_balance ?? 0, 10) || 0;
-  const rewardsPaise = parseInt(wallet.rewards_balance ?? 0, 10) || 0;
+  // findOrCreateUserByPhone returns the wallet in rupees/camelCase, while some
+  // callers may provide the raw PostgreSQL paise/snake_case row. Support both
+  // shapes so login can never accidentally report a zero wallet.
+  const hasPaiseShape = [
+    'available_balance',
+    'reserved_balance',
+    'deposit_balance',
+    'winnings_balance',
+    'rewards_balance',
+  ].some((key) => wallet[key] !== undefined && wallet[key] !== null);
+
+  const toPaise = (paiseKey, rupeesKey) => {
+    if (hasPaiseShape) return parseInt(wallet[paiseKey] ?? 0, 10) || 0;
+    return Math.round((Number(wallet[rupeesKey] ?? 0) || 0) * 100);
+  };
+
+  const availablePaise = toPaise('available_balance', 'availableBalance');
+  const reservedPaise = toPaise('reserved_balance', 'reservedBalance');
+  const depositPaise = toPaise('deposit_balance', 'depositBalance');
+  const winningsPaise = toPaise('winnings_balance', 'winningsBalance');
+  const rewardsPaise = toPaise('rewards_balance', 'rewardsBalance');
+
   return {
     depositBalance: depositPaise / 100,
     winningsBalance: winningsPaise / 100,
