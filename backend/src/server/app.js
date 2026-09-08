@@ -24,9 +24,11 @@ const adminReportsController = require('../admin/admin_reports.controller');
 
 const app = express();
 
-app.use(cors({ origin: config.corsOrigin }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+if (config.trustProxy) app.set('trust proxy', config.trustProxy);
+
+app.use(cors({ origin: config.corsOrigin, credentials: true }));
+app.use(express.json({ limit: config.bodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 app.use(requestIdMiddleware);
 app.use(responseContract);
 
@@ -37,7 +39,7 @@ app.get('/admin', (req, res) => {
 
 let activeSocketCountGetter = () => 0;
 app.setOnlineUsersGetter = (fn) => {
-  activeSocketCountGetter = fn;
+  activeSocketCountGetter = typeof fn === 'function' ? fn : () => 0;
 };
 
 const { query } = require('../database/db');
@@ -61,7 +63,6 @@ app.get('/ready', async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    // Readiness is intentionally generic. Do not expose database driver errors to clients.
     return res.status(503).json({
       status: 'unready',
       db: 'disconnected',
@@ -77,8 +78,8 @@ app.get('/api/config', (req, res) => {
     status: 'success',
     data: {
       onlineUsers: realtimeOnlineUsers,
-      maintenanceMode: false,
-      minimumAppVersion: '1.0.0',
+      maintenanceMode: config.maintenanceMode,
+      minimumAppVersion: config.minimumAppVersion,
     },
   });
 });
@@ -91,15 +92,8 @@ app.get('/api/online-ticker', (req, res) => {
       totalOnline: realtimeCount,
       label: 'online',
       formattedText: `${realtimeCount.toLocaleString()} online`,
-      ringColors: ['#FFC107', '#FF9800', '#4FC3F7'],
-      avatars: [
-        '/avatars/avatar_1.png',
-        '/avatars/avatar_2.png',
-        '/avatars/avatar_3.png',
-        '/avatars/avatar_7.png',
-        '/avatars/avatar_8.png',
-        '/avatars/avatar_9.png',
-      ],
+      ringColors: config.onlineTickerRingColors,
+      avatars: config.onlineTickerAvatars,
       isLive: true,
     },
   });
