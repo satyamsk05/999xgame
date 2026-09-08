@@ -151,6 +151,7 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
       }
     });
   }
+
   Future<void> _fetchUserData() async {
     DashboardSyncManager.syncWithServer();
     try {
