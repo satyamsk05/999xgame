@@ -41,6 +41,7 @@ let activeSocketCountGetter = () => 0;
 app.setOnlineUsersGetter = (fn) => {
   activeSocketCountGetter = typeof fn === 'function' ? fn : () => 0;
 };
+app.getOnlineUsersCount = () => activeSocketCountGetter();
 
 const { query } = require('../database/db');
 
