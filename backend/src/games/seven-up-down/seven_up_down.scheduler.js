@@ -3,16 +3,6 @@ const { GameLeaderLock } = require('../scheduler.lock');
 const { isDatabaseReady } = require('../../database/db');
 const logger = require('../../utils/logger');
 
-/**
- * 7 Up Down game worker (sec 22, 47).
- *
- * A single async loop owns each full cycle (open -> bet -> roll -> settle -> pause);
- * there is NO overlapping setInterval. A PostgreSQL advisory leader lock guarantees
- * only ONE instance runs this game in a multi-instance deployment, and the loop fails
- * closed (idles) whenever the database is not ready. Orphaned rounds from a previous
- * process are recovered deterministically on startup.
- */
-
 const GAME_ID = 'seven_up_down';
 const BETTING_WINDOW_MS = 15000;
 const REVEAL_BUFFER_MS = 2000;
@@ -23,7 +13,6 @@ let isRunning = false;
 let loopPromise = null;
 const leaderLock = new GameLeaderLock(GAME_ID);
 
-/** Interruptible sleep so graceful shutdown is responsive. */
 function sleep(ms) {
   return new Promise((resolve) => {
     const step = 200;
@@ -60,7 +49,6 @@ async function runGameCycle(io = null) {
   await sleep(BETTING_WINDOW_MS);
   if (!isRunning) return;
 
-  // Close betting & roll the dice from the committed seed (deterministic, provably fair).
   round = await sevenUpDownEngine.closeBettingAndRoll();
 
   if (io) {
@@ -97,9 +85,16 @@ async function runGameCycle(io = null) {
   await sleep(REVEAL_BUFFER_MS);
   if (!isRunning) return;
 
-  // Settle atomically. A failure throws -> logged by the loop handler; the round stays
-  // unresolved and startup recovery settles it deterministically on the next boot.
   const result = await sevenUpDownEngine.settleRound();
+
+  // Never broadcast per-user settlement rows. They contain internal user identifiers
+  // and wallet details that are not needed by other players. Clients refresh their own
+  // wallet through the authenticated API after settlement.
+  const publicSettlement = {
+    roundId: round.roundId,
+    winningBetType: round.winningBetType,
+    settledAt: result.round.endedAt,
+  };
 
   if (io) {
     io.emit('GAME_ROUND_SETTLED', {
@@ -107,20 +102,15 @@ async function runGameCycle(io = null) {
       gameId: GAME_ID,
       roundId: round.roundId,
       serverTime: new Date().toISOString(),
-      payload: result,
+      payload: publicSettlement,
     });
-    io.emit('7ud:round_settled', {
-      roundId: round.roundId,
-      winningBetType: round.winningBetType,
-      settlements: result.settlements,
-    });
+    io.emit('7ud:round_settled', publicSettlement);
   }
 
   await sleep(INTER_ROUND_PAUSE_MS);
 }
 
 async function schedulerLoop(io) {
-  // Recover orphaned rounds from a previous process before scheduling new ones.
   try {
     await sevenUpDownEngine.recoverFromDb();
   } catch (err) {
@@ -131,7 +121,6 @@ async function schedulerLoop(io) {
     try {
       const isLeader = await leaderLock.acquire();
       if (!isLeader || !isDatabaseReady()) {
-        // Not leader, or DB not ready: idle and re-poll. NEVER create rounds here.
         await sleep(LEADER_POLL_MS);
         continue;
       }
