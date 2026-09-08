@@ -28,26 +28,20 @@ app.use(cors({ origin: config.corsOrigin }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(requestIdMiddleware);
-// sec 31: stamp every JSON response with the unified contract (success/error envelope)
-// as an additive compatibility layer over the legacy { status } shape.
 app.use(responseContract);
 
-// Serve Static Public Files & Web Admin Portal
 app.use(express.static(path.join(__dirname, '../../public')));
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, '../../public/admin.html'));
 });
 
-// Active Online Presence Tracker
 let activeSocketCountGetter = () => 0;
-
 app.setOnlineUsersGetter = (fn) => {
   activeSocketCountGetter = fn;
 };
 
 const { query } = require('../database/db');
 
-// Health & Readiness Endpoints
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -67,16 +61,16 @@ app.get('/ready', async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
+    // Readiness is intentionally generic. Do not expose database driver errors to clients.
     return res.status(503).json({
       status: 'unready',
       db: 'disconnected',
-      error: err.message,
+      code: 'DATABASE_UNAVAILABLE',
       timestamp: new Date().toISOString(),
     });
   }
 });
 
-// App Config & Realtime Online Users API
 app.get('/api/config', (req, res) => {
   const realtimeOnlineUsers = activeSocketCountGetter();
   res.status(200).json({
@@ -124,10 +118,7 @@ app.get('/api/banners', async (req, res) => {
       targetScreen: row.target_screen || '/add-cash',
     }));
 
-    return res.status(200).json({
-      status: 'success',
-      data: banners,
-    });
+    return res.status(200).json({ status: 'success', data: banners });
   } catch (err) {
     return res.status(503).json({
       status: 'error',
@@ -137,13 +128,10 @@ app.get('/api/banners', async (req, res) => {
   }
 });
 
-
-// Mount Controllers
 app.use('/api/auth', authLimiter, authController);
 app.use('/api/user', userController);
 app.use('/api/app', userController);
 app.use('/api/games', gameController);
-
 app.use('/api/wallet', walletController);
 app.use('/api/deposits', depositLimiter, depositController);
 app.use('/api/admin/auth', adminAuthLimiter, adminAuthController);
@@ -156,8 +144,6 @@ app.use('/api/admin/games', adminGamesController);
 app.use('/api/admin/promotions', adminPromotionsController);
 app.use('/api/admin/reports', adminReportsController);
 
-
-// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     status: 'error',
