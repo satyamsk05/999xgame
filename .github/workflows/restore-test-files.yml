@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   restore:
-    if: github.sha == '419fcd5912ba87326203a27f871b655bb4829108'
+    if: github.sha == '428a3505e57fd23e423c3c35ed6652b7aadd23c4'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
