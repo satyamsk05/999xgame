@@ -4,10 +4,17 @@ import '../core/api/api_client.dart';
 import '../features/wallet/data/wallet_api.dart';
 
 class ApiService {
-  static String serverDomain = const String.fromEnvironment(
-    'SERVER_DOMAIN',
-    defaultValue: kDebugMode ? 'http://localhost:5050' : 'https://ingames.onrender.com',
-  );
+  static const String _configuredServerDomain = String.fromEnvironment('SERVER_DOMAIN');
+
+  static String get serverDomain {
+    if (kDebugMode) {
+      return _configuredServerDomain.isNotEmpty ? _configuredServerDomain : 'http://localhost:5050';
+    }
+    if (_configuredServerDomain.isEmpty) {
+      throw StateError('SERVER_DOMAIN must be supplied for release builds.');
+    }
+    return _configuredServerDomain;
+  }
 
   static String get baseUrl => '$serverDomain/api';
 
