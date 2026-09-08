@@ -3,12 +3,21 @@ import '../../../core/money/money_paise.dart';
 
 class WalletApi {
   static Future<Map<String, dynamic>> createDepositOrderPaise({required MoneyPaise amount, String paymentMethod = 'UPI'}) async {
-    final res = await ApiClient.post('/deposits', {'amount': amount.rupees, 'amountPaise': amount.value, 'paymentMethod': paymentMethod});
+    final res = await ApiClient.post('/deposits', {
+      'amount': amount.rupees,
+      'amountPaise': amount.value,
+      'paymentMethod': paymentMethod,
+    });
     return res as Map<String, dynamic>;
   }
 
   static Future<Map<String, dynamic>> withdrawCashPaise({required MoneyPaise amount, required String upiId, String? idempotencyKey}) async {
-    final res = await ApiClient.post('/withdrawals', {'amount': amount.rupees, 'amountPaise': amount.value, 'upiId': upiId, 'idempotencyKey': idempotencyKey});
+    final res = await ApiClient.post('/withdrawals', {
+      'amount': amount.rupees,
+      'amountPaise': amount.value,
+      'upiId': upiId,
+      'idempotencyKey': idempotencyKey,
+    });
     return res as Map<String, dynamic>;
   }
 
@@ -17,15 +26,17 @@ class WalletApi {
     return res as Map<String, dynamic>;
   }
 
+  /// Compatibility boundary for existing UI callers. The value is converted to
+  /// exact paise before it reaches the API layer.
+  @Deprecated('Use createDepositOrderPaise with MoneyPaise for new code.')
   static Future<Map<String, dynamic>> createDepositOrder({
     required double amount,
     String paymentMethod = 'UPI',
-  }) async {
-    final res = await ApiClient.post('/deposits', {
-      'amount': amount,
-      'paymentMethod': paymentMethod,
-    });
-    return res as Map<String, dynamic>;
+  }) {
+    return createDepositOrderPaise(
+      amount: MoneyPaise.fromRupees(amount),
+      paymentMethod: paymentMethod,
+    );
   }
 
   static Future<Map<String, dynamic>> submitUtr({
@@ -38,17 +49,19 @@ class WalletApi {
     return res as Map<String, dynamic>;
   }
 
+  /// Compatibility boundary for existing UI callers. The value is converted to
+  /// exact paise before it reaches the API layer.
+  @Deprecated('Use withdrawCashPaise with MoneyPaise for new code.')
   static Future<Map<String, dynamic>> withdrawCash({
     required double amount,
     required String upiId,
     String? idempotencyKey,
-  }) async {
-    final res = await ApiClient.post('/withdrawals', {
-      'amount': amount,
-      'upiId': upiId,
-      'idempotencyKey': idempotencyKey,
-    });
-    return res as Map<String, dynamic>;
+  }) {
+    return withdrawCashPaise(
+      amount: MoneyPaise.fromRupees(amount),
+      upiId: upiId,
+      idempotencyKey: idempotencyKey,
+    );
   }
 
   static Future<Map<String, dynamic>> getTransactions({int page = 1, int limit = 20}) async {
