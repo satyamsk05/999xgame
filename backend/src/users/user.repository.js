@@ -7,47 +7,86 @@ const logger = require('../utils/logger');
  * New user starts with ₹0 balance.
  */
 async function findOrCreateUserByPhone(verifiedPhone) {
+  if (typeof verifiedPhone !== 'string') {
+    throw new Error('Verified phone number is required');
+  }
+
+  const cleanDigits = verifiedPhone.replace(/[^0-9]/g, '');
+  if (cleanDigits.length < 8 || cleanDigits.length > 15) {
+    throw new Error('Invalid verified phone number');
+  }
+
   const client = await getClient();
   try {
     await client.query('BEGIN');
 
-    // 1. Check if user exists by phone OR user ID
-    const cleanDigits = verifiedPhone.replace(/[^0-9]/g, '');
     const userId = `usr_${cleanDigits}`;
-    const findRes = await client.query('SELECT * FROM users WHERE phone = $1 OR id = $2', [verifiedPhone, userId]);
-    
+
+    // Existing account lookup. Both phone and deterministic ID are checked so
+    // alternate phone formatting cannot accidentally create a second account.
+    const findRes = await client.query(
+      'SELECT * FROM users WHERE phone = $1 OR id = $2 LIMIT 1',
+      [verifiedPhone, userId]
+    );
+
     let user;
     if (findRes.rows.length > 0) {
       user = findRes.rows[0];
     } else {
-      // 2. Create new user
       const defaultUsername = `Player_${verifiedPhone.slice(-4)}`;
       const avatarPath = 'assets/avatar/avatar_1.png';
 
+      // DO NOTHING handles a concurrent first login safely. If another request
+      // wins the unique phone/id race, we fetch that committed row below instead
+      // of surfacing a duplicate-key error to the user.
       const insertUserRes = await client.query(
         `INSERT INTO users (id, phone, username, avatar_path, created_at, updated_at)
          VALUES ($1, $2, $3, $4, NOW(), NOW())
-         ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone
+         ON CONFLICT DO NOTHING
          RETURNING *`,
         [userId, verifiedPhone, defaultUsername, avatarPath]
       );
-      user = insertUserRes.rows[0];
 
-      // 3. Create new user wallet with ₹0 initial balance
-      const walletId = `wlt_${userId}`;
+      if (insertUserRes.rows.length > 0) {
+        user = insertUserRes.rows[0];
+        logger.info('Created new PostgreSQL user', { userId });
+      } else {
+        const concurrentRes = await client.query(
+          'SELECT * FROM users WHERE phone = $1 OR id = $2 LIMIT 1',
+          [verifiedPhone, userId]
+        );
+        if (concurrentRes.rows.length === 0) {
+          throw new Error('Unable to create or load verified user');
+        }
+        user = concurrentRes.rows[0];
+      }
+
+      // Always ensure a wallet exists, including for accounts created by another
+      // concurrent request or legacy accounts missing their wallet row.
+      const walletId = `wlt_${user.id}`;
       await client.query(
         `INSERT INTO wallets (id, user_id, available_balance, reserved_balance, deposit_balance, winnings_balance, rewards_balance, locked_balance, version, created_at, updated_at)
          VALUES ($1, $2, 0, 0, 0, 0, 0, 0, 1, NOW(), NOW())
          ON CONFLICT (user_id) DO NOTHING`,
-        [walletId, userId]
+        [walletId, user.id]
       );
-
-      logger.info('Created new PostgreSQL user and initial zero-balance wallet', { userId, verifiedPhone });
     }
 
-    // Fetch latest wallet
+    // Existing users also need a wallet guarantee. This is intentionally inside
+    // the same transaction as user lookup/creation.
+    const walletId = `wlt_${user.id}`;
+    await client.query(
+      `INSERT INTO wallets (id, user_id, available_balance, reserved_balance, deposit_balance, winnings_balance, rewards_balance, locked_balance, version, created_at, updated_at)
+       VALUES ($1, $2, 0, 0, 0, 0, 0, 0, 1, NOW(), NOW())
+       ON CONFLICT (user_id) DO NOTHING`,
+      [walletId, user.id]
+    );
+
     const walletRes = await client.query('SELECT * FROM wallets WHERE user_id = $1', [user.id]);
-    const wallet = walletRes.rows[0] || { deposit_balance: 0, winnings_balance: 0, rewards_balance: 0 };
+    if (walletRes.rows.length === 0) {
+      throw new Error('User wallet could not be initialized');
+    }
+    const wallet = walletRes.rows[0];
 
     await client.query('COMMIT');
 
@@ -57,12 +96,14 @@ async function findOrCreateUserByPhone(verifiedPhone) {
         depositBalance: parseInt(wallet.deposit_balance || 0, 10) / 100,
         winningsBalance: parseInt(wallet.winnings_balance || 0, 10) / 100,
         rewardsBalance: parseInt(wallet.rewards_balance || 0, 10) / 100,
-        totalBalance: (parseInt(wallet.deposit_balance || 0, 10) + parseInt(wallet.winnings_balance || 0, 10) + parseInt(wallet.rewards_balance || 0, 10)) / 100,
+        availableBalance: parseInt(wallet.available_balance || 0, 10) / 100,
+        reservedBalance: parseInt(wallet.reserved_balance || 0, 10) / 100,
+        totalBalance: (parseInt(wallet.available_balance || 0, 10) + parseInt(wallet.reserved_balance || 0, 10)) / 100,
       },
     };
   } catch (err) {
     await client.query('ROLLBACK');
-    logger.error('Failed to find/create user in PostgreSQL', { verifiedPhone, error: err.message });
+    logger.error('Failed to find/create user in PostgreSQL', { error: err.message });
     throw err;
   } finally {
     client.release();
@@ -136,4 +177,3 @@ module.exports = {
   updateUserProfile,
   completeOnboarding,
 };
-
