@@ -23,13 +23,19 @@ router.post('/', authMiddleware, async (req, res, next) => {
       });
     }
 
-    const idempotencyKey = req.body.idempotencyKey || req.headers['x-idempotency-key'] || null;
+    // sec 16: accept a client-supplied request id so a retried create maps to a
+    // deterministic WITHDRAW_CREATE:{id} key (DB-unique) and never double-reserves.
+    const clientRequestId = req.body.clientRequestId
+      || req.body.idempotencyKey
+      || req.headers['x-client-request-id']
+      || req.headers['x-idempotency-key']
+      || null;
 
     const requestData = await withdrawalRepo.createWithdrawalRequest({
       userId: req.user.id,
       amountRupees: parseFloat(amount),
       upiId: upiId.trim(),
-      idempotencyKey,
+      clientRequestId,
     });
 
     res.status(201).json({

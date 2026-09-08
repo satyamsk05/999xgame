@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const adminMiddleware = require('../middleware/admin.middleware');
+const { adminMiddleware } = require('../middleware/admin_auth.middleware');
 const { query } = require('../database/db');
 const logger = require('../utils/logger');
 

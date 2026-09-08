@@ -1,102 +1,168 @@
 const { sevenUpDownEngine, RoundStatus } = require('./engine');
+const { GameLeaderLock } = require('../scheduler.lock');
+const { isDatabaseReady } = require('../../database/db');
 const logger = require('../../utils/logger');
 
-let schedulerInterval = null;
-let isLoopRunning = false;
-
 /**
- * Continuous 25-Second Game Loop for 7 Up Down:
- * 1. Create Round & Open Betting (15s betting window)
- * 2. Close Betting & Roll Dice (2s calculation/reveal)
- * 3. Settle Round & Credit Winners (3s payout)
- * 4. Next Round
+ * 7 Up Down game worker (sec 22, 47).
+ *
+ * A single async loop owns each full cycle (open -> bet -> roll -> settle -> pause);
+ * there is NO overlapping setInterval. A PostgreSQL advisory leader lock guarantees
+ * only ONE instance runs this game in a multi-instance deployment, and the loop fails
+ * closed (idles) whenever the database is not ready. Orphaned rounds from a previous
+ * process are recovered deterministically on startup.
  */
+
+const GAME_ID = 'seven_up_down';
+const BETTING_WINDOW_MS = 15000;
+const REVEAL_BUFFER_MS = 2000;
+const INTER_ROUND_PAUSE_MS = 3000;
+const LEADER_POLL_MS = 2000;
+
+let isRunning = false;
+let loopPromise = null;
+const leaderLock = new GameLeaderLock(GAME_ID);
+
+/** Interruptible sleep so graceful shutdown is responsive. */
+function sleep(ms) {
+  return new Promise((resolve) => {
+    const step = 200;
+    let waited = 0;
+    const timer = setInterval(() => {
+      waited += step;
+      if (!isRunning || waited >= ms) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, step);
+  });
+}
+
 async function runGameCycle(io = null) {
-  if (isLoopRunning) return;
-  isLoopRunning = true;
+  let round = await sevenUpDownEngine.getOrStartCurrentRound();
 
-  try {
-    // 1. Check/Recover or Create active round
-    let round = await sevenUpDownEngine.getOrStartCurrentRound();
-    
-    if (io) {
-      io.emit('7ud:round_open', {
-        roundId: round.roundId,
-        serverSeedHash: round.serverSeedHash,
-        bettingDurationSeconds: 15,
-        status: RoundStatus.BETTING_OPEN,
-      });
-    }
+  if (io) {
+    io.emit('GAME_ROUND_OPEN', {
+      version: 1,
+      gameId: GAME_ID,
+      roundId: round.roundId,
+      serverTime: new Date().toISOString(),
+      payload: { roundId: round.roundId, serverSeedHash: round.serverSeedHash, status: RoundStatus.BETTING_OPEN },
+    });
+    io.emit('7ud:round_open', {
+      roundId: round.roundId,
+      serverSeedHash: round.serverSeedHash,
+      bettingDurationSeconds: BETTING_WINDOW_MS / 1000,
+      status: RoundStatus.BETTING_OPEN,
+    });
+  }
 
-    // 15 seconds betting window
-    await new Promise((resolve) => setTimeout(resolve, 15000));
+  await sleep(BETTING_WINDOW_MS);
+  if (!isRunning) return;
 
-    // 2. Close betting and roll dice
-    round = await sevenUpDownEngine.closeBettingAndRoll();
+  // Close betting & roll the dice from the committed seed (deterministic, provably fair).
+  round = await sevenUpDownEngine.closeBettingAndRoll();
 
-    if (io) {
-      io.emit('7ud:dice_rolled', {
-        roundId: round.roundId,
+  if (io) {
+    io.emit('GAME_BETTING_CLOSED', {
+      version: 1,
+      gameId: GAME_ID,
+      roundId: round.roundId,
+      serverTime: new Date().toISOString(),
+    });
+    io.emit('GAME_RESULT', {
+      version: 1,
+      gameId: GAME_ID,
+      roundId: round.roundId,
+      serverTime: new Date().toISOString(),
+      payload: {
         dice1: round.dice1,
         dice2: round.dice2,
         diceSum: round.diceSum,
         winningBetType: round.winningBetType,
         serverSeed: round.serverSeed,
-      });
-    }
+        serverSeedHash: round.serverSeedHash,
+      },
+    });
+    io.emit('7ud:dice_rolled', {
+      roundId: round.roundId,
+      dice1: round.dice1,
+      dice2: round.dice2,
+      diceSum: round.diceSum,
+      winningBetType: round.winningBetType,
+      serverSeed: round.serverSeed,
+    });
+  }
 
-    // 2 seconds animation buffer
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+  await sleep(REVEAL_BUFFER_MS);
+  if (!isRunning) return;
 
-    // 3. Settle round and credit winners
-    const result = await sevenUpDownEngine.settleRound();
+  // Settle atomically. A failure throws -> logged by the loop handler; the round stays
+  // unresolved and startup recovery settles it deterministically on the next boot.
+  const result = await sevenUpDownEngine.settleRound();
 
-    if (io) {
-      io.emit('7ud:round_settled', {
-        roundId: round.roundId,
-        winningBetType: round.winningBetType,
-        settlements: result.settlements,
-      });
-    }
+  if (io) {
+    io.emit('GAME_ROUND_SETTLED', {
+      version: 1,
+      gameId: GAME_ID,
+      roundId: round.roundId,
+      serverTime: new Date().toISOString(),
+      payload: result,
+    });
+    io.emit('7ud:round_settled', {
+      roundId: round.roundId,
+      winningBetType: round.winningBetType,
+      settlements: result.settlements,
+    });
+  }
 
-    // 3 seconds pause before next round
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+  await sleep(INTER_ROUND_PAUSE_MS);
+}
 
+async function schedulerLoop(io) {
+  // Recover orphaned rounds from a previous process before scheduling new ones.
+  try {
+    await sevenUpDownEngine.recoverFromDb();
   } catch (err) {
-    logger.error('Error in 7 Up Down game loop cycle', { error: err.message });
-  } finally {
-    isLoopRunning = false;
+    logger.error('7 Up Down startup recovery failed', { error: err.message });
+  }
+
+  while (isRunning) {
+    try {
+      const isLeader = await leaderLock.acquire();
+      if (!isLeader || !isDatabaseReady()) {
+        // Not leader, or DB not ready: idle and re-poll. NEVER create rounds here.
+        await sleep(LEADER_POLL_MS);
+        continue;
+      }
+      await runGameCycle(io);
+    } catch (err) {
+      logger.error('Error in 7 Up Down game loop cycle', { error: err.message });
+      await sleep(5000);
+    }
   }
 }
 
 function startScheduler(io = null) {
-  if (schedulerInterval) return;
-  logger.info('Starting 7 Up Down Server Continuous Game Loop Scheduler (25s cycle)');
-
-  // Try DB recovery first
-  sevenUpDownEngine.recoverActiveRoundFromDb().catch((err) => {
-    logger.error('Failed to recover active round from DB', { error: err.message });
-  });
-
-  // Run first cycle immediately
-  runGameCycle(io);
-
-  // Repeat cycle continuously
-  schedulerInterval = setInterval(() => {
-    runGameCycle(io);
-  }, 22000);
+  if (isRunning) return;
+  isRunning = true;
+  logger.info('Starting 7 Up Down game worker loop');
+  loopPromise = schedulerLoop(io);
 }
 
-function stopScheduler() {
-  if (schedulerInterval) {
-    clearInterval(schedulerInterval);
-    schedulerInterval = null;
-    logger.info('Stopped 7 Up Down Game Loop Scheduler');
+async function stopScheduler() {
+  isRunning = false;
+  await leaderLock.release();
+  if (loopPromise) {
+    try { await loopPromise; } catch (_) { /* loop logs its own errors */ }
+    loopPromise = null;
   }
+  logger.info('Stopped 7 Up Down game worker loop');
 }
 
 module.exports = {
   startScheduler,
   stopScheduler,
   runGameCycle,
+  isWorkerRunning: () => isRunning,
 };

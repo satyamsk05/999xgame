@@ -7,6 +7,18 @@ const { gameManager } = require('../games/game.manager');
 
 router.use(adminMiddleware);
 
+/**
+ * GET /api/admin/games/health — game worker liveness (sec 30).
+ * Exposes, per registered game, whether its engine is registered and whether its
+ * worker loop is running. If a worker dies/stops, `running` flips to false so
+ * monitoring can detect it.
+ */
+router.get('/health', async (req, res, next) => {
+  try {
+    res.json({ status: 'success', data: gameManager.getHealthSummary() });
+  } catch (err) { next(err); }
+});
+
 /** GET /api/admin/games — All games with worker health status */
 router.get('/', async (req, res, next) => {
   try {

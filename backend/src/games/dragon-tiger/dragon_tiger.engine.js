@@ -35,10 +35,77 @@ const CARDS = [
 
 const SUITS = ['♠', '♥', '♣', '♦'];
 
+/**
+ * Dragon Tiger engine — SERVER-AUTHORITATIVE + provably fair (sec 23).
+ *
+ * Cards are derived deterministically from ONE committed server seed and the round id,
+ * so a recovered round can never produce a different result. Payout/tie rules live in
+ * game.config (via the repository). Settlement is a single atomic DB call. There is no
+ * in-memory round counter (round_number is DB-derived) and no fallback seed.
+ */
 class DragonTigerEngine {
   constructor() {
     this.currentRound = null;
-    this.roundCounter = 1;
+  }
+
+  /** Single authoritative result derivation (deterministic from seed + roundId). */
+  deriveResult(serverSeed, roundId) {
+    if (!serverSeed) {
+      throw new Error('Cannot draw cards: server seed is missing');
+    }
+    const hash = crypto.createHmac('sha256', serverSeed).update(roundId).digest('hex');
+    const dCardIdx = parseInt(hash.substring(0, 8), 16) % 13;
+    const dSuitIdx = parseInt(hash.substring(8, 16), 16) % 4;
+    const tCardIdx = parseInt(hash.substring(16, 24), 16) % 13;
+    const tSuitIdx = parseInt(hash.substring(24, 32), 16) % 4;
+
+    const dragonCard = { ...CARDS[dCardIdx], suit: SUITS[dSuitIdx] };
+    const tigerCard = { ...CARDS[tCardIdx], suit: SUITS[tSuitIdx] };
+
+    let winningBetType = BetTypes.TIE;
+    if (dragonCard.value > tigerCard.value) winningBetType = BetTypes.DRAGON;
+    else if (tigerCard.value > dragonCard.value) winningBetType = BetTypes.TIGER;
+
+    return { dragonCard, tigerCard, winningBetType };
+  }
+
+  /**
+   * Startup recovery (sec 22/23). Resolves orphaned rounds deterministically:
+   *  - RESULT/SETTLING (winner persisted) -> settle.
+   *  - pre-result WITH committed seed -> draw + settle.
+   *  - pre-result WITHOUT seed (legacy) -> void + refund.
+   */
+  async recoverFromDb() {
+    const rounds = await dtRepo.getInFlightRoundsFromDb();
+    let settled = 0;
+    let drawn = 0;
+    let refunded = 0;
+
+    for (const r of rounds) {
+      try {
+        if (['RESULT', 'SETTLING'].includes(r.status) && r.winningBetType) {
+          await dtRepo.settleRoundInDb(r.roundId, r.winningBetType);
+          settled += 1;
+        } else if (['CREATED', 'BETTING_OPEN', 'BETTING_CLOSED'].includes(r.status)) {
+          if (r.serverSeed) {
+            const { dragonCard, tigerCard, winningBetType } = this.deriveResult(r.serverSeed, r.roundId);
+            await dtRepo.updateRoundInDb(r.roundId, RoundStatus.RESULT, dragonCard, tigerCard, winningBetType);
+            await dtRepo.settleRoundInDb(r.roundId, winningBetType);
+            drawn += 1;
+          } else {
+            await dtRepo.refundRoundInDb(r.roundId, 'SERVER_RESTART_NO_SEED');
+            refunded += 1;
+          }
+        }
+      } catch (err) {
+        logger.error('Dragon Tiger recovery failed for round', { roundId: r.roundId, status: r.status, error: err.message });
+      }
+    }
+
+    if (rounds.length) {
+      logger.warn('Dragon Tiger recovery processed orphaned rounds', { total: rounds.length, settled, drawn, refunded });
+    }
+    return { total: rounds.length, settled, drawn, refunded };
   }
 
   async createRound() {
@@ -61,13 +128,9 @@ class DragonTigerEngine {
       endedAt: null,
     };
 
-    try {
-      await dtRepo.createRoundInDb(roundId, this.roundCounter++, serverSeed, serverSeedHash);
-      this.currentRound = newRound;
-    } catch (err) {
-      logger.error('Failed to persist Dragon Tiger round in DB', { roundId, error: err.message });
-      throw err;
-    }
+    // Fail-closed: persist (with seed hash + DB-derived round_number) before use.
+    await dtRepo.createRoundInDb(roundId, serverSeed, serverSeedHash);
+    this.currentRound = newRound;
 
     logger.info('Dragon Tiger round created', { roundId });
     return this.currentRound;
@@ -85,37 +148,38 @@ class DragonTigerEngine {
 
   async placeBet({ userId, betType, stakePaise, idempotencyKey }) {
     if (!this.currentRound || this.currentRound.status !== RoundStatus.BETTING_OPEN) {
-      throw new Error('Betting is closed for Dragon Tiger');
+      const e = new Error('Betting is closed for Dragon Tiger');
+      e.statusCode = 409;
+      throw e;
     }
     if (!Object.values(BetTypes).includes(betType)) {
-      throw new Error(`Invalid bet type: ${betType}`);
+      const e = new Error(`Invalid bet type: ${betType}`);
+      e.statusCode = 400;
+      throw e;
     }
-    return await dtRepo.placeBetInDb({ userId, roundId: this.currentRound.roundId, betType, stakePaise, idempotencyKey });
+    // Deterministic idempotency (sec 23): prefer the client key; otherwise derive a
+    // stable key so a retry never double-debits.
+    const key = idempotencyKey || `dt_${userId}_${this.currentRound.roundId}_${betType}_${parseInt(stakePaise, 10)}`;
+    return await dtRepo.placeBetInDb({
+      userId,
+      roundId: this.currentRound.roundId,
+      betType,
+      stakePaise,
+      idempotencyKey: key,
+    });
   }
 
   async drawCardsAndReveal() {
     if (!this.currentRound) throw new Error('No active round');
+    if (!this.currentRound.serverSeed) {
+      throw new Error('Cannot draw cards: authoritative server seed is missing');
+    }
 
     this.currentRound.status = RoundStatus.BETTING_CLOSED;
-
-    const hash = crypto.createHmac('sha256', this.currentRound.serverSeed)
-      .update(this.currentRound.roundId)
-      .digest('hex');
-
-    const dCardIdx = parseInt(hash.substring(0, 8), 16) % 13;
-    const dSuitIdx = parseInt(hash.substring(8, 16), 16) % 4;
-    const tCardIdx = parseInt(hash.substring(16, 24), 16) % 13;
-    const tSuitIdx = parseInt(hash.substring(24, 32), 16) % 4;
-
-    const dragonCard = { ...CARDS[dCardIdx], suit: SUITS[dSuitIdx] };
-    const tigerCard = { ...CARDS[tCardIdx], suit: SUITS[tSuitIdx] };
-
-    let winningBetType = BetTypes.TIE;
-    if (dragonCard.value > tigerCard.value) {
-      winningBetType = BetTypes.DRAGON;
-    } else if (tigerCard.value > dragonCard.value) {
-      winningBetType = BetTypes.TIGER;
-    }
+    const { dragonCard, tigerCard, winningBetType } = this.deriveResult(
+      this.currentRound.serverSeed,
+      this.currentRound.roundId
+    );
 
     this.currentRound.status = RoundStatus.RESULT;
     this.currentRound.dragonCard = dragonCard;
@@ -123,23 +187,36 @@ class DragonTigerEngine {
     this.currentRound.winningBetType = winningBetType;
 
     await dtRepo.updateRoundInDb(this.currentRound.roundId, RoundStatus.RESULT, dragonCard, tigerCard, winningBetType);
-    logger.info('Dragon Tiger cards drawn', { roundId: this.currentRound.roundId, dragonCard, tigerCard, winningBetType });
+    logger.info('Dragon Tiger cards drawn', { roundId: this.currentRound.roundId, winningBetType });
     return this.currentRound;
   }
 
+  // Settle atomically (sec 23): the repository marks the round SETTLED in-transaction,
+  // so there is no separate, non-atomic status update.
   async settleRound() {
     if (!this.currentRound || this.currentRound.status !== RoundStatus.RESULT) {
       throw new Error('Cannot settle: result not generated');
     }
-
     this.currentRound.status = RoundStatus.SETTLING;
-    const settlements = await dtRepo.settleRoundInDb(this.currentRound.roundId, this.currentRound.winningBetType);
+    try {
+      const { settlements } = await dtRepo.settleRoundInDb(this.currentRound.roundId, this.currentRound.winningBetType);
+      this.currentRound.status = RoundStatus.SETTLED;
+      this.currentRound.endedAt = new Date().toISOString();
+      logger.info('Dragon Tiger round settled', { roundId: this.currentRound.roundId, winningBetType: this.currentRound.winningBetType });
+      return { round: this.currentRound, settlements };
+    } catch (err) {
+      this.currentRound.status = 'SETTLEMENT_FAILED';
+      logger.error('Dragon Tiger settlement failed in DB', { roundId: this.currentRound.roundId, error: err.message });
+      throw err; // never report a failed settlement as success
+    }
+  }
 
-    this.currentRound.status = RoundStatus.SETTLED;
-    this.currentRound.endedAt = new Date().toISOString();
-    await dtRepo.updateRoundInDb(this.currentRound.roundId, RoundStatus.SETTLED);
-
-    return { round: this.currentRound, settlements };
+  async getOrStartCurrentRound() {
+    if (!this.currentRound || this.currentRound.status === RoundStatus.SETTLED || this.currentRound.status === 'SETTLEMENT_FAILED') {
+      await this.createRound();
+      await this.openBetting();
+    }
+    return this.currentRound;
   }
 }
 

@@ -7,6 +7,7 @@ const { signToken } = require('../src/auth/jwt');
 const userRepo = require('../src/users/user.repository');
 const walletRepo = require('../src/wallet/wallet.repository');
 const { query } = require('../src/database/db');
+const { getAdminToken } = require('./helpers/adminAuth');
 
 function makeRequest(options, postData = null) {
   return new Promise((resolve, reject) => {
@@ -26,7 +27,6 @@ function makeRequest(options, postData = null) {
 test('Master Financial System — Complete End-to-End Money Flow Verification', async (t) => {
   const server = http.createServer(app);
   let testUserId = 'usr_e2e_master_user';
-  const adminSecret = config.adminSecret;
   const testPhone = '+919999888877';
 
   // Cleanup past test state
@@ -42,6 +42,13 @@ test('Master Financial System — Complete End-to-End Money Flow Verification', 
 
   await new Promise((resolve) => server.listen(0, resolve));
   const port = server.address().port;
+
+  // Provision a real admin (bcrypt hash) and log in to obtain an admin JWT (sec 55).
+  const { token: adminToken } = await getAdminToken(port, {
+    username: 'test_finance_admin',
+    password: 'TestFinancePass!234',
+    role: 'FINANCE_ADMIN',
+  });
 
   try {
     // ------------------------------------------------------------------------
@@ -104,7 +111,7 @@ test('Master Financial System — Complete End-to-End Money Flow Verification', 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Admin-Secret': adminSecret,
+          Authorization: `Bearer ${adminToken}`,
         },
       },
       JSON.stringify({ adminNote: 'E2E Bank statement confirmed' })
@@ -151,7 +158,7 @@ test('Master Financial System — Complete End-to-End Money Flow Verification', 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Admin-Secret': adminSecret,
+          Authorization: `Bearer ${adminToken}`,
         },
       },
       JSON.stringify({ adminNote: 'Payout sent via NetBanking' })
@@ -199,7 +206,7 @@ test('Master Financial System — Complete End-to-End Money Flow Verification', 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Admin-Secret': adminSecret,
+          Authorization: `Bearer ${adminToken}`,
         },
       },
       JSON.stringify({ adminNote: 'UPI Handle Invalid' })

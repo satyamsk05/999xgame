@@ -240,14 +240,28 @@ async function confirmDepositByAdmin({ depositId, adminId = 'admin_sys', adminNo
 
     const amountPaise = parseInt(deposit.amount, 10);
 
-    // 2. Execute atomic wallet credit via financial service
-    const creditResult = await financialService.creditWallet(deposit.user_id, amountPaise, {
+    // 2. Execute atomic wallet credit via financial service USING THE SAME CLIENT.
+    //    Passing the transactional `client` (not the userId) guarantees the credit
+    //    runs inside THIS BEGIN/COMMIT. No separate transaction is opened, so a
+    //    wallet credit can never be committed without the deposit being CONFIRMED
+    //    (and vice-versa). Deterministic idempotency key prevents double credit.
+    const creditResult = await financialService.creditWallet(client, amountPaise, {
+      userId: deposit.user_id,
       type: 'DEPOSIT',
       referenceType: 'DEPOSIT',
       referenceId: deposit.deposit_id,
-      idempotencyKey: `idemp_confirm_${deposit.deposit_id}`,
-      metadata: { adminId, adminNote, utr: deposit.utr },
+      idempotencyKey: `DEPOSIT_CONFIRM:${deposit.deposit_id}`,
+      metadata: { adminId, adminNote, utr: deposit.utr, depositRowId: deposit.id },
     });
+
+    // Fail-safe: if the ledger already recorded this confirmation key while the
+    // deposit row was still not CONFIRMED, that is an inconsistent state. Do not
+    // silently proceed — abort so the transaction rolls back and it can be audited.
+    if (creditResult && creditResult.duplicate) {
+      const err = new Error('Deposit confirmation already recorded in ledger but deposit was not CONFIRMED. Manual reconciliation required.');
+      err.statusCode = 409;
+      throw err;
+    }
 
     // 3. Update deposit status to CONFIRMED
     const updateRes = await client.query(
@@ -297,13 +311,24 @@ async function confirmDepositByAdmin({ depositId, adminId = 'admin_sys', adminNo
  * Admin: Reject Deposit Order (ZERO wallet credit)
  */
 async function rejectDepositByAdmin({ depositId, adminId = 'admin_sys', adminNote = '' }) {
+  const client = await getClient();
   try {
-    const deposit = await getDepositById(depositId);
-    if (!deposit) {
+    await client.query('BEGIN');
+
+    // Lock the deposit row to eliminate the read-then-update (TOCTOU) race where a
+    // concurrent confirm and reject could both proceed.
+    const findRes = await client.query(
+      `SELECT * FROM deposits WHERE deposit_id = $1 OR id = $1 FOR UPDATE`,
+      [depositId]
+    );
+
+    if (findRes.rows.length === 0) {
       const err = new Error('Deposit order not found');
       err.statusCode = 404;
       throw err;
     }
+
+    const deposit = findRes.rows[0];
 
     if (deposit.status === 'CONFIRMED') {
       const err = new Error('Cannot reject an already CONFIRMED deposit');
@@ -317,13 +342,15 @@ async function rejectDepositByAdmin({ depositId, adminId = 'admin_sys', adminNot
       throw err;
     }
 
-    const res = await query(
+    const res = await client.query(
       `UPDATE deposits
        SET status = 'REJECTED', rejected_at = NOW(), admin_id = $2, admin_note = $3, updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
       [deposit.id, adminId, adminNote]
     );
+
+    await client.query('COMMIT');
 
     const row = res.rows[0];
     logger.info('Admin rejected deposit order (Zero wallet credit)', {
@@ -336,8 +363,8 @@ async function rejectDepositByAdmin({ depositId, adminId = 'admin_sys', adminNot
       id: row.id,
       depositId: row.deposit_id,
       userId: row.user_id,
-      amountRupees: row.amount / 100,
-      amountPaise: row.amount,
+      amountRupees: parseInt(row.amount, 10) / 100,
+      amountPaise: parseInt(row.amount, 10),
       status: row.status, // Strictly 'REJECTED'
       utr: row.utr,
       rejectedAt: row.rejected_at,
@@ -345,8 +372,11 @@ async function rejectDepositByAdmin({ depositId, adminId = 'admin_sys', adminNot
       adminNote: row.admin_note,
     };
   } catch (err) {
+    await client.query('ROLLBACK');
     logger.error('Failed to reject deposit by admin', { depositId, adminId, error: err.message });
     throw err;
+  } finally {
+    client.release();
   }
 }
 

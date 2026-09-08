@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const logger = require('../../utils/logger');
 const gameRepo = require('./game.repository');
+const { SEVEN_UP_DOWN_PAYOUTS } = require('../game.config');
 
 const RoundStatus = {
   CREATED: 'CREATED',
@@ -13,24 +14,92 @@ const RoundStatus = {
 };
 
 const BetTypes = {
-  DOWN: 'DOWN',       // Sum 2..6 (2.0x)
-  SEVEN: 'SEVEN',     // Sum 7 (5.0x)
-  UP: 'UP',           // Sum 8..12 (2.0x)
+  DOWN: 'DOWN', // Sum 2..6 (2.0x)
+  SEVEN: 'SEVEN', // Sum 7 (5.0x)
+  UP: 'UP', // Sum 8..12 (2.0x)
 };
 
-const PayoutMultipliers = {
-  [BetTypes.DOWN]: 2.0,
-  [BetTypes.SEVEN]: 5.0,
-  [BetTypes.UP]: 2.0,
-};
+// Payouts are centralized in game.config (sec 23 — no business rules duplicated).
+const PayoutMultipliers = { ...SEVEN_UP_DOWN_PAYOUTS };
 
+/**
+ * 7 Up Down engine — SERVER-AUTHORITATIVE + provably fair (sec 21).
+ *
+ * The result is derived deterministically from ONE committed server seed and the
+ * round id: `deriveResult(serverSeed, roundId)`. The seed hash is committed before
+ * betting opens and the seed is revealed at roll, so a recovered round can NEVER be
+ * re-rolled to a different result. There is NO fallback seed and NO in-memory round
+ * counter (round_number is DB-derived).
+ */
 class SevenUpDownEngine {
   constructor() {
     this.currentRound = null;
-    this.roundCounter = 1;
   }
 
-  // Recover active un-settled round from PostgreSQL DB on server startup
+  /**
+   * Single authoritative result derivation. Used by both the live roll and recovery,
+   * guaranteeing the same committed seed + round id always yields the same outcome.
+   */
+  deriveResult(serverSeed, roundId) {
+    if (!serverSeed) {
+      // sec 21.5: NEVER fall back to a default seed. A missing seed is a hard failure.
+      throw new Error('Cannot derive result: server seed is missing');
+    }
+    const hash = crypto.createHmac('sha256', serverSeed).update(roundId).digest('hex');
+    const val1 = parseInt(hash.substring(0, 8), 16);
+    const val2 = parseInt(hash.substring(8, 16), 16);
+    const dice1 = (val1 % 6) + 1;
+    const dice2 = (val2 % 6) + 1;
+    const diceSum = dice1 + dice2;
+
+    let winningBetType = BetTypes.SEVEN;
+    if (diceSum < 7) winningBetType = BetTypes.DOWN;
+    else if (diceSum > 7) winningBetType = BetTypes.UP;
+
+    return { dice1, dice2, diceSum, winningBetType };
+  }
+
+  /**
+   * Startup recovery (sec 21.2/21.3/21.4). Resolves every non-terminal round left by
+   * a previous process WITHOUT ever regenerating a different result:
+   *  - RESULT/SETTLING (winner already persisted) -> settle deterministically.
+   *  - CREATED/BETTING_OPEN/BETTING_CLOSED WITH committed seed -> roll + settle.
+   *  - pre-result WITHOUT a seed (legacy) -> cannot resolve fairly: void + refund.
+   */
+  async recoverFromDb() {
+    const rounds = await gameRepo.getInFlightRoundsFromDb();
+    let settled = 0;
+    let rolled = 0;
+    let refunded = 0;
+
+    for (const r of rounds) {
+      try {
+        if (['RESULT', 'SETTLING'].includes(r.status) && r.winningBetType) {
+          await gameRepo.settleRoundInDb(r.roundId, r.winningBetType);
+          settled += 1;
+        } else if (['CREATED', 'BETTING_OPEN', 'BETTING_CLOSED', 'ROLLING'].includes(r.status)) {
+          if (r.serverSeed) {
+            const { dice1, dice2, diceSum, winningBetType } = this.deriveResult(r.serverSeed, r.roundId);
+            await gameRepo.updateRoundInDb(r.roundId, RoundStatus.RESULT, dice1, dice2, diceSum, winningBetType);
+            await gameRepo.settleRoundInDb(r.roundId, winningBetType);
+            rolled += 1;
+          } else {
+            await gameRepo.refundRoundInDb(r.roundId, 'SERVER_RESTART_NO_SEED');
+            refunded += 1;
+          }
+        }
+      } catch (err) {
+        logger.error('7 Up Down recovery failed for round', { roundId: r.roundId, status: r.status, error: err.message });
+      }
+    }
+
+    if (rounds.length) {
+      logger.warn('7 Up Down recovery processed orphaned rounds', { total: rounds.length, settled, rolled, refunded });
+    }
+    return { total: rounds.length, settled, rolled, refunded };
+  }
+
+  /** Recover the most recent active round into memory (kept for compatibility). */
   async recoverActiveRoundFromDb() {
     try {
       const active = await gameRepo.getRecentRoundsFromDb(1);
@@ -41,8 +110,9 @@ class SevenUpDownEngine {
             roundId: last.roundId,
             gameId: 'seven_up_down',
             status: last.status,
-            serverSeedHash: '',
-            serverSeed: '',
+            // Recover the REAL committed seed so the eventual roll matches the hash (sec 21.2).
+            serverSeedHash: last.serverSeedHash || '',
+            serverSeed: last.serverSeed || '',
             dice1: last.dice1,
             dice2: last.dice2,
             diceSum: last.diceSum,
@@ -51,7 +121,7 @@ class SevenUpDownEngine {
             bettingClosedAt: null,
             endedAt: last.endedAt,
           };
-          logger.info('Recovered active 7 Up Down round from PostgreSQL DB', { roundId: last.roundId, status: last.status });
+          logger.info('Recovered active 7 Up Down round from DB', { roundId: last.roundId, status: last.status });
           return this.currentRound;
         }
       }
@@ -61,7 +131,7 @@ class SevenUpDownEngine {
     return null;
   }
 
-  // Create New Round & Persist in PostgreSQL
+  // Create a new round & persist it (fail-closed: DB write happens first).
   async createRound() {
     const serverSeed = crypto.randomBytes(32).toString('hex');
     const serverSeedHash = crypto.createHash('sha256').update(serverSeed).digest('hex');
@@ -82,19 +152,15 @@ class SevenUpDownEngine {
       endedAt: null,
     };
 
-    try {
-      await gameRepo.createRoundInDb(roundId, this.roundCounter++, serverSeed, serverSeedHash);
-      this.currentRound = newRound;
-    } catch (err) {
-      logger.error('Failed to persist new round in DB', { roundId, error: err.message });
-      throw err;
-    }
+    // round_number is DB-derived inside createRoundInDb (survives restarts).
+    await gameRepo.createRoundInDb(roundId, serverSeed, serverSeedHash);
+    this.currentRound = newRound;
 
     logger.info('New 7 Up Down round created', { roundId, status: this.currentRound.status });
     return this.currentRound;
   }
 
-  // Open Betting Window
+  // Open the betting window.
   async openBetting() {
     if (!this.currentRound || this.currentRound.status !== RoundStatus.CREATED) {
       if (this.currentRound && this.currentRound.status === RoundStatus.BETTING_OPEN) {
@@ -103,32 +169,24 @@ class SevenUpDownEngine {
       await this.createRound();
     }
     this.currentRound.status = RoundStatus.BETTING_OPEN;
-
-    try {
-      await gameRepo.updateRoundInDb(this.currentRound.roundId, RoundStatus.BETTING_OPEN);
-    } catch (err) {
-      logger.error('Failed to update round state to BETTING_OPEN in DB', { roundId: this.currentRound.roundId, error: err.message });
-      throw err;
-    }
-
+    await gameRepo.updateRoundInDb(this.currentRound.roundId, RoundStatus.BETTING_OPEN);
     logger.info('7 Up Down betting window opened', { roundId: this.currentRound.roundId });
     return this.currentRound;
   }
 
-  // Place Bet with Atomic PostgreSQL Wallet Debit + DB Idempotency
+  // Place a bet (atomic debit + DB idempotency live in the repository).
   async placeBet({ userId, betType, stakePaise, idempotencyKey }) {
     if (!this.currentRound || this.currentRound.status !== RoundStatus.BETTING_OPEN) {
-      throw new Error('Betting is closed for current round');
+      const e = new Error('Betting is closed for current round');
+      e.statusCode = 409;
+      throw e;
     }
-
     if (!Object.values(BetTypes).includes(betType)) {
-      throw new Error(`Invalid bet type: ${betType}. Must be DOWN, SEVEN, or UP`);
+      const e = new Error(`Invalid bet type: ${betType}. Must be DOWN, SEVEN, or UP`);
+      e.statusCode = 400;
+      throw e;
     }
-
-    if (!stakePaise || stakePaise < 1000) {
-      throw new Error('Minimum bet stake is ₹10 (1000 paise)');
-    }
-
+    // Min/max stake is DB-controlled and enforced in placeBetInDb (sec 21.7).
     return await gameRepo.placeBetInDb({
       userId,
       roundId: this.currentRound.roundId,
@@ -138,32 +196,23 @@ class SevenUpDownEngine {
     });
   }
 
-  // Close Betting Window & Roll Dice
+  // Close betting & roll the dice using the committed seed (no fallback — sec 21.5).
   async closeBettingAndRoll() {
     if (!this.currentRound || (this.currentRound.status !== RoundStatus.BETTING_OPEN && this.currentRound.status !== RoundStatus.CREATED)) {
       throw new Error('Cannot roll: round is not in BETTING_OPEN state');
+    }
+    if (!this.currentRound.serverSeed) {
+      // sec 21.5: never `this.currentRound.serverSeed || 'seed'`.
+      throw new Error('Cannot roll: authoritative server seed is missing');
     }
 
     this.currentRound.status = RoundStatus.BETTING_CLOSED;
     this.currentRound.bettingClosedAt = new Date().toISOString();
 
-    const hash = crypto.createHmac('sha256', this.currentRound.serverSeed || 'seed')
-      .update(this.currentRound.roundId)
-      .digest('hex');
-    
-    const val1 = parseInt(hash.substring(0, 8), 16);
-    const val2 = parseInt(hash.substring(8, 16), 16);
-    
-    const dice1 = (val1 % 6) + 1;
-    const dice2 = (val2 % 6) + 1;
-    const diceSum = dice1 + dice2;
-
-    let winningBetType = BetTypes.SEVEN;
-    if (diceSum < 7) {
-      winningBetType = BetTypes.DOWN;
-    } else if (diceSum > 7) {
-      winningBetType = BetTypes.UP;
-    }
+    const { dice1, dice2, diceSum, winningBetType } = this.deriveResult(
+      this.currentRound.serverSeed,
+      this.currentRound.roundId
+    );
 
     this.currentRound.status = RoundStatus.RESULT;
     this.currentRound.dice1 = dice1;
@@ -171,32 +220,20 @@ class SevenUpDownEngine {
     this.currentRound.diceSum = diceSum;
     this.currentRound.winningBetType = winningBetType;
 
-    try {
-      await gameRepo.updateRoundInDb(
-        this.currentRound.roundId,
-        RoundStatus.RESULT,
-        dice1,
-        dice2,
-        diceSum,
-        winningBetType
-      );
-    } catch (err) {
-      logger.error('Failed to update round result in DB', { roundId: this.currentRound.roundId, error: err.message });
-      throw err;
-    }
-
-    logger.info('7 Up Down dice roll complete', {
-      roundId: this.currentRound.roundId,
+    await gameRepo.updateRoundInDb(
+      this.currentRound.roundId,
+      RoundStatus.RESULT,
       dice1,
       dice2,
       diceSum,
-      winningBetType,
-    });
+      winningBetType
+    );
 
+    logger.info('7 Up Down dice roll complete', { roundId: this.currentRound.roundId, dice1, dice2, diceSum, winningBetType });
     return this.currentRound;
   }
 
-  // Settle Round Bets
+  // Settle round bets atomically (settleRoundInDb marks the round SETTLED in-tx).
   async settleRound() {
     if (!this.currentRound || this.currentRound.status !== RoundStatus.RESULT) {
       throw new Error('Cannot settle: result not generated');
@@ -204,7 +241,6 @@ class SevenUpDownEngine {
 
     this.currentRound.status = RoundStatus.SETTLING;
     let settlements = [];
-
     try {
       settlements = await gameRepo.settleRoundInDb(this.currentRound.roundId, this.currentRound.winningBetType);
       this.currentRound.status = RoundStatus.SETTLED;
@@ -212,21 +248,14 @@ class SevenUpDownEngine {
     } catch (err) {
       this.currentRound.status = 'SETTLEMENT_FAILED';
       logger.error('Round settlement failed in DB', { roundId: this.currentRound.roundId, error: err.message });
-      throw err;
+      throw err; // never report a failed settlement as success
     }
 
-    logger.info('7 Up Down round settled', {
-      roundId: this.currentRound.roundId,
-      winningType: this.currentRound.winningBetType,
-    });
-
-    return {
-      round: this.currentRound,
-      settlements,
-    };
+    logger.info('7 Up Down round settled', { roundId: this.currentRound.roundId, winningType: this.currentRound.winningBetType });
+    return { round: this.currentRound, settlements };
   }
 
-  // Get current active round or initialize new one
+  // Get the current active round or initialize a new one.
   async getOrStartCurrentRound() {
     if (!this.currentRound || this.currentRound.status === RoundStatus.SETTLED || this.currentRound.status === 'SETTLEMENT_FAILED') {
       await this.createRound();

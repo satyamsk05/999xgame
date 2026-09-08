@@ -2,7 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const config = require('../config/env');
 const requestIdMiddleware = require('../middleware/requestId');
+const responseContract = require('../middleware/responseContract');
 const errorHandler = require('../middleware/errorHandler');
+const { authLimiter, adminAuthLimiter, depositLimiter, withdrawalLimiter } = require('../middleware/rateLimit');
 
 const path = require('path');
 const authController = require('../auth/auth.controller');
@@ -26,6 +28,9 @@ app.use(cors({ origin: config.corsOrigin }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(requestIdMiddleware);
+// sec 31: stamp every JSON response with the unified contract (success/error envelope)
+// as an additive compatibility layer over the legacy { status } shape.
+app.use(responseContract);
 
 // Serve Static Public Files & Web Admin Portal
 app.use(express.static(path.join(__dirname, '../../public')));
@@ -134,16 +139,16 @@ app.get('/api/banners', async (req, res) => {
 
 
 // Mount Controllers
-app.use('/api/auth', authController);
+app.use('/api/auth', authLimiter, authController);
 app.use('/api/user', userController);
 app.use('/api/app', userController);
 app.use('/api/games', gameController);
 
 app.use('/api/wallet', walletController);
-app.use('/api/deposits', depositController);
-app.use('/api/admin/auth', adminAuthController);
+app.use('/api/deposits', depositLimiter, depositController);
+app.use('/api/admin/auth', adminAuthLimiter, adminAuthController);
 app.use('/api/admin/deposits', adminDepositController);
-app.use('/api/withdrawals', withdrawalController);
+app.use('/api/withdrawals', withdrawalLimiter, withdrawalController);
 app.use('/api/admin/withdrawals', adminWithdrawalController);
 app.use('/api/admin/stats', adminStatsController);
 app.use('/api/admin/users', adminUserController);
@@ -156,6 +161,7 @@ app.use('/api/admin/reports', adminReportsController);
 app.use((req, res) => {
   res.status(404).json({
     status: 'error',
+    code: 'NOT_FOUND',
     requestId: req.id,
     message: `Route not found: ${req.method} ${req.originalUrl}`,
   });

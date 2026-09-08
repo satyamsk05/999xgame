@@ -16,43 +16,13 @@ router.get('/', authMiddleware, async (req, res, next) => {
   }
 });
 
-// Add Cash API (Atomic PostgreSQL Transaction + Ledger Entry)
-router.post('/add-cash', authMiddleware, async (req, res, next) => {
-  try {
-    const { amount, paymentMethod } = req.body;
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ status: 'error', message: 'Valid deposit amount required' });
-    }
-
-    const result = await walletRepo.addCash(req.user.id, amount, paymentMethod || 'UPI');
-    res.status(200).json({
-      status: 'success',
-      message: `Cash deposited successfully via ${paymentMethod || 'UPI'}`,
-      data: result,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Withdraw Cash API (Atomic Winnings Lock + Ledger Entry)
-router.post('/withdraw', authMiddleware, async (req, res, next) => {
-  try {
-    const { amount, upiId } = req.body;
-    if (!amount || amount <= 0 || !upiId) {
-      return res.status(400).json({ status: 'error', message: 'Valid amount and UPI ID required' });
-    }
-
-    const result = await walletRepo.withdraw(req.user.id, amount, upiId);
-    res.status(200).json({
-      status: 'success',
-      message: `Withdrawal request of ₹${amount} submitted successfully`,
-      data: result,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
+// NOTE (financial integrity): the legacy POST /add-cash and POST /withdraw routes
+// were REMOVED. /add-cash credited arbitrary amounts with no deposit record, UTR or
+// admin approval (free-money hole); /withdraw reserved funds but created NO
+// withdrawal row (funds stuck, no admin path to confirm/reject). The authoritative,
+// audited flows are:
+//   deposits    -> POST /api/deposits      (+ POST /api/admin/deposits/:id/confirm)
+//   withdrawals -> POST /api/withdrawals   (+ POST /api/admin/withdrawals/:id/confirm|reject)
 
 // Transactions History API from PostgreSQL Ledger
 router.get('/transactions', authMiddleware, async (req, res, next) => {

@@ -6,10 +6,10 @@
 const API = (() => {
   /* ── Core fetch ─────────────────────────────────────── */
   async function req(path, opts = {}) {
-    const secret = AppState.secret;
-    if (!secret && !path.startsWith('/health') && !path.startsWith('/ready')) {
-      UI.toast('Admin secret not set. Configure in Settings.', 'error');
-      App.navigate('settings');
+    const token = AppState.token;
+    const isPublic = path.startsWith('/health') || path.startsWith('/ready');
+    if (!token && !isPublic) {
+      App.showLogin();
       return null;
     }
 
@@ -17,7 +17,7 @@ const API = (() => {
       ...opts,
       headers: {
         'Content-Type': 'application/json',
-        'X-Admin-Secret': secret,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(opts.headers || {}),
       },
     };
@@ -27,8 +27,12 @@ const API = (() => {
       const json = await r.json().catch(() => ({}));
 
       if (!r.ok) {
+        if (r.status === 401) {
+          App.logout(true);
+          UI.toast(json.message || 'Session expired. Please sign in again.', 'error');
+          return null;
+        }
         UI.toast(json.message || `Server error (${r.status})`, 'error');
-        if (r.status === 403) App.navigate('settings');
         UI.setConnected(false);
         return null;
       }
@@ -110,7 +114,25 @@ const API = (() => {
   const getHealth = () => fetch('/health').then(r => r.json()).catch(() => null);
   const getReady  = () => fetch('/ready').then(r => r.json()).catch(() => null);
 
+  // Auth — login is public (no Bearer token yet)
+  const login = async (username, password) => {
+    try {
+      const r = await fetch('/api/admin/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const json = await r.json().catch(() => ({}));
+      return { ok: r.ok, status: r.status, json };
+    } catch {
+      return { ok: false, status: 0, json: {} };
+    }
+  };
+  const getMe     = () => get('/api/admin/auth/me');
+  const logoutApi = () => post('/api/admin/auth/logout', {});
+
   return {
+    login, getMe, logoutApi,
     getDashboard, getAuditLogs,
     getUsers, getUser, adjustBalance, blockUser, unblockUser, updateKyc,
     getPendingDeposits, confirmDeposit, rejectDeposit,

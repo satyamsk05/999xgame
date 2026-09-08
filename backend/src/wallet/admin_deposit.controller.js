@@ -3,6 +3,7 @@ const router = express.Router();
 const { adminMiddleware, requireRole } = require('../middleware/admin_auth.middleware');
 const depositRepo = require('./deposit.repository');
 const telegramService = require('../services/telegram.service');
+const auditService = require('../services/audit.service');
 
 router.use(adminMiddleware);
 
@@ -30,11 +31,23 @@ router.post('/:depositId/confirm', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN'), 
       adminNote,
     });
 
-    // Notify Telegram channel safely after DB commit
+    // Audit the financial action (sec 49) — fire-and-forget, never blocks the commit.
+    auditService.logAdminAction({
+      adminId,
+      userId: confirmedOrder.userId,
+      action: 'DEPOSIT_CONFIRM',
+      target: confirmedOrder.depositId,
+      ip: req.ip,
+      metadata: { amountRupees: confirmedOrder.amountRupees, adminNote },
+    });
+
+    // Notify Telegram channel safely AFTER DB commit.
+    // NOTE: the repository returns a camelCase contract (depositId/userId/amountRupees).
+    // Reading snake_case fields here previously produced undefined/0 in notifications.
     telegramService.notifyDepositConfirmed({
-      depositId: confirmedOrder.deposit_id || depositId,
-      userId: confirmedOrder.user_id,
-      amountRupees: parseInt(confirmedOrder.amount || 0, 10) / 100,
+      depositId: confirmedOrder.depositId,
+      userId: confirmedOrder.userId,
+      amountRupees: confirmedOrder.amountRupees,
       adminId,
     }).catch(() => {});
 
@@ -64,11 +77,21 @@ router.post('/:depositId/reject', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN'), a
       adminNote,
     });
 
-    // Notify Telegram channel safely after DB commit
+    // Audit the financial action (sec 49) — fire-and-forget, never blocks the commit.
+    auditService.logAdminAction({
+      adminId,
+      userId: rejectedOrder.userId,
+      action: 'DEPOSIT_REJECT',
+      target: rejectedOrder.depositId,
+      ip: req.ip,
+      metadata: { amountRupees: rejectedOrder.amountRupees, adminNote },
+    });
+
+    // Notify Telegram channel safely AFTER DB commit (camelCase contract).
     telegramService.notifyDepositRejected({
-      depositId: rejectedOrder.deposit_id || depositId,
-      userId: rejectedOrder.user_id,
-      amountRupees: parseInt(rejectedOrder.amount || 0, 10) / 100,
+      depositId: rejectedOrder.depositId,
+      userId: rejectedOrder.userId,
+      amountRupees: rejectedOrder.amountRupees,
       reason: adminNote,
     }).catch(() => {});
 

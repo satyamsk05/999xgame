@@ -7,6 +7,7 @@ const { signToken } = require('../src/auth/jwt');
 const userRepo = require('../src/users/user.repository');
 const walletRepo = require('../src/wallet/wallet.repository');
 const { query } = require('../src/database/db');
+const { getAdminToken } = require('./helpers/adminAuth');
 
 function makeRequest(options, postData = null) {
   return new Promise((resolve, reject) => {
@@ -26,7 +27,6 @@ function makeRequest(options, postData = null) {
 test('Task 7 — Admin Deposit Confirmation & Rejection Unit Test', async (t) => {
   const server = http.createServer(app);
   let testUserId = 'usr_admin_dep_test_1';
-  const adminSecret = config.adminSecret;
 
   try {
     await query('DELETE FROM deposits WHERE utr IN (\'998877665511\', \'998877665522\');');
@@ -42,8 +42,15 @@ test('Task 7 — Admin Deposit Confirmation & Rejection Unit Test', async (t) =>
   await new Promise((resolve) => server.listen(0, resolve));
   const port = server.address().port;
 
+  // Provision a real admin (bcrypt hash) and log in to obtain an admin JWT (sec 55).
+  const { token: adminToken } = await getAdminToken(port, {
+    username: 'test_finance_admin',
+    password: 'TestFinancePass!234',
+    role: 'FINANCE_ADMIN',
+  });
+
   try {
-    // 1. Reject Admin API calls without Admin Secret Header (403 Forbidden)
+    // 1. Reject Admin API calls without a valid admin session (401 Unauthorized)
     const unauthRes = await makeRequest({
       hostname: 'localhost',
       port,
@@ -51,7 +58,7 @@ test('Task 7 — Admin Deposit Confirmation & Rejection Unit Test', async (t) =>
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
-    assert.strictEqual(unauthRes.statusCode, 403);
+    assert.strictEqual(unauthRes.statusCode, 401);
 
     // 2. Fetch pending deposits as Admin -> 200 OK
     const pendingRes = await makeRequest({
@@ -61,7 +68,7 @@ test('Task 7 — Admin Deposit Confirmation & Rejection Unit Test', async (t) =>
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'X-Admin-Secret': adminSecret,
+        Authorization: `Bearer ${adminToken}`,
       },
     });
     assert.strictEqual(pendingRes.statusCode, 200);
@@ -113,7 +120,7 @@ test('Task 7 — Admin Deposit Confirmation & Rejection Unit Test', async (t) =>
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Admin-Secret': adminSecret,
+          Authorization: `Bearer ${adminToken}`,
         },
       },
       JSON.stringify({ adminNote: 'Verified with HDFC Bank statement' })
@@ -135,7 +142,7 @@ test('Task 7 — Admin Deposit Confirmation & Rejection Unit Test', async (t) =>
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Admin-Secret': adminSecret,
+          Authorization: `Bearer ${adminToken}`,
         },
       },
       JSON.stringify({ adminNote: 'Attempting double credit' })
@@ -186,7 +193,7 @@ test('Task 7 — Admin Deposit Confirmation & Rejection Unit Test', async (t) =>
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Admin-Secret': adminSecret,
+          Authorization: `Bearer ${adminToken}`,
         },
       },
       JSON.stringify({ adminNote: 'UTR invalid on bank portal' })

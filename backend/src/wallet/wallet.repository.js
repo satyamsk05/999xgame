@@ -73,33 +73,6 @@ async function addCash(userId, amountRupees, paymentMethod) {
 }
 
 /**
- * Request Withdrawal (Delegates to financial.service.js)
- */
-async function withdraw(userId, amountRupees, upiId) {
-  const amountPaise = Math.round(amountRupees * 100);
-  if (!upiId || typeof upiId !== 'string' || !/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upiId.trim())) {
-    throw new Error('Invalid UPI ID format (e.g. username@bank)');
-  }
-
-  const withdrawalId = `wdr_${Date.now()}`;
-  const result = await financialService.reserveFunds(userId, amountPaise, {
-    referenceType: 'WITHDRAWAL',
-    referenceId: withdrawalId,
-    idempotencyKey: `idemp_wdr_${withdrawalId}`,
-    metadata: { upiId: upiId.trim() },
-  });
-
-  const avail = parseInt(result.wallet.available_balance || 0, 10);
-  const resv = parseInt(result.wallet.reserved_balance || 0, 10);
-
-  return {
-    withdrawalId,
-    winningsBalance: avail / 100,
-    totalBalance: (avail + resv) / 100,
-  };
-}
-
-/**
  * Get Ledger Transactions History from PostgreSQL
  */
 async function getTransactionsByUserId(userId, category) {
@@ -147,6 +120,5 @@ function mapLedgerCategory(type) {
 module.exports = {
   getWalletByUserId,
   addCash,
-  withdraw,
   getTransactionsByUserId,
 };

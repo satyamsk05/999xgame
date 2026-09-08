@@ -5,10 +5,32 @@ const logger = require('../utils/logger');
 const financialService = require('../services/financial.service');
 
 /**
+ * Map a withdrawals row to the API response contract (camelCase).
+ * Shared by the duplicate-replay paths so a repeated create returns the exact
+ * same shape as the original (sec 16).
+ */
+function toWithdrawalResponse(row, extra = {}) {
+  return {
+    id: row.id,
+    withdrawalId: row.withdrawal_id,
+    userId: row.user_id,
+    amountRupees: parseInt(row.amount, 10) / 100,
+    amountPaise: parseInt(row.amount, 10),
+    currency: row.currency,
+    status: row.status,
+    payoutMethod: row.payout_method,
+    upiId: row.payout_address_or_upi,
+    requestedAt: row.requested_at,
+    createdAt: row.created_at,
+    ...extra,
+  };
+}
+
+/**
  * Create Withdrawal Request in PostgreSQL (Initial Status: PENDING)
  * Funds are ATOMICALLY reserved from available_balance -> reserved_balance.
  */
-async function createWithdrawalRequest({ userId, amountRupees, upiId, idempotencyKey = null }) {
+async function createWithdrawalRequest({ userId, amountRupees, upiId, clientRequestId = null, idempotencyKey = null }) {
   const amountRupeeNum = parseFloat(amountRupees);
   if (isNaN(amountRupeeNum) || amountRupeeNum <= 0) {
     const err = new Error('Valid numeric withdrawal amount is required');
@@ -33,34 +55,30 @@ async function createWithdrawalRequest({ userId, amountRupees, upiId, idempotenc
 
   const cleanUpi = upiId.trim();
   const amountPaise = Math.round(amountRupeeNum * 100);
-  const effectiveIdempKey = idempotencyKey || `idemp_wdr_${userId}_${amountPaise}_${Date.now()}`;
-
-  if (idempotencyKey) {
-    const existing = await query(
-      'SELECT * FROM withdrawals WHERE idempotency_key = $1 OR (user_id = $2 AND idempotency_key = $1)',
-      [idempotencyKey, userId]
-    );
-    if (existing.rows.length > 0) {
-      const row = existing.rows[0];
-      return {
-        id: row.id,
-        withdrawalId: row.withdrawal_id,
-        userId: row.user_id,
-        amountRupees: parseInt(row.amount, 10) / 100,
-        amountPaise: parseInt(row.amount, 10),
-        currency: row.currency,
-        status: row.status,
-        payoutMethod: row.payout_method,
-        upiId: row.payout_address_or_upi,
-        requestedAt: row.requested_at,
-        createdAt: row.created_at,
-        isDuplicate: true,
-      };
-    }
-  }
 
   const withdrawalId = `WDR_${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
   const id = `wdr_${crypto.randomUUID()}`;
+
+  // sec 16: deterministic operation id WITHDRAW_CREATE:{clientRequestId}.
+  // A client-supplied request id makes a retry of the SAME logical withdrawal map
+  // to the SAME key, so withdrawals.idempotency_key UNIQUE prevents a double
+  // reserve. NEVER derive this key from Date.now()/Math.random(). When the client
+  // sends no request id, fall back to the unique withdrawalId (still deterministic
+  // per row, no time-based collisions).
+  const resolvedRequestId = clientRequestId || idempotencyKey;
+  const effectiveIdempKey = resolvedRequestId
+    ? `WITHDRAW_CREATE:${resolvedRequestId}`
+    : `WITHDRAW_CREATE:${withdrawalId}`;
+
+  if (resolvedRequestId) {
+    const existing = await query(
+      'SELECT * FROM withdrawals WHERE idempotency_key = $1 AND user_id = $2',
+      [effectiveIdempKey, userId]
+    );
+    if (existing.rows.length > 0) {
+      return toWithdrawalResponse(existing.rows[0], { isDuplicate: true });
+    }
+  }
 
   const client = await getClient();
   try {
@@ -114,6 +132,18 @@ async function createWithdrawalRequest({ userId, amountRupees, upiId, idempotenc
     };
   } catch (err) {
     await client.query('ROLLBACK');
+    // sec 16: a unique-violation on idempotency_key means a concurrent duplicate
+    // create for the SAME client request id. Return the existing withdrawal instead
+    // of double-reserving (fail-safe, no partial financial mutation).
+    if (err && err.code === '23505' && resolvedRequestId) {
+      const existing = await query(
+        'SELECT * FROM withdrawals WHERE idempotency_key = $1 AND user_id = $2',
+        [effectiveIdempKey, userId]
+      );
+      if (existing.rows.length > 0) {
+        return toWithdrawalResponse(existing.rows[0], { isDuplicate: true });
+      }
+    }
     logger.error('Failed to create withdrawal request in PostgreSQL', { userId, error: err.message });
     if (err.message && (err.message.includes('Insufficient funds') || err.message.includes('Insufficient available balance'))) {
       const resErr = new Error(err.message || 'Insufficient available balance for withdrawal');
@@ -223,7 +253,7 @@ async function confirmWithdrawalByAdmin({ withdrawalId, adminId = 'admin_sys', a
       userId: withdrawal.user_id,
       referenceType: 'WITHDRAWAL',
       referenceId: withdrawal.withdrawal_id,
-      idempotencyKey: `idemp_confirm_wdr_${withdrawal.withdrawal_id}`,
+      idempotencyKey: `WITHDRAW_CONFIRM:${withdrawal.withdrawal_id}`,
       metadata: { adminId, adminNote, upiId: withdrawal.payout_address_or_upi },
     });
 
@@ -314,7 +344,7 @@ async function rejectWithdrawalByAdmin({ withdrawalId, adminId = 'admin_sys', ad
       userId: withdrawal.user_id,
       referenceType: 'WITHDRAWAL',
       referenceId: withdrawal.withdrawal_id,
-      idempotencyKey: `idemp_reject_wdr_${withdrawal.withdrawal_id}`,
+      idempotencyKey: `WITHDRAW_REJECT:${withdrawal.withdrawal_id}`,
       metadata: { adminId, adminNote, upiId: withdrawal.payout_address_or_upi },
     });
 
@@ -386,10 +416,16 @@ async function processWithdrawalByAdmin({ withdrawalId, adminId = 'admin_sys', a
     const res = await query(
       `UPDATE withdrawals
        SET status = 'PROCESSING', processing_at = NOW(), admin_id = $2, admin_note = $3, updated_at = NOW()
-       WHERE id = $1
+       WHERE id = $1 AND status = 'PENDING'
        RETURNING *`,
       [withdrawal.id, adminId, adminNote]
     );
+
+    if (res.rows.length === 0) {
+      const err = new Error('Withdrawal is no longer PENDING (already processing/confirmed/rejected)');
+      err.statusCode = 409;
+      throw err;
+    }
 
     const row = res.rows[0];
     logger.info('Admin started processing withdrawal payout in PostgreSQL', {

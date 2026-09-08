@@ -47,6 +47,26 @@ class GameManager {
     }
   }
 
+  /**
+   * Stop every game loop and release advisory leader locks (graceful shutdown).
+   * Awaits workers that return a promise from stopScheduler.
+   */
+  async stopAll() {
+    logger.info('Stopping all game workers and releasing leader locks...');
+    const results = [];
+    for (const [gameId, worker] of this.workers.entries()) {
+      try {
+        const r = worker.stopScheduler();
+        if (r && typeof r.then === 'function') await r;
+        results.push(`${gameId}:stopped`);
+      } catch (err) {
+        logger.warn('Failed to stop game worker cleanly', { gameId, error: err.message });
+        results.push(`${gameId}:error`);
+      }
+    }
+    return results;
+  }
+
   isWorkerHealthy(gameId) {
     const worker = this.workers.get(gameId);
     if (!worker) return false;

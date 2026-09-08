@@ -3,48 +3,42 @@
 
 const PageSettings = (() => {
   async function load() {
-    // Set saved secret value
-    const el = document.getElementById('setting-secret');
-    if (el) el.value = AppState.secret;
-
-    // Load health
+    _renderAccount();
     _loadHealth();
+    _refreshMe();
   }
 
-  async function saveSecret() {
-    const val = document.getElementById('setting-secret').value.trim();
-    if (!val) { UI.toast('Enter a secret first', 'error'); return; }
+  function _renderAccount() {
+    const el = document.getElementById('account-body');
+    if (!el) return;
+    const admin = AppState.admin || {};
+    const username = admin.username ? Fmt.esc(admin.username) : '—';
+    const role = admin.role ? Fmt.esc(admin.role) : '—';
+    el.innerHTML = `
+      <div class="detail-row"><span class="detail-key">Username</span><span class="detail-val">${username}</span></div>
+      <div class="detail-row"><span class="detail-key">Role</span><span class="detail-val">${role}</span></div>
+      <div class="detail-row"><span class="detail-key">Session</span><span class="detail-val text-green">Authenticated (JWT)</span></div>
+    `;
+  }
 
-    AppState.secret = val;
-    localStorage.setItem('adminSecret', val);
-
-    const result = document.getElementById('secret-result');
-    result.textContent = 'Testing connection...';
-    result.style.color = 'var(--text-3)';
-
-    const res = await API.getDashboard();
-    if (res) {
-      result.textContent = 'Connection successful. Secret saved.';
-      result.style.color = 'var(--green)';
-      UI.toast('Admin secret saved and verified.', 'success');
-      setTimeout(() => App.navigate('dashboard'), 600);
-    } else {
-      result.textContent = 'Connection failed. Check your secret.';
-      result.style.color = 'var(--red)';
+  // Pull the authoritative admin profile so the panel stays accurate after reloads.
+  async function _refreshMe() {
+    const res = await API.getMe();
+    const admin = res && res.data && res.data.admin;
+    if (admin) {
+      AppState.admin = admin;
+      localStorage.setItem('adminUser', JSON.stringify(admin));
+      _renderAccount();
     }
   }
 
-  function clearSecret() {
-    AppState.secret = '';
-    localStorage.removeItem('adminSecret');
-    document.getElementById('setting-secret').value = '';
-    document.getElementById('secret-result').textContent = 'Secret cleared.';
-    document.getElementById('secret-result').style.color = 'var(--text-3)';
-    UI.toast('Secret cleared.', 'error');
+  function logout() {
+    App.logout(false);
   }
 
   async function _loadHealth() {
     const el = document.getElementById('health-body');
+    if (!el) return;
     el.innerHTML = Skel.lines(4);
 
     const h = await API.getHealth();
@@ -61,5 +55,5 @@ const PageSettings = (() => {
     `;
   }
 
-  return { load, saveSecret, clearSecret };
+  return { load, logout };
 })();

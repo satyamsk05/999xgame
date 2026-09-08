@@ -1,5 +1,12 @@
 -- PostgreSQL Schema DDL Script for InGames / 999x Game Platform
 -- Money amounts are stored as INTEGER (paise), e.g. ₹10.00 = 1000 paise
+--
+-- NOTE (sec 29): this file is the CANONICAL CONSOLIDATED schema reference and is
+-- validated by tests/schema.test.js. At runtime the database is provisioned by the
+-- ordered, idempotent migrations in ./migrations (001_initial .. 005_indexes) via
+-- migrate.js, which collectively produce exactly this schema. Keep the two in sync:
+-- any new column/index/constraint must be added as a NEW migration file, never by
+-- editing an already-applied one.
 
 CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(64) PRIMARY KEY,
@@ -224,6 +231,13 @@ CREATE INDEX IF NOT EXISTS idx_deposits_did ON deposits(deposit_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_deposits_utr_unique ON deposits(utr) WHERE utr IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_deposits_status ON deposits(status);
 
+-- Game round enrichment (sec 21, 22, 28): provably-fair seed hash + authoritative
+-- crash point for recovery. ADD COLUMN IF NOT EXISTS keeps this idempotent.
+ALTER TABLE game_rounds ADD COLUMN IF NOT EXISTS server_seed_hash VARCHAR(128);
+ALTER TABLE game_rounds ADD COLUMN IF NOT EXISTS crash_point NUMERIC(6,2);
+CREATE INDEX IF NOT EXISTS idx_game_rounds_game_status ON game_rounds(game_id, status);
+CREATE INDEX IF NOT EXISTS idx_settlements_round ON settlements(round_id);
+
 -- Admin Panel Migrations
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_status VARCHAR(20) NOT NULL DEFAULT 'NOT_SUBMITTED';
@@ -265,8 +279,14 @@ INSERT INTO promotions (id, title, subtitle, tag, button_text, type, bonus_amoun
 VALUES ('promo_default_180', 'DEPOSIT BONUS' || E'\n' || '180% BONUS', 'DEPOSIT -> GET BONUS', 'DEPOSIT', 'DEPOSIT NOW', 'WELCOME', 18000, 10000, 'ACTIVE')
 ON CONFLICT (id) DO NOTHING;
 
+-- Audit log enrichment (sec 49): attribute actions to an admin and a target resource.
+-- ADD COLUMN IF NOT EXISTS keeps this idempotent for pre-existing databases.
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS admin_id VARCHAR(64);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS target VARCHAR(128);
+
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_admin ON audit_logs(admin_id, created_at DESC);
 
 -- Admins Table for RBAC Admin Authentication
 CREATE TABLE IF NOT EXISTS admins (

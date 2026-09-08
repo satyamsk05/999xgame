@@ -417,23 +417,18 @@
       <div class="grid-2">
         <div>
           <div class="card card-p mb-4">
-            <div class="font-semi mb-4">Admin Authentication</div>
-            <div class="field">
-              <label class="field-label">Admin Secret Key</label>
-              <input class="input" type="password" id="setting-secret" placeholder="X-Admin-Secret value">
+            <div class="font-semi mb-4">Account</div>
+            <div id="account-body"></div>
+            <div style="display:flex;gap:8px;margin-top:16px">
+              <button class="btn btn-ghost btn-sm" onclick="PageSettings.logout()">Sign Out</button>
             </div>
-            <div style="display:flex;gap:8px;margin-top:4px">
-              <button class="btn btn-primary btn-sm" onclick="PageSettings.saveSecret()">Save & Test</button>
-              <button class="btn btn-ghost btn-sm" onclick="PageSettings.clearSecret()">Clear</button>
-            </div>
-            <div id="secret-result" class="text-sm mt-4" style="min-height:18px"></div>
           </div>
 
           <div class="card card-p">
-            <div class="font-semi mb-4">Default Secret (development)</div>
+            <div class="font-semi mb-4">Authentication</div>
             <div class="alert alert-info text-sm">
-              If no <code>ADMIN_SECRET</code> is set in <code>.env</code>, the default is:<br>
-              <code style="font-family:var(--font-mono);margin-top:6px;display:block">dev_admin_secret_key_999x</code>
+              Admin access uses username + password (bcrypt) and issues a signed JWT.
+              The legacy <code>X-Admin-Secret</code> master key has been removed.
             </div>
           </div>
         </div>
@@ -639,6 +634,30 @@
 
 <!-- Toast container -->
 <div id="toast-root"></div>
+
+<!-- ── Login screen ─────────────────────────── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="brand-mark">9x</div>
+      <div>
+        <div class="brand-name">999x Admin</div>
+        <div class="brand-env">Control Center</div>
+      </div>
+    </div>
+    <div class="login-title">Sign in to continue</div>
+    <div class="field">
+      <label class="field-label">Username</label>
+      <input class="input" type="text" id="login-username" autocomplete="username" placeholder="admin">
+    </div>
+    <div class="field">
+      <label class="field-label">Password</label>
+      <input class="input" type="password" id="login-password" autocomplete="current-password" placeholder="Password">
+    </div>
+    <div id="login-error" class="login-error"></div>
+    <button class="btn btn-primary btn-lg" id="login-submit" style="width:100%" onclick="App.submitLogin()">Sign In</button>
+  </div>
+</div>
 
 <!-- ── Scripts ───────────────────────────────────────── -->
 <script src="/admin/js/utils.js"></script>

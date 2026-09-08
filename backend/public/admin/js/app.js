@@ -5,7 +5,8 @@
 
 /* ── Global state ───────────────────────────────────── */
 const AppState = {
-  secret:      '',
+  token:       '',
+  admin:       null,
   currentPage: 'dashboard',
   refreshTimer: null,
 };
@@ -72,6 +73,73 @@ const App = {
       el.classList.remove('visible');
     }
   },
+
+  /* ── Auth gate ────────────────────────────────────── */
+  showLogin() {
+    clearInterval(AppState.refreshTimer);
+    AppState.refreshTimer = null;
+    const shell = document.getElementById('shell');
+    if (shell) shell.style.display = 'none';
+    const ls = document.getElementById('login-screen');
+    if (ls) ls.classList.add('open');
+    const u = document.getElementById('login-username');
+    if (u) setTimeout(() => u.focus(), 50);
+  },
+
+  showApp() {
+    const ls = document.getElementById('login-screen');
+    if (ls) ls.classList.remove('open');
+    const shell = document.getElementById('shell');
+    if (shell) shell.style.display = '';
+    App.navigate('dashboard');
+  },
+
+  async submitLogin() {
+    const uEl = document.getElementById('login-username');
+    const pEl = document.getElementById('login-password');
+    const errEl = document.getElementById('login-error');
+    const btn = document.getElementById('login-submit');
+    const username = (uEl?.value || '').trim();
+    const password = pEl?.value || '';
+    if (!username || !password) {
+      if (errEl) errEl.textContent = 'Username and password are required.';
+      return;
+    }
+    if (errEl) errEl.textContent = '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Signing in...'; }
+
+    const res = await API.login(username, password);
+
+    if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
+
+    const token = res.ok ? (res.json.token || res.json.data?.token) : null;
+    if (token) {
+      AppState.token = token;
+      AppState.admin = res.json.data?.admin || null;
+      localStorage.setItem('adminToken', token);
+      if (AppState.admin) localStorage.setItem('adminUser', JSON.stringify(AppState.admin));
+      if (pEl) pEl.value = '';
+      UI.setConnected(true);
+      App.showApp();
+    } else {
+      let msg = (res.json && res.json.message) || '';
+      if (!msg) {
+        msg = res.status === 503
+          ? 'Backend unavailable. Please try again later.'
+          : (res.status === 0 ? 'Cannot reach backend.' : 'Invalid credentials.');
+      }
+      if (errEl) errEl.textContent = msg;
+    }
+  },
+
+  logout(silent) {
+    AppState.token = '';
+    AppState.admin = null;
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminUser');
+    if (!silent) { try { API.logoutApi(); } catch (_) {} }
+    App.showLogin();
+  },
 };
 
 /* ── Sidebar toggle ─────────────────────────────────── */
@@ -82,31 +150,42 @@ function toggleSidebar() {
 
 /* ── Init ───────────────────────────────────────────── */
 window.addEventListener('DOMContentLoaded', () => {
-  // Load saved secret
-  AppState.secret = localStorage.getItem('adminSecret') || '';
-
-  // Set secret input if on page
-  const si = document.getElementById('setting-secret');
-  if (si) si.value = AppState.secret;
+  // Restore session
+  AppState.token = localStorage.getItem('adminToken') || '';
+  try { AppState.admin = JSON.parse(localStorage.getItem('adminUser') || 'null'); } catch (_) { AppState.admin = null; }
 
   // Responsive: show/hide menu toggle
   const checkViewport = () => {
     const mobile = window.innerWidth <= 960;
-    document.getElementById('menu-toggle').style.display = mobile ? 'flex' : 'none';
+    const mt = document.getElementById('menu-toggle');
+    if (mt) mt.style.display = mobile ? 'flex' : 'none';
   };
   checkViewport();
   window.addEventListener('resize', checkViewport);
 
   // Sidebar overlay click closes sidebar
-  document.getElementById('sidebar-overlay').addEventListener('click', () => {
+  const ov = document.getElementById('sidebar-overlay');
+  if (ov) ov.addEventListener('click', () => {
     document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('sidebar-overlay').classList.remove('open');
+    ov.classList.remove('open');
   });
 
-  // Navigate to dashboard on load
-  if (!AppState.secret) {
-    App.navigate('settings');
+  // Enter key submits the login form
+  document.addEventListener('keydown', (e) => {
+    const ls = document.getElementById('login-screen');
+    if (ls && ls.classList.contains('open') && e.key === 'Enter') {
+      const a = document.activeElement;
+      if (a && (a.id === 'login-username' || a.id === 'login-password')) {
+        e.preventDefault();
+        App.submitLogin();
+      }
+    }
+  });
+
+  // Auth gate
+  if (!AppState.token) {
+    App.showLogin();
   } else {
-    App.navigate('dashboard');
+    App.showApp();
   }
 });

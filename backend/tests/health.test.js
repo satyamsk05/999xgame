@@ -4,52 +4,43 @@ const http = require('http');
 const app = require('../src/server/app');
 
 const { signToken } = require('../src/auth/jwt');
+const userRepo = require('../src/users/user.repository');
 
-test('Health, Readiness & Core API Endpoints Unit Test', (t, done) => {
+test('Health, Readiness & Core API Endpoints Unit Test', async (t) => {
   const server = http.createServer(app);
-  const testToken = signToken({ userId: 'usr_test_player', phone: '+919999999999' });
-  server.listen(0, () => {
-    const port = server.address().port;
-    
+  await new Promise((resolve) => server.listen(0, resolve));
+  const port = server.address().port;
+  const base = `http://localhost:${port}`;
+
+  try {
+    // Seed a REAL user. With the hardened auth middleware an unknown subject now returns
+    // 401 (sec 10), so the authenticated /api/wallet call must use a persisted user.
+    const { user } = await userRepo.findOrCreateUserByPhone('+919999999999');
+    const testToken = signToken({ userId: user.id, phone: user.phone });
+
     // Test /health
-    http.get(`http://localhost:${port}/health`, (res) => {
-      assert.strictEqual(res.statusCode, 200);
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        const body = JSON.parse(data);
-        assert.strictEqual(body.status, 'ok');
-        assert.strictEqual(body.service, 'ingames-backend');
-        
-        // Test /api/games
-        http.get(`http://localhost:${port}/api/games`, (res2) => {
-          assert.strictEqual(res2.statusCode, 200);
-          let data2 = '';
-          res2.on('data', (chunk) => { data2 += chunk; });
-          res2.on('end', () => {
-            const body2 = JSON.parse(data2);
-            assert.strictEqual(body2.status, 'success');
-            assert.strictEqual(Array.isArray(body2.data), true);
-            assert.strictEqual(body2.data[0].id, 'seven_up_down');
-            
-            // Test /api/wallet with Auth Header
-            const options = {
-              hostname: 'localhost',
-              port: port,
-              path: '/api/wallet',
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${testToken}`,
-              },
-            };
-            const req = http.request(options, (res3) => {
-              assert.strictEqual(res3.statusCode, 200);
-              server.close(done);
-            });
-            req.end();
-          });
-        });
-      });
+    const healthRes = await fetch(`${base}/health`);
+    assert.strictEqual(healthRes.status, 200);
+    const healthBody = await healthRes.json();
+    assert.strictEqual(healthBody.status, 'ok');
+    assert.strictEqual(healthBody.service, 'ingames-backend');
+
+    // Test /api/games
+    const gamesRes = await fetch(`${base}/api/games`);
+    assert.strictEqual(gamesRes.status, 200);
+    const gamesBody = await gamesRes.json();
+    assert.strictEqual(gamesBody.status, 'success');
+    assert.strictEqual(Array.isArray(gamesBody.data), true);
+    assert.strictEqual(gamesBody.data[0].id, 'seven_up_down');
+
+    // Test /api/wallet with a real user's Bearer token
+    const walletRes = await fetch(`${base}/api/wallet`, {
+      headers: { Authorization: `Bearer ${testToken}` },
     });
-  });
+    assert.strictEqual(walletRes.status, 200);
+    const walletBody = await walletRes.json();
+    assert.strictEqual(walletBody.status, 'success');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });

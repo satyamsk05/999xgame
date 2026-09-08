@@ -37,7 +37,7 @@ class ApiClient {
     final uri = Uri.parse('$serverBaseUrl$endpoint');
     try {
       final response = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
-      return _handleResponse(response);
+      return await _handleResponse(response);
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException(code: 'NETWORK_ERROR', message: 'Network connection failed: ${e.toString()}', statusCode: 0);
@@ -58,7 +58,7 @@ class ApiClient {
             body: jsonEncode(body),
           )
           .timeout(timeout);
-      return _handleResponse(response);
+      return await _handleResponse(response);
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException(
@@ -68,38 +68,74 @@ class ApiClient {
     }
   }
 
-  static dynamic _handleResponse(http.Response response) {
+  static Future<dynamic> _handleResponse(http.Response response) async {
+    final int status = response.statusCode;
+
     dynamic jsonBody;
+    bool parsed = false;
     try {
       jsonBody = jsonDecode(response.body);
+      parsed = true;
     } catch (_) {
-      throw ApiException(code: 'PARSE_ERROR', message: 'Invalid response format from server', statusCode: response.statusCode);
+      jsonBody = null;
     }
 
-    if (response.statusCode >= 200 && response.statusCode < 300) {
+    // Pull the standardized error object ({ code, message }) if present. The backend
+    // emits { success:false, error:{ code, message } } and a legacy { code, message }.
+    Map<String, dynamic>? errObj;
+    if (jsonBody is Map<String, dynamic>) {
+      if (jsonBody['error'] is Map<String, dynamic>) {
+        errObj = jsonBody['error'] as Map<String, dynamic>;
+      } else if (jsonBody.containsKey('code') || jsonBody.containsKey('message')) {
+        errObj = jsonBody;
+      }
+    }
+
+    // 401 (sec 33/35): the server no longer recognizes this session. Drop the stale
+    // local token so the app stops presenting an invalid credential. A cached token is
+    // never proof of a valid session — the server is authoritative.
+    if (status == 401) {
+      if (TokenManager.token != null) {
+        await TokenManager.clearSession();
+      }
+      throw ApiException(
+        code: errObj?['code']?.toString() ?? 'UNAUTHORIZED',
+        message: errObj?['message']?.toString() ?? 'Session expired. Please log in again.',
+        statusCode: 401,
+      );
+    }
+
+    // 503 (sec 3/33): backend or database unavailable. Surface it, never hide it.
+    if (status == 503) {
+      throw ApiException(
+        code: errObj?['code']?.toString() ?? 'SERVICE_UNAVAILABLE',
+        message: errObj?['message']?.toString() ?? 'Service temporarily unavailable. Please try again.',
+        statusCode: 503,
+      );
+    }
+
+    if (status >= 200 && status < 300) {
+      if (!parsed) {
+        throw ApiException(code: 'PARSE_ERROR', message: 'Invalid response format from server', statusCode: status);
+      }
       if (jsonBody is Map<String, dynamic> && jsonBody.containsKey('success')) {
         if (jsonBody['success'] == true) {
           return jsonBody['data'];
-        } else {
-          final err = jsonBody['error'];
-          throw ApiException(
-            code: err?['code']?.toString() ?? 'ERROR',
-            message: err?['message']?.toString() ?? 'Request failed',
-            statusCode: response.statusCode,
-          );
         }
-      }
-      return jsonBody;
-    } else {
-      if (jsonBody is Map<String, dynamic> && jsonBody.containsKey('error')) {
-        final err = jsonBody['error'];
         throw ApiException(
-          code: err?['code']?.toString() ?? 'HTTP_${response.statusCode}',
-          message: err?['message']?.toString() ?? 'Server error',
-          statusCode: response.statusCode,
+          code: errObj?['code']?.toString() ?? 'ERROR',
+          message: errObj?['message']?.toString() ?? 'Request failed',
+          statusCode: status,
         );
       }
-      throw ApiException(code: 'HTTP_${response.statusCode}', message: 'Server returned HTTP ${response.statusCode}', statusCode: response.statusCode);
+      return jsonBody;
     }
+
+    // Any other non-2xx: convert to an ApiException (never hide server errors).
+    throw ApiException(
+      code: errObj?['code']?.toString() ?? 'HTTP_$status',
+      message: errObj?['message']?.toString() ?? 'Server returned HTTP $status',
+      statusCode: status,
+    );
   }
 }

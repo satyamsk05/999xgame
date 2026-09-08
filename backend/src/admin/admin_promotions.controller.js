@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const adminMiddleware = require('../middleware/admin.middleware');
+const { adminMiddleware, requireRole } = require('../middleware/admin_auth.middleware');
 const { query } = require('../database/db');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
@@ -16,7 +16,7 @@ router.get('/', async (req, res, next) => {
 });
 
 /** POST /api/admin/promotions — Create */
-router.post('/', async (req, res, next) => {
+router.post('/', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN', 'GAME_ADMIN'), async (req, res, next) => {
   try {
     const { title, subtitle, tag, buttonText, imageUrl, targetScreen, description, type, bonusAmount, minDeposit, validFrom, validUntil } = req.body;
     const adminId = req.admin?.id || 'admin_sys';
@@ -45,7 +45,7 @@ router.post('/', async (req, res, next) => {
 });
 
 /** PATCH /api/admin/promotions/:id — Edit */
-router.patch('/:id', async (req, res, next) => {
+router.patch('/:id', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN', 'GAME_ADMIN'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const { title, subtitle, tag, buttonText, imageUrl, targetScreen, description, bonusAmount, minDeposit, validFrom, validUntil } = req.body;
@@ -77,7 +77,7 @@ router.patch('/:id', async (req, res, next) => {
 
 
 /** POST /api/admin/promotions/:id/toggle — Enable / Disable */
-router.post('/:id/toggle', async (req, res, next) => {
+router.post('/:id/toggle', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN', 'GAME_ADMIN'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const adminId = req.admin?.id || 'admin_sys';
@@ -99,7 +99,7 @@ router.post('/:id/toggle', async (req, res, next) => {
 });
 
 /** DELETE /api/admin/promotions/:id */
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN', 'GAME_ADMIN'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const adminId = req.admin?.id || 'admin_sys';

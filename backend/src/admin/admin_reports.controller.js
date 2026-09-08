@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const adminMiddleware = require('../middleware/admin.middleware');
+const { adminMiddleware } = require('../middleware/admin_auth.middleware');
 const { query } = require('../database/db');
 const logger = require('../utils/logger');
+const reconciliationService = require('../services/reconciliation.service');
 
 router.use(adminMiddleware);
 
@@ -107,6 +108,23 @@ router.get('/daily', async (req, res, next) => {
       },
     });
   } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/admin/reports/reconciliation?userId=
+ * Read-only financial drift report (sec 48). Detects — never repairs — mismatches
+ * between wallets, the wallet_ledger, deposits, withdrawals and settlements.
+ */
+router.get('/reconciliation', async (req, res, next) => {
+  try {
+    const report = await reconciliationService.runReconciliation({
+      userId: req.query.userId || null,
+    });
+    res.json({ status: 'success', data: report });
+  } catch (err) {
+    logger.error('Reconciliation report failed', { error: err.message });
+    next(err);
+  }
 });
 
 module.exports = router;
