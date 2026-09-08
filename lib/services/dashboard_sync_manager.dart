@@ -23,8 +23,7 @@ class DashboardSyncManager {
       if (cachedStr != null && cachedStr.isNotEmpty) {
         final cachedData = jsonDecode(cachedStr) as Map<String, dynamic>;
         if (cachedData.isNotEmpty && cachedData.containsKey('games')) {
-          final cachedProfile = cachedData['profile'];
-          if (cachedProfile is Map<String, dynamic>) cachedProfile['balance'] = null;
+          _stripFinancialData(cachedData);
           dashboardData.value = cachedData;
           isSyncing.value = false;
         }
@@ -56,6 +55,7 @@ class DashboardSyncManager {
           : (response != null ? Map<String, dynamic>.from(response) : <String, dynamic>{});
       if (bannersList != null && bannersList.isNotEmpty) rawData['banners'] = bannersList;
       if (gamesList != null && gamesList.isNotEmpty) rawData['games'] = gamesList;
+      _stripFinancialData(rawData);
       if (rawData.isNotEmpty) {
         if (!rawData.containsKey('games') || (rawData['games'] as List?)?.isEmpty == true) rawData['games'] = _defaultFallbackData['games'];
         try {
@@ -74,12 +74,31 @@ class DashboardSyncManager {
     }
   }
 
+  static void _stripFinancialData(Map<String, dynamic> data) {
+    final profile = data['profile'];
+    if (profile is Map<String, dynamic>) {
+      profile.remove('balance');
+      profile.remove('depositBalance');
+      profile.remove('winningsBalance');
+      profile.remove('rewardsBalance');
+      profile.remove('totalBalance');
+    }
+
+    final wallet = data['wallet'];
+    if (wallet is Map<String, dynamic>) {
+      wallet.remove('balance');
+      wallet.remove('depositBalance');
+      wallet.remove('winningsBalance');
+      wallet.remove('rewardsBalance');
+      wallet.remove('totalBalance');
+    }
+  }
+
   static final Map<String, dynamic> _defaultFallbackData = {
     'profile': {
       'username': 'Guest', 'avatarUrl': '/avatars/avatar_1.png', 'avatarFrameUrl': '/frames/golden_ring.png',
-      'ringColor': '#E1B219', 'balance': null, 'phoneNumber': '', 'isKycVerified': false, 'currencySymbol': '₹',
+      'ringColor': '#E1B219', 'phoneNumber': '', 'isKycVerified': false, 'currencySymbol': '₹',
     },
-    'wallet': {'depositBalance': 0.0, 'winningsBalance': 0.0, 'rewardsBalance': 0.0, 'totalBalance': 0.0},
     'onlinePlayers': {
       'totalOnline': 0, 'ringColors': ['#FFD700', '#FF9800', '#4FC3F7'],
       'avatars': ['/avatars/avatar_1.png', '/avatars/avatar_2.png', '/avatars/avatar_3.png'],
@@ -94,15 +113,4 @@ class DashboardSyncManager {
       {'id': 'mines', 'title': 'Mines', 'imagePath': 'Assets/images/mines.png', 'accentColor': '#7C4DFF', 'gameUrl': '/games/mines/index.html', 'isAvailable': false},
     ],
   };
-
-  static void updateLocalBalance(double newBalance) {
-    try {
-      final currentMap = Map<String, dynamic>.from(dashboardData.value);
-      final profileMap = Map<String, dynamic>.from(currentMap['profile'] ?? {});
-      profileMap['balance'] = newBalance;
-      currentMap['profile'] = profileMap;
-      dashboardData.value = currentMap;
-      SharedPreferences.getInstance().then((prefs) => prefs.setString(_cacheKey, jsonEncode(currentMap)));
-    } catch (_) {}
-  }
 }
