@@ -22,6 +22,12 @@ class DashboardSyncManager {
       if (cachedStr != null && cachedStr.isNotEmpty) {
         final cachedData = jsonDecode(cachedStr) as Map<String, dynamic>;
         if (cachedData.isNotEmpty && cachedData.containsKey('games')) {
+          // Cached dashboard data is useful for non-financial UI only. Never expose a
+          // cached balance as an authoritative money value while the server sync is pending.
+          final cachedProfile = cachedData['profile'];
+          if (cachedProfile is Map<String, dynamic>) {
+            cachedProfile['balance'] = null;
+          }
           dashboardData.value = cachedData;
           isSyncing.value = false;
         }
@@ -143,7 +149,6 @@ class DashboardSyncManager {
         'isAvailable': false,
       },
     ],
-
   };
 
   static void updateLocalBalance(double newBalance) {
