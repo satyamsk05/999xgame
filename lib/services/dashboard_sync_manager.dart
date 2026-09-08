@@ -38,6 +38,7 @@ class DashboardSyncManager {
     } catch (_) {}
 
     await refreshBackendHealth();
+    _healthTimer?.cancel();
     _healthTimer = Timer.periodic(const Duration(seconds: 15), (_) => refreshBackendHealth());
     await syncWithServer();
   }
@@ -49,6 +50,7 @@ class DashboardSyncManager {
   static Future<void> dispose() async {
     _healthTimer?.cancel();
     _healthTimer = null;
+    _initialized = false;
   }
 
   static Future<void> syncWithServer() async {
