@@ -5,6 +5,7 @@ const userRepo = require('./user.repository');
 const walletRepo = require('../wallet/wallet.repository');
 const logger = require('../utils/logger');
 const { query } = require('../database/db');
+const config = require('../config/env');
 
 // Get Authenticated User Profile from PostgreSQL
 router.get('/profile', authMiddleware, async (req, res, next) => {
@@ -43,18 +44,19 @@ router.get('/dashboard-header', authMiddleware, async (req, res, next) => {
     }
 
     const wallet = await walletRepo.getWalletByUserId(req.user.id);
-    let games = [];
-    try {
-      const gamesRes = await query('SELECT * FROM games ORDER BY created_at ASC');
-      games = gamesRes.rows.map((row) => ({
-        id: row.id,
-        title: row.title,
-        imagePath: (row.id === 'seven_up_down' || row.id === '7updown') ? 'Assets/images/7updown.png' : `/games/${row.id}.png`,
-        gameUrl: `/games/${row.id}/index.html`,
-        accentColor: row.id === 'classic_dice' ? '#00E676' : (row.id === 'dragon_tiger' ? '#FFD700' : (row.id === 'seven_up_down' || row.id === '7updown' ? '#FF4081' : '#7C4DFF')),
-        isAvailable: row.status === 'LIVE',
-      }));
-    } catch (_) {}
+    const gamesRes = await query('SELECT * FROM games ORDER BY created_at ASC');
+    const games = gamesRes.rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      imagePath: (row.id === 'seven_up_down' || row.id === '7updown') ? 'Assets/images/7updown.png' : `/games/${row.id}.png`,
+      gameUrl: `/games/${row.id}/index.html`,
+      accentColor: row.id === 'classic_dice' ? '#00E676' : (row.id === 'dragon_tiger' ? '#FFD700' : (row.id === 'seven_up_down' || row.id === '7updown' ? '#FF4081' : '#7C4DFF')),
+      isAvailable: row.status === 'LIVE',
+    }));
+
+    const onlineCount = typeof req.app.getOnlineUsersCount === 'function'
+      ? req.app.getOnlineUsersCount()
+      : 0;
 
     return res.status(200).json({
       status: 'success',
@@ -83,34 +85,20 @@ router.get('/dashboard-header', authMiddleware, async (req, res, next) => {
           availableBalance: wallet.availableBalance,
         },
         onlinePlayers: {
-          totalOnline: 89214,
+          totalOnline: onlineCount,
           label: 'online',
-          formattedText: '89,214 online',
-          ringColors: ['#FFC107', '#FF9800', '#40C4FF'],
-          avatars: [
-            '/avatars/avatar_1.png',
-            '/avatars/avatar_2.png',
-            '/avatars/avatar_3.png',
-            '/avatars/avatar_7.png',
-            '/avatars/avatar_8.png',
-            '/avatars/avatar_9.png',
-          ],
+          formattedText: `${onlineCount.toLocaleString()} online`,
+          ringColors: config.onlineTickerRingColors,
+          avatars: config.onlineTickerAvatars,
           isLive: true,
         },
-        games: games.length > 0 ? games : [
-          { id: 'seven_up_down', title: '7 Up Down', imagePath: 'Assets/images/7updown.png', accentColor: '#FF4081', gameUrl: '/games/seven_up_down/index.html', isAvailable: true },
-          { id: 'dragon_tiger', title: 'Dragon Vs Tiger', imagePath: 'Assets/images/dtgame.png', accentColor: '#FFD700', gameUrl: '/games/dragon_tiger/index.html', isAvailable: true },
-          { id: 'crush', title: 'Crush', imagePath: 'Assets/images/classic_dice.png', accentColor: '#00E676', gameUrl: '/games/crush/index.html', isAvailable: true },
-          { id: 'mines', title: 'Mines', imagePath: 'Assets/images/mines.png', accentColor: '#7C4DFF', gameUrl: '/games/mines/index.html', isAvailable: false },
-        ],
+        games,
       },
     });
   } catch (err) {
     next(err);
   }
 });
-
-
 
 // Update User Profile (Username & Avatar)
 router.post('/update-profile', authMiddleware, async (req, res, next) => {
@@ -163,4 +151,3 @@ router.post('/complete-onboarding', authMiddleware, async (req, res, next) => {
 });
 
 module.exports = router;
-
