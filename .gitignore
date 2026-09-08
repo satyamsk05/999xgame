@@ -57,9 +57,10 @@ yarn-error.log*
 agent/
 .claude/
 graphify-out/
+
 # Environment & Secret files
 .env
 *.env
 !.env.example
-
+infrastructure/aws-free/.env.aws
 
