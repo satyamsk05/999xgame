@@ -7,12 +7,10 @@ const { verifyToken } = require('../auth/jwt');
 const userRepo = require('../users/user.repository');
 const { gameManager } = require('../games/game.manager');
 const { initDb } = require('../database/db');
+const { initRealtime, closeRealtime } = require('../services/realtime.service');
 
 const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: { origin: config.corsOrigin, methods: ['GET', 'POST'] },
-});
+const io = new Server(server, { cors: { origin: config.corsOrigin, methods: ['GET', 'POST'] } });
 
 io.use(async (socket, next) => {
   try {
@@ -36,16 +34,11 @@ io.use(async (socket, next) => {
   }
 });
 
-// Count unique authenticated accounts, not raw TCP/socket connections. This prevents
-// multiple tabs/devices for one user and anonymous sockets from inflating the online ticker.
 function getAuthenticatedOnlineUserCount() {
   const ids = new Set();
-  for (const socket of io.sockets.sockets.values()) {
-    if (socket.user?.id) ids.add(socket.user.id);
-  }
+  for (const socket of io.sockets.sockets.values()) if (socket.user?.id) ids.add(socket.user.id);
   return ids.size;
 }
-
 app.setOnlineUsersGetter(getAuthenticatedOnlineUserCount);
 
 function broadcastOnlineUsers() {
@@ -67,6 +60,8 @@ server.listen(config.port, async () => {
   if (!dbReady) logger.error('Database not ready at boot — game workers will stay stopped until DB is ready.');
   if (dbReady) {
     try {
+      // Must initialize cross-instance event fanout before game workers start emitting.
+      await initRealtime(io);
       await gameManager.init(io);
     } catch (err) {
       logger.error('GameManager initialization failed; workers remain stopped', { error: err.message });
@@ -77,16 +72,11 @@ server.listen(config.port, async () => {
 function gracefulShutdown(signal) {
   logger.info(`Received ${signal}. Shutting down gracefully...`);
   const stopWorkers = Promise.resolve().then(() => gameManager.stopAll()).catch((err) => logger.warn('Error stopping game workers', { error: err.message }));
-  stopWorkers.finally(() => {
-    server.close(() => {
-      logger.info('HTTP server closed cleanly.');
-      process.exit(0);
-    });
+  stopWorkers.finally(async () => {
+    await closeRealtime();
+    server.close(() => { logger.info('HTTP server closed cleanly.'); process.exit(0); });
   });
-  setTimeout(() => {
-    logger.error('Could not close connections in time, forcefully shutting down');
-    process.exit(1);
-  }, 10000);
+  setTimeout(() => { logger.error('Could not close connections in time, forcefully shutting down'); process.exit(1); }, 10000);
 }
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
