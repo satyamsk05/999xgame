@@ -13,9 +13,6 @@ const walletRepo = require('../wallet/wallet.repository');
 const validation = require('../utils/validation');
 const { betLimiter, cashoutLimiter } = require('../middleware/rateLimit');
 
-// Issue a short-lived, game-scoped USER token after the app JWT has authenticated the user.
-// The token is intentionally short-lived and carries the game id so a WebView never needs
-// to receive the long-lived application credential.
 router.post('/session', authMiddleware, async (req, res) => {
   const { gameId } = req.body || {};
   const allowedGames = new Set(['seven_up_down', '7updown', 'dragon_tiger', 'crush']);
@@ -62,7 +59,6 @@ router.post('/session', authMiddleware, async (req, res) => {
   }
 });
 
-// Catalog of Games
 router.get('/', async (req, res) => {
   try {
     const dbRes = await query('SELECT * FROM games ORDER BY created_at ASC');
@@ -93,7 +89,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Generic Current State & Resync Endpoint
 router.get('/:gameId/current-state', async (req, res) => {
   const { gameId } = req.params;
   try {
@@ -125,26 +120,19 @@ router.get('/:gameId/current-state', async (req, res) => {
   }
 });
 
-// 7 Up Down Current Round
 router.get('/7updown/current-round', async (req, res) => {
   try {
     const currentRound = await sevenUpDownEngine.getOrStartCurrentRound();
-    return res.status(200).json({
-      status: 'success',
-      data: currentRound,
-    });
+    return res.status(200).json({ status: 'success', data: currentRound });
   } catch (err) {
     return res.status(500).json({ status: 'error', message: err.message });
   }
 });
 
-// 7 Up Down Round History (public) — recent rounds for the game UI.
 router.get('/7updown/history', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
     const rounds = await gameRepo.getRecentRoundsFromDb(limit);
-    // Provably-fair: reveal the server seed ONLY for SETTLED rounds; the commitment
-    // hash is always safe. Never leak the seed of an in-flight round (sec 21).
     const safe = rounds.map((r) => ({ ...r, serverSeed: r.status === 'SETTLED' ? r.serverSeed : null }));
     return res.status(200).json({ status: 'success', data: safe });
   } catch (err) {
@@ -153,15 +141,56 @@ router.get('/7updown/history', async (req, res) => {
   }
 });
 
-// Deprecated legacy join endpoint — returns an explicit 400 (never a silent 404).
-router.post('/join', (req, res) => {
-  return res.status(400).json({
-    status: 'error',
-    message: 'This endpoint is deprecated. Use the game-specific bet endpoints (e.g. POST /api/games/7updown/bets).',
-  });
+// Backward-compatible adapter for the currently bundled 7 Up Down client. New clients
+// should call /7updown/bets directly, but an old /games/join request must still be mapped
+// to the authoritative 7 Up Down transaction instead of being silently rejected.
+router.post('/join', betLimiter, authMiddleware, async (req, res) => {
+  try {
+    const { gameId, roundId, betType, stakeAmount, stake, stakePaise, idempotencyKey } = req.body || {};
+    if (gameId && !['game_7_up_down', 'seven_up_down', '7updown'].includes(String(gameId))) {
+      return res.status(400).json({ status: 'error', code: 'INVALID_GAME', message: 'Unsupported game.' });
+    }
+    if (!betType) {
+      return res.status(400).json({ status: 'error', code: 'BET_TYPE_REQUIRED', message: 'betType is required' });
+    }
+
+    const computedStakePaise = validation.resolveStakePaise({
+      stakePaise,
+      stake: stake !== undefined ? stake : stakeAmount,
+    }, 'stake');
+    validation.validateBetType(betType, 'seven_up_down');
+    validation.validateIdempotencyKey(idempotencyKey);
+
+    const { bet, isDuplicate } = await sevenUpDownEngine.placeBet({
+      userId: req.user.id,
+      betType,
+      stakePaise: computedStakePaise,
+      idempotencyKey,
+    });
+    const wallet = await walletRepo.getWalletByUserId(req.user.id);
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        bet: {
+          id: bet.id,
+          roundId: bet.round_id || roundId,
+          betType: bet.bet_type || betType,
+          stake: parseInt(bet.stake || computedStakePaise, 10) / 100,
+          stakePaise: parseInt(bet.stake || computedStakePaise, 10),
+          status: bet.status,
+          isDuplicate,
+        },
+        wallet,
+      },
+    });
+  } catch (err) {
+    const status = err.statusCode || 400;
+    if (status >= 500) logger.error('Legacy game join failed', { userId: req.user && req.user.id, error: err.message });
+    return res.status(status).json({ status: 'error', message: err.message || 'Failed to place bet' });
+  }
 });
 
-// 7 Up Down Place Bet
 router.post('/7updown/bets', betLimiter, authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -179,26 +208,20 @@ router.post('/7updown/bets', betLimiter, authMiddleware, async (req, res) => {
     const activeRoundId = (sevenUpDownEngine.currentRound && sevenUpDownEngine.currentRound.roundId) || roundId;
     validation.validateIdempotencyKey(idempotencyKey);
     const normalizedBets = betList.map((betItem, i) => {
-      const itemStakePaise = validation.resolveStakePaise(
-        { stakePaise: betItem.stakePaise, stake: betItem.stake },
-        'stake'
-      );
+      const itemStakePaise = validation.resolveStakePaise({ stakePaise: betItem.stakePaise, stake: betItem.stake }, 'stake');
       validation.validateBetType(betItem.betType, 'seven_up_down');
       const clientKey = validation.validateIdempotencyKey(betItem.idempotencyKey);
-      const itemKey = clientKey || idempotencyKey
-        || `sud_${userId}_${activeRoundId}_${betItem.betType}_${itemStakePaise}_${i}`;
+      const itemKey = clientKey || idempotencyKey || `sud_${userId}_${activeRoundId}_${betItem.betType}_${itemStakePaise}_${i}`;
       return { betType: betItem.betType, stakePaise: itemStakePaise, idempotencyKey: itemKey };
     });
 
     const placedBets = [];
     for (let i = 0; i < normalizedBets.length; i++) {
       const betItem = normalizedBets[i];
-      const itemStakePaise = betItem.stakePaise;
-
       const { bet, isDuplicate } = await sevenUpDownEngine.placeBet({
         userId,
         betType: betItem.betType,
-        stakePaise: itemStakePaise,
+        stakePaise: betItem.stakePaise,
         idempotencyKey: betItem.idempotencyKey,
       });
 
@@ -206,8 +229,8 @@ router.post('/7updown/bets', betLimiter, authMiddleware, async (req, res) => {
         id: bet.id,
         roundId: bet.round_id || roundId,
         betType: bet.bet_type || betItem.betType,
-        stake: parseInt(bet.stake || itemStakePaise, 10) / 100,
-        stakePaise: parseInt(bet.stake || itemStakePaise, 10),
+        stake: parseInt(bet.stake || betItem.stakePaise, 10) / 100,
+        stakePaise: parseInt(bet.stake || betItem.stakePaise, 10),
         status: bet.status,
         isDuplicate,
       });
@@ -222,7 +245,6 @@ router.post('/7updown/bets', betLimiter, authMiddleware, async (req, res) => {
   }
 });
 
-// Dragon Tiger Place Bet
 router.post('/dragon_tiger/bets', betLimiter, authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -230,18 +252,8 @@ router.post('/dragon_tiger/bets', betLimiter, authMiddleware, async (req, res) =
     const computedStakePaise = validation.resolveStakePaise({ stakePaise, stake });
     validation.validateBetType(betType, 'dragon_tiger');
     validation.validateIdempotencyKey(idempotencyKey);
-
-    const { bet, wallet } = await dragonTigerEngine.placeBet({
-      userId,
-      betType,
-      stakePaise: computedStakePaise,
-      idempotencyKey,
-    });
-
-    return res.status(200).json({
-      status: 'success',
-      data: { bet, wallet },
-    });
+    const { bet, wallet } = await dragonTigerEngine.placeBet({ userId, betType, stakePaise: computedStakePaise, idempotencyKey });
+    return res.status(200).json({ status: 'success', data: { bet, wallet } });
   } catch (err) {
     const status = err.statusCode || 400;
     if (status >= 500) logger.error('Dragon Tiger bet failed', { userId: req.user && req.user.id, error: err.message });
@@ -249,25 +261,14 @@ router.post('/dragon_tiger/bets', betLimiter, authMiddleware, async (req, res) =
   }
 });
 
-// Crush Place Bet
 router.post('/crush/bets', betLimiter, authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const { stake, stakePaise, autoCashoutMultiplier, idempotencyKey } = req.body;
     const computedStakePaise = validation.resolveStakePaise({ stakePaise, stake });
     validation.validateIdempotencyKey(idempotencyKey);
-
-    const { bet, wallet } = await crushEngine.placeBet({
-      userId,
-      stakePaise: computedStakePaise,
-      autoCashoutMultiplier,
-      idempotencyKey,
-    });
-
-    return res.status(200).json({
-      status: 'success',
-      data: { bet, wallet },
-    });
+    const { bet, wallet } = await crushEngine.placeBet({ userId, stakePaise: computedStakePaise, autoCashoutMultiplier, idempotencyKey });
+    return res.status(200).json({ status: 'success', data: { bet, wallet } });
   } catch (err) {
     const status = err.statusCode || 400;
     if (status >= 500) logger.error('Crush bet failed', { userId: req.user && req.user.id, error: err.message });
@@ -275,19 +276,12 @@ router.post('/crush/bets', betLimiter, authMiddleware, async (req, res) => {
   }
 });
 
-// Crush Cashout — SERVER-AUTHORITATIVE (sec 25). The client's `multiplier` is a UI
-// hint only and is NEVER trusted as truth: the server computes the payout multiplier
-// from the authoritative flight clock and validates ownership/state atomically.
 router.post('/crush/cashout', cashoutLimiter, authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const { betId } = validation.validateCashoutRequest(req.body);
     const result = await crushEngine.cashoutBet({ betId, userId });
-
-    return res.status(200).json({
-      status: 'success',
-      data: result,
-    });
+    return res.status(200).json({ status: 'success', data: result });
   } catch (err) {
     const status = err.statusCode || 400;
     if (status >= 500) logger.error('Crush cashout failed', { userId: req.user.id, error: err.message });
@@ -295,21 +289,14 @@ router.post('/crush/cashout', cashoutLimiter, authMiddleware, async (req, res) =
   }
 });
 
-// Authenticated User Bet History Endpoint
 router.get('/bet-history', authMiddleware, async (req, res) => {
   try {
     const dbRes = await query(
-      `SELECT b.id, b.round_id as "roundId", b.bet_type as "betType", 
-              b.stake, b.win_amount as "winAmount", b.status, b.created_at as timestamp,
-              r.game_id as "gameId"
-       FROM bets b
-       LEFT JOIN game_rounds r ON r.id = b.round_id
-       WHERE b.user_id = $1
-       ORDER BY b.created_at DESC
-       LIMIT 50`,
+      `SELECT b.id, b.round_id as "roundId", b.bet_type as "betType", b.stake, b.win_amount as "winAmount", b.status, b.created_at as timestamp, r.game_id as "gameId"
+       FROM bets b LEFT JOIN game_rounds r ON r.id = b.round_id
+       WHERE b.user_id = $1 ORDER BY b.created_at DESC LIMIT 50`,
       [req.user.id]
     );
-
     const betsHistory = dbRes.rows.map((row) => ({
       id: row.id,
       roundId: row.roundId,
@@ -320,7 +307,6 @@ router.get('/bet-history', authMiddleware, async (req, res) => {
       status: row.status,
       timestamp: row.timestamp,
     }));
-
     return res.status(200).json({ status: 'success', data: betsHistory });
   } catch (err) {
     logger.error('Failed to fetch user bet history', { userId: req.user.id, error: err.message });
