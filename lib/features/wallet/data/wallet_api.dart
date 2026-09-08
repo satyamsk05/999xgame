@@ -1,6 +1,17 @@
 import '../../../core/api/api_client.dart';
+import '../../../core/money/money_paise.dart';
 
 class WalletApi {
+  static Future<Map<String, dynamic>> createDepositOrderPaise({required MoneyPaise amount, String paymentMethod = 'UPI'}) async {
+    final res = await ApiClient.post('/deposits', {'amount': amount.rupees, 'amountPaise': amount.value, 'paymentMethod': paymentMethod});
+    return res as Map<String, dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> withdrawCashPaise({required MoneyPaise amount, required String upiId, String? idempotencyKey}) async {
+    final res = await ApiClient.post('/withdrawals', {'amount': amount.rupees, 'amountPaise': amount.value, 'upiId': upiId, 'idempotencyKey': idempotencyKey});
+    return res as Map<String, dynamic>;
+  }
+
   static Future<Map<String, dynamic>> getUserProfile() async {
     final res = await ApiClient.get('/user/profile');
     return res as Map<String, dynamic>;

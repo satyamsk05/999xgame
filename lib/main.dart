@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -140,28 +139,18 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
     _networkPingTimer?.cancel();
     _networkPingTimer = Timer.periodic(const Duration(seconds: 8), (timer) async {
       if (!mounted || !_isLoggedIn) return;
-      if (kIsWeb) return;
-      try {
-        final result = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 4));
-        if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
-          if (_isOffline && mounted) {
-            setState(() {
-              _isOffline = false;
-            });
-            _fetchUserData();
-          }
-          return;
+      final ready = await ApiService.isBackendReady(timeout: const Duration(seconds: 4));
+      if (!mounted) return;
+      if (ready) {
+        if (_isOffline) {
+          setState(() => _isOffline = false);
+          _fetchUserData();
         }
-      } catch (_) {
-        if (!_isOffline && mounted) {
-          setState(() {
-            _isOffline = true;
-          });
-        }
+      } else if (!_isOffline) {
+        setState(() => _isOffline = true);
       }
     });
   }
-
   Future<void> _fetchUserData() async {
     DashboardSyncManager.syncWithServer();
     try {
