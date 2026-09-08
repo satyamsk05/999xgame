@@ -6,12 +6,12 @@ import '../../services/api_service.dart';
 class ApiException implements Exception {
   final String code;
   final String message;
-  final int statusCode;
+  final int? statusCode;
 
   ApiException({required this.code, required this.message, required this.statusCode});
 
   @override
-  String toString() => 'ApiException [$code] ($statusCode): $message';
+  String toString() => 'ApiException [$code] (${statusCode ?? 0}): $message';
 }
 
 class ApiClient {
