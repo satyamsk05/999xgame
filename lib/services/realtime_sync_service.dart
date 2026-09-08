@@ -3,14 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../core/storage/token_manager.dart';
 import 'api_service.dart';
-import 'dashboard_sync_manager.dart';
 
 /// Authoritative realtime synchronization for the Flutter client.
 ///
-/// Socket.IO is used only as a realtime transport. Wallet balances, game
-/// state and other financial data are always re-read from the backend after a
-/// reconnect or settlement event, so a missed socket event can never become
-/// the source of truth.
+/// Socket.IO is only a realtime transport. Wallet balances, game state and
+/// other financial data are re-read from the backend after reconnect or
+/// settlement events, so missed socket events cannot become source of truth.
 class RealtimeSyncService {
   static final RealtimeSyncService instance = RealtimeSyncService._();
   RealtimeSyncService._();
@@ -19,6 +17,11 @@ class RealtimeSyncService {
   bool _running = false;
   bool _refreshInFlight = false;
   Timer? _manualReconnectTimer;
+
+  /// Assigned by the dashboard layer so a realtime invalidation can trigger
+  /// the normal authoritative dashboard refresh without creating an import
+  /// cycle between the two services.
+  Future<void> Function()? onAuthoritativeRefresh;
 
   final ValueNotifier<bool> isConnected = ValueNotifier<bool>(false);
   final ValueNotifier<Map<String, dynamic>?> lastEvent =
@@ -73,7 +76,7 @@ class RealtimeSyncService {
         if (identical(_socket, socket)) isConnected.value = false;
       });
 
-      socket.onConnectError((error) {
+      socket.onConnectError((_) {
         if (!identical(_socket, socket)) return;
         isConnected.value = false;
         _scheduleManualReconnect();
@@ -83,8 +86,6 @@ class RealtimeSyncService {
         if (identical(_socket, socket)) isConnected.value = false;
       });
 
-      // Global authoritative game events. These are intentionally treated as
-      // invalidation signals, not as trusted wallet/balance values.
       for (final eventName in const [
         'GAME_ROUND_OPEN',
         'GAME_BETTING_CLOSED',
@@ -100,9 +101,7 @@ class RealtimeSyncService {
         'crush:result',
         'crush:round_settled',
       ]) {
-        socket.on(eventName, (data) {
-          _handleRealtimeEvent(eventName, data);
-        });
+        socket.on(eventName, (data) => _handleRealtimeEvent(eventName, data));
       }
     } catch (_) {
       isConnected.value = false;
@@ -111,12 +110,11 @@ class RealtimeSyncService {
   }
 
   void _handleRealtimeEvent(String eventName, dynamic data) {
-    final event = <String, dynamic>{
+    lastEvent.value = <String, dynamic>{
       'name': eventName,
       'data': data,
       'receivedAt': DateTime.now().toUtc().toIso8601String(),
     };
-    lastEvent.value = event;
 
     if (eventName == 'GAME_ROUND_SETTLED' ||
         eventName == 'GAME_RESULT' ||
@@ -138,12 +136,12 @@ class RealtimeSyncService {
     if (_refreshInFlight || !_running || !TokenManager.isAuthenticated) return;
     _refreshInFlight = true;
     try {
-      // Profile contains the authoritative wallet summary used by the home UI.
       await ApiService.getUserProfile();
-      await DashboardSyncManager.syncWithServer();
+      final callback = onAuthoritativeRefresh;
+      if (callback != null) await callback();
     } catch (_) {
-      // Never replace authoritative data with a local guess. Socket.IO will
-      // reconnect and trigger another refresh when transport recovers.
+      // Never replace authoritative data with a local guess. Reconnect and
+      // future game events will trigger another refresh.
     } finally {
       _refreshInFlight = false;
     }
