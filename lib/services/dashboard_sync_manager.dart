@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
+import 'realtime_sync_service.dart';
 
 /// Synchronizes non-authoritative dashboard presentation data.
 ///
@@ -37,6 +38,12 @@ class DashboardSyncManager {
       }
     } catch (_) {}
 
+    final realtime = RealtimeSyncService.instance;
+    realtime.onAuthoritativeRefresh = syncWithServer;
+    if (realtime.isConnected.value == false) {
+      await realtime.start();
+    }
+
     await refreshBackendHealth();
     _healthTimer?.cancel();
     _healthTimer = Timer.periodic(const Duration(seconds: 15), (_) => refreshBackendHealth());
@@ -50,6 +57,7 @@ class DashboardSyncManager {
   static Future<void> dispose() async {
     _healthTimer?.cancel();
     _healthTimer = null;
+    await RealtimeSyncService.instance.stop();
     _initialized = false;
   }
 
