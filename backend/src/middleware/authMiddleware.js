@@ -11,9 +11,10 @@ const logger = require('../utils/logger');
  *  3. token.type === "USER" required.
  *  4. Subject (userId) required.
  *  5. User loaded from PostgreSQL (authoritative).
- *  6. User not found -> 401 (never treat an unknown user as authenticated).
+ *  6. User not found -> 401.
  *  7. Blocked user -> 403.
  *  8. DB unavailable -> 503 (fail closed).
+ *  9. GAME_SESSION tokens are restricted to game APIs and the read-only profile endpoint.
  *
  * req.user is always { id, phone } sourced from the authoritative DB row.
  */
@@ -33,6 +34,11 @@ function isDbUnavailable(err) {
     code === '28000' ||
     code === '3D000'
   );
+}
+
+function isAllowedGameSessionRoute(req) {
+  if (req.baseUrl === '/api/games') return true;
+  return req.baseUrl === '/api/user' && req.method === 'GET' && req.path === '/profile';
 }
 
 async function authMiddleware(req, res, next) {
@@ -60,12 +66,22 @@ async function authMiddleware(req, res, next) {
     });
   }
 
-  // Explicit token type check (sec 8/10) — an ADMIN token must never authenticate a user route.
   if (!decoded || decoded.type !== 'USER') {
     return res.status(401).json({
       status: 'error',
       code: 'UNAUTHORIZED',
       message: 'Unauthorized: Invalid token type.',
+    });
+  }
+
+  // GAME_SESSION is deliberately narrow: it can operate the game and read the profile
+  // needed by the game UI, but cannot be replayed against wallet, deposit, withdrawal,
+  // profile mutation, or other user-management endpoints.
+  if (decoded.scope === 'GAME_SESSION' && !isAllowedGameSessionRoute(req)) {
+    return res.status(401).json({
+      status: 'error',
+      code: 'GAME_SESSION_SCOPE_DENIED',
+      message: 'This game session is not valid for this API.',
     });
   }
 
@@ -78,7 +94,6 @@ async function authMiddleware(req, res, next) {
     });
   }
 
-  // Load the authoritative user from PostgreSQL. Fail closed on DB errors.
   let user;
   try {
     user = await userRepo.getUserById(userId);
@@ -99,7 +114,6 @@ async function authMiddleware(req, res, next) {
     });
   }
 
-  // Unknown user -> 401. Never treat an unknown user as authenticated.
   if (!user) {
     logger.warn('Auth rejected: token subject not found', { userId });
     return res.status(401).json({
@@ -117,7 +131,6 @@ async function authMiddleware(req, res, next) {
     });
   }
 
-  // Attach authenticated user context from the authoritative DB row.
   req.user = {
     id: user.id,
     phone: user.phone,
