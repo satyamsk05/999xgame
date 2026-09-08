@@ -187,26 +187,25 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           return;
         }
       } catch (e) {
-        // Log error for debugging (visible in flutter logs)} catch (e) {
-        // Log error for debugging (visible in flutter logs)  if (e is ApiException) {
-        // Log error for debugging (visible in flutter logs)    const retryableStatuses = <int>{0, 408, 429, 500, 502, 503, 504};
-        // Log error for debugging (visible in flutter logs)    final status = e.statusCode ?? 0;
-        // Log error for debugging (visible in flutter logs)    if (!retryableStatuses.contains(status)) {
-        // Log error for debugging (visible in flutter logs)      _isVerifyingActive = false;
-        // Log error for debugging (visible in flutter logs)      if (mounted) {
-        // Log error for debugging (visible in flutter logs)        setState(() {
-        // Log error for debugging (visible in flutter logs)          _isLoading = false;
-        // Log error for debugging (visible in flutter logs)          _statusMessage = null;
-        // Log error for debugging (visible in flutter logs)          _errorMessage = e.message;
-        // Log error for debugging (visible in flutter logs)          _currentStep = 0;
-        // Log error for debugging (visible in flutter logs)        });
-        // Log error for debugging (visible in flutter logs)      }
-        // Log error for debugging (visible in flutter logs)      return;
-        // Log error for debugging (visible in flutter logs)    }
-        // Log error for debugging (visible in flutter logs)  }
-        // Log error for debugging (visible in flutter logs)  debugPrint('[LoginVerify] transient error: $e');
-        // Log error for debugging (visible in flutter logs)  await Future.delayed(const Duration(milliseconds: 1500));
-        // Log error for debugging (visible in flutter logs)}
+        if (e is ApiException) {
+          const retryableStatuses = <int>{0, 408, 429, 500, 502, 503, 504};
+          final status = e.statusCode ?? 0;
+          if (!retryableStatuses.contains(status)) {
+            _isVerifyingActive = false;
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _statusMessage = null;
+                _errorMessage = e.message;
+                _currentStep = 0;
+              });
+            }
+            return;
+          }
+        }
+        debugPrint('[LoginVerify] transient error: $e');
+        await Future.delayed(const Duration(milliseconds: 1500));
+      }
     }
 
     _isVerifyingActive = false;
