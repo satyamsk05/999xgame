@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:ui';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -313,7 +312,7 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                         final name = (profileMap['username'] != null && profileMap['username'].toString().isNotEmpty)
                             ? profileMap['username'].toString()
                             : _userName;
-                        final bal = (profileMap['balance'] as num?)?.toDouble() ?? _totalBalance;
+                        final bal = _totalBalance;
                         final av = (profileMap['avatarUrl'] != null && profileMap['avatarUrl'].toString().isNotEmpty)
                             ? profileMap['avatarUrl'].toString()
                             : _currentAvatarPath;
