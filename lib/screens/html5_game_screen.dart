@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:webview_flutter/webview_flutter.dart';
+import '../core/api/api_client.dart';
 import '../features/wallet/data/wallet_api.dart';
 import '../core/storage/token_manager.dart';
 import '../services/api_service.dart';
@@ -39,108 +40,133 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
   bool _isLoading = true;
   bool _hasWebError = false;
   WebViewController? _webViewController;
-
   StreamSubscription? _msgSubscription;
+  String? _gameSessionToken;
+
+  String get _gameId {
+    final match = RegExp(r'/games/([^/]+)/').firstMatch(widget.gameUrl);
+    return match?.group(1) ?? 'seven_up_down';
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_initializeGame());
+  }
 
-    _initializeGameAndDeductFee();
+  Future<void> _initializeGame() async {
+    try {
+      final sessionResponse = await ApiClient.post('/games/session', {'gameId': _gameId});
+      final data = sessionResponse['data'];
+      final token = data is Map<String, dynamic> ? data['token']?.toString() : null;
+      if (token == null || token.isEmpty) {
+        throw ApiException(
+          code: 'GAME_SESSION_FAILED',
+          message: 'Unable to start a secure game session.',
+          statusCode: 500,
+        );
+      }
+      _gameSessionToken = token;
+      await _initializeGameView(token);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _hasWebError = true;
+        _isLoading = false;
+      });
+    }
 
-    final token = TokenManager.token ?? '';
+    try {
+      await _refreshProfileBalance();
+    } catch (_) {}
+  }
+
+  Future<void> _initializeGameView(String sessionToken) async {
     final fullUrl = widget.gameUrl.startsWith('http')
         ? widget.gameUrl
         : '${ApiService.serverDomain}${widget.gameUrl.startsWith('/') ? '' : '/'}${widget.gameUrl}';
-    final formattedUrl = fullUrl.contains('?')
-        ? '$fullUrl&token=${Uri.encodeComponent(token)}'
-        : '$fullUrl?token=${Uri.encodeComponent(token)}';
+
+    // Use a URL fragment instead of a query parameter. Fragments are not sent to the
+    // server in HTTP requests/referrers, so the short-lived credential is not exposed
+    // as part of the resource URL. The game client reads the fragment locally.
+    final separator = fullUrl.contains('#') ? '&' : '#';
+    final formattedUrl = '$fullUrl${separator}token=${Uri.encodeComponent(sessionToken)}';
 
     if (kIsWeb) {
       registerIframeViewFactory(_viewId, formattedUrl);
       _msgSubscription = setupWebMessageListener((msgStr) async {
-        if (mounted) {
-          try {
-            final dynamic json = jsonDecode(msgStr);
-            if (json is Map<String, dynamic>) {
-              // Security validation: check source schema and version
-              final String source = json['source']?.toString() ?? '';
-              final int version = (json['version'] as num?)?.toInt() ?? 1;
-              final String type = json['type']?.toString() ?? '';
+        if (!mounted) return;
+        try {
+          final dynamic json = jsonDecode(msgStr);
+          if (json is Map<String, dynamic>) {
+            final source = json['source']?.toString() ?? '';
+            final version = (json['version'] as num?)?.toInt() ?? 1;
+            final type = json['type']?.toString() ?? '';
+            if (source == 'ingames-game' && version >= 1) {
+              if (type == 'EXIT_GAME' || type == 'EXIT_MATCH') {
+                _exitGame();
+              } else if (type == 'WALLET_UPDATED' || type == 'ROUND_RESULT') {
+                _refreshProfileBalance();
+              }
+            }
+          }
+        } catch (_) {}
+      });
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
-              if (source == 'ingames-game' && version >= 1) {
-                if (type == 'EXIT_GAME' || type == 'EXIT_MATCH') {
-                  _exitGame();
-                } else if (type == 'WALLET_UPDATED' || type == 'ROUND_RESULT') {
-                  _refreshProfileBalance();
-                }
+    _webViewController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (_) {
+            try {
+              _webViewController?.runJavaScript("""
+                window.IN_GAMES_AUTH_TOKEN = '$sessionToken';
+                window.IN_GAMES_SERVER_URL = '${ApiService.baseUrl}';
+              """);
+            } catch (_) {}
+          },
+          onPageFinished: (_) {
+            if (mounted) setState(() => _isLoading = false);
+            try {
+              _webViewController?.runJavaScript("""
+                window.IN_GAMES_AUTH_TOKEN = '$sessionToken';
+                window.IN_GAMES_SERVER_URL = '${ApiService.baseUrl}';
+              """);
+            } catch (_) {}
+          },
+          onWebResourceError: (WebResourceError error) {
+            final isMainFrame = error.isForMainFrame ?? false;
+            if (mounted && isMainFrame) {
+              setState(() {
+                _hasWebError = true;
+                _isLoading = false;
+              });
+            }
+          },
+        ),
+      )
+      ..addJavaScriptChannel(
+        'InGamesNativeBridge',
+        onMessageReceived: (JavaScriptMessage message) {
+          try {
+            final dynamic json = jsonDecode(message.message);
+            if (json is Map<String, dynamic>) {
+              final type = json['type']?.toString() ?? '';
+              if (type == 'EXIT_GAME' || type == 'EXIT_MATCH') {
+                _exitGame();
+              } else if (type == 'WALLET_UPDATED' || type == 'ROUND_RESULT') {
+                _refreshProfileBalance();
               }
             }
           } catch (_) {}
-        }
-      });
-    } else {
-      _webViewController = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageStarted: (_) {
-              try {
-                _webViewController?.runJavaScript("""
-                  window.IN_GAMES_AUTH_TOKEN = '$token';
-                  window.IN_GAMES_SERVER_URL = '${ApiService.baseUrl}';
-                """);
-              } catch (_) {}
-            },
-            onPageFinished: (_) {
-              if (mounted) {
-                setState(() {
-                  _isLoading = false;
-                });
-                try {
-                  _webViewController?.runJavaScript("""
-                    window.IN_GAMES_AUTH_TOKEN = '$token';
-                    window.IN_GAMES_SERVER_URL = '${ApiService.baseUrl}';
-                  """);
-                } catch (_) {}
-              }
-            },
-            onWebResourceError: (WebResourceError error) {
-              // Ignore subresource errors (e.g. socket reconnects or offline asset pings) so local WebView stays open
-              final isMainFrame = error.isForMainFrame ?? false;
-              if (mounted && isMainFrame && error.errorType == WebResourceErrorType.fileNotFound) {
-                setState(() {
-                  _hasWebError = true;
-                  _isLoading = false;
-                });
-              }
-            },
-          ),
-        )
-        ..addJavaScriptChannel(
-          'InGamesNativeBridge',
-          onMessageReceived: (JavaScriptMessage message) {
-            try {
-              final dynamic json = jsonDecode(message.message);
-              if (json is Map<String, dynamic>) {
-                final String type = json['type']?.toString() ?? '';
-                if (type == 'EXIT_GAME' || type == 'EXIT_MATCH') {
-                  _exitGame();
-                } else if (type == 'WALLET_UPDATED' || type == 'ROUND_RESULT') {
-                  _refreshProfileBalance();
-                }
-              }
-            } catch (_) {}
-          },
-        );
+        },
+      );
 
-      if (formattedUrl.startsWith('http')) {
-        _webViewController?.loadRequest(Uri.parse(formattedUrl));
-      } else {
-        _webViewController?.loadFlutterAsset('assets/game/seven_up_down/index.html');
-      }
-    }
+    _webViewController!.loadRequest(Uri.parse(formattedUrl));
   }
 
   @override
@@ -161,9 +187,7 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
       if (!kIsWeb && _webViewController != null) {
         try {
           _webViewController?.runJavaScript("""
-            if (window.soundManager) {
-              window.soundManager.stopAll();
-            }
+            if (window.soundManager) window.soundManager.stopAll();
           """);
         } catch (_) {}
       }
@@ -171,23 +195,10 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
       if (!kIsWeb && _webViewController != null) {
         try {
           _webViewController?.runJavaScript("""
-            if (window.soundManager) {
-              window.soundManager.resume();
-            }
+            if (window.soundManager) window.soundManager.resume();
           """);
         } catch (_) {}
       }
-    }
-  }
-
-  Future<void> _initializeGameAndDeductFee() async {
-    try {
-      await _refreshProfileBalance();
-    } catch (_) {}
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
     }
   }
 
@@ -207,9 +218,7 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
     if (!mounted) return;
     _msgSubscription?.cancel();
     Future.microtask(() {
-      if (mounted) {
-        widget.onBackPressed();
-      }
+      if (mounted) widget.onBackPressed();
     });
   }
 
@@ -227,7 +236,6 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
       backgroundColor: const Color(0xFF20084B),
       body: Stack(
         children: [
-          // 1. Full-screen HTML5 Game Canvas (Fills entire screen from top to bottom)
           Positioned.fill(
             child: _hasWebError
                 ? NetworkErrorWidget(
@@ -238,7 +246,7 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
                         _hasWebError = false;
                         _isLoading = true;
                       });
-                      _webViewController?.reload();
+                      unawaited(_initializeGame());
                     },
                   )
                 : (kIsWeb
@@ -263,49 +271,42 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
                             ),
                           ))),
           ),
-
-
-
-            // Match Loading Overlay
-            if (_isLoading)
-              Container(
-                color: const Color(0xFF20084B),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFF6C20E0).withValues(alpha: 0.3),
-                          border: Border.all(color: const Color(0xFF00E676), width: 2),
-                        ),
-                        child: const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00E676)),
-                        ),
+          if (_isLoading)
+            Container(
+              color: const Color(0xFF20084B),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF6C20E0).withValues(alpha: 0.3),
+                        border: Border.all(color: const Color(0xFF00E676), width: 2),
                       ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Loading ${widget.gameTitle}...',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      child: const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00E676)),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Connecting to live game engine...',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white54,
-                          fontSize: 13,
-                        ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Loading ${widget.gameTitle}...',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Connecting to live game engine...',
+                      style: GoogleFonts.poppins(color: Colors.white54, fontSize: 13),
+                    ),
+                  ],
                 ),
               ),
+            ),
         ],
       ),
     );
