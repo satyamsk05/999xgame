@@ -13,6 +13,7 @@ const depositController = require('../wallet/deposit.controller');
 const adminDepositController = require('../wallet/admin_deposit.controller');
 const withdrawalController = require('../wallet/withdrawal.controller');
 const adminWithdrawalController = require('../wallet/admin_withdrawal.controller');
+const adminAuthController = require('../admin/admin_auth.controller');
 const adminStatsController = require('../admin/admin_stats.controller');
 const adminUserController = require('../users/admin_user.controller');
 const adminGamesController = require('../admin/admin_games.controller');
@@ -76,7 +77,7 @@ app.get('/api/config', (req, res) => {
   res.status(200).json({
     status: 'success',
     data: {
-      onlineUsers: realtimeOnlineUsers > 0 ? realtimeOnlineUsers : 1, // Real connected presence
+      onlineUsers: realtimeOnlineUsers,
       maintenanceMode: false,
       minimumAppVersion: '1.0.0',
     },
@@ -85,13 +86,12 @@ app.get('/api/config', (req, res) => {
 
 app.get('/api/online-ticker', (req, res) => {
   const realtimeCount = activeSocketCountGetter();
-  const baseOnline = 89214 + (realtimeCount > 0 ? realtimeCount : 0);
   res.status(200).json({
     status: 'success',
     data: {
-      totalOnline: baseOnline,
+      totalOnline: realtimeCount,
       label: 'online',
-      formattedText: `${baseOnline.toLocaleString()} online`,
+      formattedText: `${realtimeCount.toLocaleString()} online`,
       ringColors: ['#FFC107', '#FF9800', '#4FC3F7'],
       avatars: [
         '/avatars/avatar_1.png',
@@ -121,32 +121,13 @@ app.get('/api/banners', async (req, res) => {
 
     return res.status(200).json({
       status: 'success',
-      data: banners.length > 0 ? banners : [
-        {
-          id: 'promo_default_180',
-          tag: 'DEPOSIT',
-          title: 'DEPOSIT BONUS\n180% BONUS',
-          subtitle: 'DEPOSIT -> GET BONUS',
-          buttonText: 'DEPOSIT NOW',
-          imageUrl: '/banners/deposit_banner.png',
-          targetScreen: '/add-cash',
-        },
-      ],
+      data: banners,
     });
   } catch (err) {
-    return res.status(200).json({
-      status: 'success',
-      data: [
-        {
-          id: 'promo_default_180',
-          tag: 'DEPOSIT',
-          title: 'DEPOSIT BONUS\n180% BONUS',
-          subtitle: 'DEPOSIT -> GET BONUS',
-          buttonText: 'DEPOSIT NOW',
-          imageUrl: '/banners/deposit_banner.png',
-          targetScreen: '/add-cash',
-        },
-      ],
+    return res.status(503).json({
+      status: 'error',
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Failed to retrieve active promotions from database',
     });
   }
 });
@@ -160,6 +141,7 @@ app.use('/api/games', gameController);
 
 app.use('/api/wallet', walletController);
 app.use('/api/deposits', depositController);
+app.use('/api/admin/auth', adminAuthController);
 app.use('/api/admin/deposits', adminDepositController);
 app.use('/api/withdrawals', withdrawalController);
 app.use('/api/admin/withdrawals', adminWithdrawalController);
@@ -168,6 +150,7 @@ app.use('/api/admin/users', adminUserController);
 app.use('/api/admin/games', adminGamesController);
 app.use('/api/admin/promotions', adminPromotionsController);
 app.use('/api/admin/reports', adminReportsController);
+
 
 // 404 Handler
 app.use((req, res) => {

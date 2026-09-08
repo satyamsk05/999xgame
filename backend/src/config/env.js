@@ -22,6 +22,10 @@ const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev_jwt_secret_key_999x',
   adminSecret: process.env.ADMIN_SECRET || 'dev_admin_secret_key_999x',
   logginAppKey: process.env.LOGGIN_APP_KEY || 'loggin_app_key_dev',
+  telegram: {
+    botToken: process.env.TELEGRAM_BOT_TOKEN || '',
+    chatId: process.env.TELEGRAM_CHAT_ID || '',
+  },
   deposit: {
     minAmountRupees: 10,
     maxAmountRupees: 100000,

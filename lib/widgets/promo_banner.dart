@@ -124,39 +124,39 @@ class _PromoBannerCardState extends State<_PromoBannerCard> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  // DEPOSIT Tag
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF4F106D),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: const Color(0xFFCAA772).withValues(alpha: 0.5),
-                                        width: 1,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    // DEPOSIT Tag
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF4F106D),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: const Color(0xFFCAA772).withValues(alpha: 0.5),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        tag,
+                                        style: GoogleFonts.poppins(
+                                          color: const Color(0xFFCAA772),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.5,
+                                        ),
                                       ),
                                     ),
-                                    child: Text(
-                                      tag,
-                                      style: GoogleFonts.poppins(
-                                        color: const Color(0xFFCAA772),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
+                                    const SizedBox(height: 4),
+                                    Text(
                                       title,
                                       style: GoogleFonts.poppins(
                                         color: Colors.white,
@@ -165,18 +165,18 @@ class _PromoBannerCardState extends State<_PromoBannerCard> {
                                         height: 1.15,
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    subtitle,
-                                    style: GoogleFonts.poppins(
-                                      color: const Color(0xFFCAA772),
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.2,
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      subtitle,
+                                      style: GoogleFonts.poppins(
+                                        color: const Color(0xFFCAA772),
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.2,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
 

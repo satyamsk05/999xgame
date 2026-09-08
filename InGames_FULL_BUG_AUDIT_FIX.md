@@ -2,11 +2,6 @@
 
 ## Scope
 
-Audited the uploaded:
-
-- `backend(8).zip`
-- `lib(6).zip`
-
 Focus areas:
 
 1. Login / Loggin WhatsApp authentication

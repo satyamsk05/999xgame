@@ -268,3 +268,15 @@ ON CONFLICT (id) DO NOTHING;
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action, created_at DESC);
 
+-- Admins Table for RBAC Admin Authentication
+CREATE TABLE IF NOT EXISTS admins (
+    id VARCHAR(64) PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(30) NOT NULL DEFAULT 'GAME_ADMIN', -- SUPER_ADMIN, FINANCE_ADMIN, GAME_ADMIN, SUPPORT_ADMIN
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    last_login_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+

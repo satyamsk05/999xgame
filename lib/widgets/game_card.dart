@@ -92,7 +92,15 @@ class GameCard extends StatelessWidget {
       );
     }
 
-    final fileName = primaryPath.split('/').last;
+    String fileName = primaryPath.split('/').last;
+    if (fileName == 'seven_up_down.png' || fileName == '7updown') {
+      fileName = '7updown.png';
+    } else if (fileName == 'dragon_tiger.png' || fileName == 'dtgame') {
+      fileName = 'dtgame.png';
+    } else if (fileName == 'crush.png' || fileName == 'classic_dice') {
+      fileName = 'classic_dice.png';
+    }
+
     return Image.asset(
       'Assets/images/$fileName',
       fit: BoxFit.cover,

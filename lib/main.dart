@@ -799,10 +799,11 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                   itemCount: gamesListRaw.length,
                   itemBuilder: (ctx, index) {
                     final gameObj = gamesListRaw[index] as Map<String, dynamic>? ?? {};
+                    final id = gameObj['id']?.toString() ?? '';
                     final title = gameObj['title']?.toString() ?? 'Game';
-                    final imagePath = gameObj['imagePath']?.toString() ?? 'Assets/images/classic_dice.png';
+                    final imagePath = gameObj['imagePath']?.toString() ?? 'Assets/images/7updown.png';
                     final gameUrl = gameObj['gameUrl']?.toString() ?? '/games/seven_up_down/index.html';
-                    final isAvailable = gameObj['isAvailable'] == true;
+                    final isAvailable = gameObj['isAvailable'] == true || gameObj['status'] == 'LIVE';
 
                     Color accentColor = const Color(0xFF00E676);
                     if (gameObj['accentColor'] != null) {
@@ -814,14 +815,14 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
 
                     return GameCard(
                       data: GameCardData(
-                        id: gameObj['id']?.toString() ?? '',
+                        id: id,
                         title: title,
                         imagePath: imagePath,
                         accentColor: accentColor,
                         gameUrl: gameUrl,
                       ),
                       onTap: () {
-                        if (isAvailable || gameObj['id'] == 'classic_dice' || gameObj['id'] == '7updown') {
+                        if (isAvailable || id == 'seven_up_down' || id == '7updown' || id == 'dragon_tiger' || id == 'crush' || id == 'classic_dice') {
                           _launchHtml5Game(title, 10.0, 20.0, gameUrl);
                         } else {
                           _showComingSoon(title);

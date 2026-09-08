@@ -28,7 +28,6 @@ class DashboardSyncManager {
       }
     } catch (_) {}
 
-    // Direct Pure Server-Driven Fetch
     syncWithServer();
   }
 
@@ -73,60 +72,32 @@ class DashboardSyncManager {
     }
   }
 
-
   static final Map<String, dynamic> _defaultFallbackData = {
     'profile': {
-      'username': 'Player_0480',
+      'username': 'Guest',
       'avatarUrl': '/avatars/avatar_1.png',
       'avatarFrameUrl': '/frames/golden_ring.png',
       'ringColor': '#E1B219',
-      'balance': 0.0,
-      'phoneNumber': '7088800480',
-      'isKycVerified': true,
-      'profileTag': 'Profile',
-      'profileTagColor': '#FFD700',
-      'profileTagBg': '#3B0A4E',
-      'walletGradientStart': '#00D294',
-      'walletGradientEnd': '#00A574',
+      'balance': null,
+      'phoneNumber': '',
+      'isKycVerified': false,
       'currencySymbol': '₹',
-      'addCashLabel': '+',
     },
     'wallet': {
       'depositBalance': 0.0,
       'winningsBalance': 0.0,
       'rewardsBalance': 0.0,
       'totalBalance': 0.0,
-      'bestDeal': {'amount': 500, 'cashback': 75, 'tag': 'BEST DEAL'},
-    },
-    'addCashOffers': [
-      {'amount': 200, 'cashback': 25},
-      {'amount': 500, 'cashback': 75},
-      {'amount': 50, 'cashback': 4},
-      {'amount': 100, 'cashback': 10},
-    ],
-    'referral': {
-      'totalEarnings': 30,
-      'perReferralTarget': 1000,
-      'rewardSteps': {'signUp': 15, 'addCash': 55, 'playGames': 930},
-      'recentReferrals': [
-        {'name': 'Dh animation', 'date': '09 Dec', 'amount': '₹15', 'avatarPath': '/avatars/avatar_1.png'},
-        {'name': 'Harshthakur', 'date': '08 Dec', 'amount': '₹15', 'avatarPath': '/avatars/avatar_2.png'},
-        {'name': 'RAHUL', 'date': '07 Dec', 'amount': '₹15', 'avatarPath': '/avatars/avatar_3.png'},
-      ],
     },
     'onlinePlayers': {
-      'totalOnline': 89156,
+      'totalOnline': 0,
       'ringColors': ['#FFD700', '#FF9800', '#4FC3F7'],
       'avatars': [
         '/avatars/avatar_1.png',
         '/avatars/avatar_2.png',
         '/avatars/avatar_3.png',
-        '/avatars/avatar_7.png',
-        '/avatars/avatar_8.png',
-        '/avatars/avatar_9.png',
       ],
     },
-
     'banners': [
       {
         'id': 'deposit_bonus_180',
@@ -140,38 +111,39 @@ class DashboardSyncManager {
     ],
     'games': [
       {
-        'id': 'classic_dice',
-        'title': 'Classic Dice',
-        'imagePath': '/games/classic_dice.png',
-        'accentColor': '#00E676',
-        'gameUrl': '/games/seven_up_down/index.html',
-        'isAvailable': true,
-      },
-      {
-        'id': 'double',
-        'title': 'Double',
-        'imagePath': '/games/double.png',
-        'accentColor': '#FFD700',
-        'gameUrl': '/games/seven_up_down/index.html',
-        'isAvailable': false,
-      },
-      {
-        'id': '7updown',
-        'title': '7 Up Down',
-        'imagePath': '/games/7updown.png',
+        'id': 'seven_up_down',
+        'title': '7 Up Down (Dice)',
+        'imagePath': 'Assets/images/7updown.png',
         'accentColor': '#FF4081',
         'gameUrl': '/games/seven_up_down/index.html',
         'isAvailable': true,
       },
       {
+        'id': 'dragon_tiger',
+        'title': 'Dragon Vs Tiger',
+        'imagePath': 'Assets/images/dtgame.png',
+        'accentColor': '#FFD700',
+        'gameUrl': '/games/dragon_tiger/index.html',
+        'isAvailable': true,
+      },
+      {
+        'id': 'crush',
+        'title': 'Crush',
+        'imagePath': 'Assets/images/classic_dice.png',
+        'accentColor': '#00E676',
+        'gameUrl': '/games/crush/index.html',
+        'isAvailable': true,
+      },
+      {
         'id': 'mines',
         'title': 'Mines',
-        'imagePath': '/games/mines.png',
+        'imagePath': 'Assets/images/mines.png',
         'accentColor': '#7C4DFF',
-        'gameUrl': '/games/seven_up_down/index.html',
+        'gameUrl': '/games/mines/index.html',
         'isAvailable': false,
       },
     ],
+
   };
 
   static void updateLocalBalance(double newBalance) {

@@ -1,4 +1,3 @@
-// Polyfill global EventSource for @loggin/sdk in Node.js CommonJS
 if (typeof global.EventSource === 'undefined') {
   const esModule = require('eventsource');
   global.EventSource = esModule.EventSource || esModule.default || esModule;
@@ -7,25 +6,36 @@ if (typeof global.EventSource === 'undefined') {
 const { loggin } = require('@loggin/sdk');
 const config = require('../config/env');
 const logger = require('../utils/logger');
+const redisService = require('../services/redis.service');
 
-// Store active verification sessions in memory / cache with 5-minute expiration
-const activeTokens = new Map(); // token -> { createdAt, link }
+// Tracking active listeners to avoid duplicate SDK subscriptions for the same token
+const activeListeners = new Set();
 
 /**
- * Generate Loggin WhatsApp token & link
+ * Generate Loggin WhatsApp token & link, store session state in Redis/Cache
  */
-function createToken() {
+async function createToken() {
   try {
     const { token, link } = loggin.createToken(config.logginAppKey);
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 minutes TTL
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
-    activeTokens.set(token, {
+    const sessionData = {
+      token,
+      status: 'PENDING',
       createdAt: Date.now(),
       expiresAt,
       link,
-    });
+      verifiedPhone: null,
+    };
 
-    logger.info('Created Loggin WhatsApp token', { maskedToken: token.slice(0, 4) + '***', expiresAt });
+    // Save to Redis / Cache with 5-minute TTL
+    await redisService.set(`loggin:session:${token}`, sessionData, 300);
+
+    logger.info('Created Loggin WhatsApp token session', { maskedToken: token.slice(0, 4) + '***', expiresAt });
+
+    // Launch single background verification listener
+    startBackgroundListener(token);
+
     return { token, link, expiresAt };
   } catch (err) {
     logger.error('Failed to create Loggin token', { error: err.message });
@@ -34,47 +44,95 @@ function createToken() {
 }
 
 /**
- * Wait and verify Loggin WhatsApp token server-side
- * NEVER TRUST CLIENT PHONE NUMBER. Use phone returned by Loggin SDK!
+ * Background SDK Listener that updates session state in Redis once verified
  */
-async function verifyToken(token, timeoutMs = 300000) {
-  if (!token) {
-    throw new Error('Token is required for verification');
+function startBackgroundListener(token) {
+  if (activeListeners.has(token)) return;
+  activeListeners.add(token);
+
+  const maskedToken = token.slice(0, 4) + '***';
+  logger.info('Subscribing background listener for Loggin verification...', { maskedToken });
+
+  loggin
+    .waitForVerify(token, 300000)
+    .then(async (result) => {
+      activeListeners.delete(token);
+      if (result && result.phone) {
+        logger.info('Loggin verification completed in background', { maskedPhone: result.phone.slice(-4) });
+        const existing = await redisService.getJson(`loggin:session:${token}`);
+        if (existing) {
+          existing.status = 'VERIFIED';
+          existing.verifiedPhone = result.phone;
+          await redisService.set(`loggin:session:${token}`, existing, 300);
+        }
+      }
+    })
+    .catch(async (err) => {
+      activeListeners.delete(token);
+      logger.warn('Background Loggin listener failed/expired', { maskedToken, error: err.message });
+      const existing = await redisService.getJson(`loggin:session:${token}`);
+      if (existing && existing.status === 'PENDING') {
+        existing.status = 'EXPIRED';
+        await redisService.set(`loggin:session:${token}`, existing, 60);
+      }
+    });
+}
+
+/**
+ * Get status of verification session (Short Polling)
+ */
+async function getStatus(token) {
+  if (!token) return { status: 'EXPIRED' };
+  const session = await redisService.getJson(`loggin:session:${token}`);
+  if (!session) return { status: 'EXPIRED' };
+
+  if (session.status === 'PENDING' && Date.now() > new Date(session.expiresAt).getTime()) {
+    session.status = 'EXPIRED';
+    await redisService.set(`loggin:session:${token}`, session, 60);
   }
 
-  const tokenData = activeTokens.get(token);
-  if (tokenData && Date.now() > new Date(tokenData.expiresAt).getTime()) {
-    activeTokens.delete(token);
-    const err = new Error('Loggin verification link expired after 5 minutes');
+  return session;
+}
+
+/**
+ * Consume verified session atomically (ensures single consumption)
+ */
+async function consumeVerifiedSession(token) {
+  const session = await getStatus(token);
+  if (!session || session.status !== 'VERIFIED' || !session.verifiedPhone) {
+    return null;
+  }
+
+  // Delete session to guarantee it can only be consumed once
+  await redisService.del(`loggin:session:${token}`);
+  return session;
+}
+
+/**
+ * Backward compatible non-blocking verifyToken
+ */
+async function verifyToken(token) {
+  const session = await getStatus(token);
+  if (session && session.status === 'VERIFIED') {
+    await redisService.del(`loggin:session:${token}`);
+    return { verifiedPhone: session.verifiedPhone };
+  }
+
+  if (session && session.status === 'EXPIRED') {
+    const err = new Error('Loggin verification link expired');
     err.code = 'TOKEN_EXPIRED';
     throw err;
   }
 
-  const maskedToken = token.slice(0, 4) + '***';
-  try {
-    logger.info('Subscribing for Loggin server-side token verification...', { maskedToken });
-    const result = await loggin.waitForVerify(token, timeoutMs);
-
-    if (!result || !result.phone) {
-      throw new Error('Verification failed: No verified phone number returned');
-    }
-
-    activeTokens.delete(token);
-    logger.info('Loggin token verified successfully server-side', { maskedPhone: result.phone.slice(-4) });
-
-    return {
-      verifiedPhone: result.phone,
-    };
-  } catch (err) {
-    logger.error('Loggin token verification failed/expired', { maskedToken, error: err.message });
-    if (err.message.includes('expired')) {
-      err.code = 'TOKEN_EXPIRED';
-    }
-    throw err;
-  }
+  // If still pending, throw pending status error rather than hanging 300s
+  const err = new Error('Verification pending. Please complete WhatsApp verification.');
+  err.code = 'PENDING';
+  throw err;
 }
 
 module.exports = {
   createToken,
+  getStatus,
+  consumeVerifiedSession,
   verifyToken,
 };

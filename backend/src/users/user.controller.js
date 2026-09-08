@@ -49,9 +49,9 @@ router.get('/dashboard-header', authMiddleware, async (req, res, next) => {
       games = gamesRes.rows.map((row) => ({
         id: row.id,
         title: row.title,
-        imagePath: `/games/${row.id}.png`,
+        imagePath: (row.id === 'seven_up_down' || row.id === '7updown') ? 'Assets/images/7updown.png' : `/games/${row.id}.png`,
         gameUrl: `/games/${row.id}/index.html`,
-        accentColor: row.id === 'classic_dice' ? '#00E676' : (row.id === 'double' ? '#FFD700' : (row.id === '7updown' ? '#FF4081' : '#7C4DFF')),
+        accentColor: row.id === 'classic_dice' ? '#00E676' : (row.id === 'dragon_tiger' ? '#FFD700' : (row.id === 'seven_up_down' || row.id === '7updown' ? '#FF4081' : '#7C4DFF')),
         isAvailable: row.status === 'LIVE',
       }));
     } catch (_) {}
@@ -98,10 +98,10 @@ router.get('/dashboard-header', authMiddleware, async (req, res, next) => {
           isLive: true,
         },
         games: games.length > 0 ? games : [
-          { id: 'classic_dice', title: 'Classic Dice', imagePath: '/games/classic_dice.png', accentColor: '#00E676', gameUrl: '/games/seven_up_down/index.html', isAvailable: true },
-          { id: 'double', title: 'Double', imagePath: '/games/double.png', accentColor: '#FFD700', gameUrl: '/games/seven_up_down/index.html', isAvailable: true },
-          { id: '7updown', title: '7 Up Down', imagePath: '/games/7updown.png', accentColor: '#FF4081', gameUrl: '/games/seven_up_down/index.html', isAvailable: true },
-          { id: 'mines', title: 'Mines', imagePath: '/games/mines.png', accentColor: '#7C4DFF', gameUrl: '/games/seven_up_down/index.html', isAvailable: false },
+          { id: 'seven_up_down', title: '7 Up Down', imagePath: 'Assets/images/7updown.png', accentColor: '#FF4081', gameUrl: '/games/seven_up_down/index.html', isAvailable: true },
+          { id: 'dragon_tiger', title: 'Dragon Vs Tiger', imagePath: 'Assets/images/dtgame.png', accentColor: '#FFD700', gameUrl: '/games/dragon_tiger/index.html', isAvailable: true },
+          { id: 'crush', title: 'Crush', imagePath: 'Assets/images/classic_dice.png', accentColor: '#00E676', gameUrl: '/games/crush/index.html', isAvailable: true },
+          { id: 'mines', title: 'Mines', imagePath: 'Assets/images/mines.png', accentColor: '#7C4DFF', gameUrl: '/games/mines/index.html', isAvailable: false },
         ],
       },
     });

@@ -1,21 +1,29 @@
 const express = require('express');
 const router = express.Router();
-const adminMiddleware = require('../middleware/admin.middleware');
+const { adminMiddleware, requireRole } = require('../middleware/admin_auth.middleware');
 const { query } = require('../database/db');
 const logger = require('../utils/logger');
+const { gameManager } = require('../games/game.manager');
 
 router.use(adminMiddleware);
 
-/** GET /api/admin/games — All games */
+/** GET /api/admin/games — All games with worker health status */
 router.get('/', async (req, res, next) => {
   try {
     const res2 = await query('SELECT * FROM games ORDER BY created_at ASC');
-    res.json({ status: 'success', data: res2.rows });
+    const health = gameManager.getHealthSummary();
+
+    const gamesWithHealth = res2.rows.map((g) => ({
+      ...g,
+      workerStatus: health[g.id] ? (health[g.id].running ? 'HEALTHY' : 'STOPPED') : 'UNREGISTERED',
+    }));
+
+    res.json({ status: 'success', data: gamesWithHealth });
   } catch (err) { next(err); }
 });
 
-/** POST /api/admin/games/:gameId/toggle — Enable / Disable */
-router.post('/:gameId/toggle', async (req, res, next) => {
+/** POST /api/admin/games/:gameId/toggle — Enable / Disable with Engine Health Verification */
+router.post('/:gameId/toggle', requireRole('SUPER_ADMIN', 'GAME_ADMIN'), async (req, res, next) => {
   try {
     const { gameId } = req.params;
     const adminId = req.admin?.id || 'admin_sys';
@@ -23,29 +31,48 @@ router.post('/:gameId/toggle', async (req, res, next) => {
     const cur = await query('SELECT status FROM games WHERE id = $1', [gameId]);
     if (!cur.rows.length) return res.status(404).json({ status: 'error', message: 'Game not found' });
 
-    const newStatus = cur.rows[0].status === 'LIVE' ? 'DISABLED' : 'LIVE';
+    const currentStatus = cur.rows[0].status;
+    const targetStatus = currentStatus === 'LIVE' ? 'DISABLED' : 'LIVE';
+
+    if (targetStatus === 'LIVE') {
+      const isEngineRegistered = !!gameManager.getEngine(gameId);
+      const isWorkerHealthy = gameManager.isWorkerHealthy(gameId);
+
+      if (!isEngineRegistered || !isWorkerHealthy) {
+        return res.status(400).json({
+          status: 'error',
+          code: 'ENGINE_NOT_READY',
+          message: `Cannot mark game [${gameId}] as LIVE: Backend game engine is not registered or worker is unready.`,
+        });
+      }
+    }
+
     const updated = await query(
       'UPDATE games SET status = $1 WHERE id = $2 RETURNING *',
-      [newStatus, gameId]
+      [targetStatus, gameId]
     );
 
     await query(
       `INSERT INTO audit_logs (id, user_id, action, details, created_at)
        VALUES ($1, $2, $3, $4::jsonb, NOW())`,
-      [`al_${Date.now()}`, adminId, 'GAME_TOGGLE', JSON.stringify({ gameId, newStatus })]
+      [`al_${Date.now()}`, adminId, 'GAME_TOGGLE', JSON.stringify({ gameId, newStatus: targetStatus })]
     );
 
-    logger.info('Admin toggled game status', { adminId, gameId, newStatus });
+    logger.info('Admin toggled game status', { adminId, gameId, targetStatus });
     res.json({ status: 'success', data: updated.rows[0] });
   } catch (err) { next(err); }
 });
 
 /** PATCH /api/admin/games/:gameId/config — Update stakes/fee */
-router.patch('/:gameId/config', async (req, res, next) => {
+router.patch('/:gameId/config', requireRole('SUPER_ADMIN', 'GAME_ADMIN'), async (req, res, next) => {
   try {
     const { gameId } = req.params;
     const { entryFee, minStake, maxStake } = req.body;
     const adminId = req.admin?.id || 'admin_sys';
+
+    if (minStake && maxStake && minStake > maxStake) {
+      return res.status(400).json({ status: 'error', message: 'minStake cannot be greater than maxStake' });
+    }
 
     const updated = await query(
       `UPDATE games

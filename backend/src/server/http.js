@@ -3,6 +3,8 @@ const { Server } = require('socket.io');
 const app = require('./app');
 const config = require('../config/env');
 const logger = require('../utils/logger');
+const { verifyToken } = require('../auth/jwt');
+const { gameManager } = require('../games/game.manager');
 
 const server = http.createServer(app);
 
@@ -11,6 +13,24 @@ const io = new Server(server, {
     origin: config.corsOrigin,
     methods: ['GET', 'POST'],
   },
+});
+
+// Socket.IO Authenticated Middleware & Room Binding
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
+  if (token) {
+    try {
+      const decoded = verifyToken(token);
+      if (decoded && decoded.userId) {
+        socket.user = decoded;
+        socket.join(`user:${decoded.userId}`);
+        logger.info('Socket connection authenticated', { socketId: socket.id, userId: decoded.userId });
+      }
+    } catch (err) {
+      logger.warn('Socket token verification failed', { socketId: socket.id, error: err.message });
+    }
+  }
+  next();
 });
 
 app.setOnlineUsersGetter(() => io.engine.clientsCount);
@@ -27,14 +47,14 @@ io.on('connection', (socket) => {
   });
 });
 
-const { startScheduler } = require('../games/seven-up-down/seven_up_down.scheduler');
-
 server.listen(config.port, () => {
   logger.info(`Ingames Backend Server running on port ${config.port}`, {
     env: config.nodeEnv,
     port: config.port,
   });
-  startScheduler(io);
+  
+  // Start GameManager workers for all live games (7 Up Down, Dragon Tiger, Crush)
+  gameManager.init(io);
 });
 
 // Graceful Shutdown

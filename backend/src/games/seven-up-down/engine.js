@@ -67,12 +67,12 @@ class SevenUpDownEngine {
     const serverSeedHash = crypto.createHash('sha256').update(serverSeed).digest('hex');
     const roundId = `7ud_r_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`;
 
-    this.currentRound = {
+    const newRound = {
       roundId,
       gameId: 'seven_up_down',
       status: RoundStatus.CREATED,
       serverSeedHash,
-      serverSeed, // Secret until result reveal
+      serverSeed,
       dice1: null,
       dice2: null,
       diceSum: null,
@@ -84,8 +84,9 @@ class SevenUpDownEngine {
 
     try {
       await gameRepo.createRoundInDb(roundId, this.roundCounter++, serverSeed, serverSeedHash);
+      this.currentRound = newRound;
     } catch (err) {
-      logger.error('Failed to persist new round in PostgreSQL DB', { roundId, error: err.message });
+      logger.error('Failed to persist new round in DB', { roundId, error: err.message });
       throw err;
     }
 
@@ -99,7 +100,7 @@ class SevenUpDownEngine {
       if (this.currentRound && this.currentRound.status === RoundStatus.BETTING_OPEN) {
         return this.currentRound;
       }
-      throw new Error('Cannot open betting: invalid round state');
+      await this.createRound();
     }
     this.currentRound.status = RoundStatus.BETTING_OPEN;
 
@@ -137,7 +138,7 @@ class SevenUpDownEngine {
     });
   }
 
-  // Close Betting Window & Roll Dice (Provably Fair Derived from Server Seed)
+  // Close Betting Window & Roll Dice
   async closeBettingAndRoll() {
     if (!this.currentRound || (this.currentRound.status !== RoundStatus.BETTING_OPEN && this.currentRound.status !== RoundStatus.CREATED)) {
       throw new Error('Cannot roll: round is not in BETTING_OPEN state');
@@ -146,7 +147,6 @@ class SevenUpDownEngine {
     this.currentRound.status = RoundStatus.BETTING_CLOSED;
     this.currentRound.bettingClosedAt = new Date().toISOString();
 
-    // Provably Fair Cryptographic Dice Roll Derived from Server Seed Payload
     const hash = crypto.createHmac('sha256', this.currentRound.serverSeed || 'seed')
       .update(this.currentRound.roundId)
       .digest('hex');
@@ -181,7 +181,7 @@ class SevenUpDownEngine {
         winningBetType
       );
     } catch (err) {
-      logger.error('Failed to update round result in PostgreSQL DB', { roundId: this.currentRound.roundId, error: err.message });
+      logger.error('Failed to update round result in DB', { roundId: this.currentRound.roundId, error: err.message });
       throw err;
     }
 
@@ -196,7 +196,7 @@ class SevenUpDownEngine {
     return this.currentRound;
   }
 
-  // Settle Round Bets with PostgreSQL Wallet Credit
+  // Settle Round Bets
   async settleRound() {
     if (!this.currentRound || this.currentRound.status !== RoundStatus.RESULT) {
       throw new Error('Cannot settle: result not generated');
@@ -245,4 +245,3 @@ module.exports = {
   BetTypes,
   PayoutMultipliers,
 };
-

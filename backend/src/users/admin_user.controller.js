@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const adminMiddleware = require('../middleware/admin.middleware');
+const { adminMiddleware, requireRole } = require('../middleware/admin_auth.middleware');
 const { query, getClient } = require('../database/db');
 const logger = require('../utils/logger');
 const financialService = require('../services/financial.service');
@@ -8,166 +8,17 @@ const financialService = require('../services/financial.service');
 router.use(adminMiddleware);
 
 /**
- * GET /api/admin/users?search=&limit=50&offset=0
- * List all users with current wallet balance.
- */
-router.get('/', async (req, res, next) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
-    const offset = parseInt(req.query.offset || '0', 10);
-    const search = req.query.search?.trim() || '';
-
-    let sql, params;
-
-    if (search) {
-      sql = `
-        SELECT u.id, u.phone, u.username, u.avatar_path, u.created_at,
-               COALESCE(w.available_balance, 0) AS available_balance,
-               COALESCE(w.reserved_balance, 0)  AS reserved_balance
-        FROM users u
-        LEFT JOIN wallets w ON w.user_id = u.id
-        WHERE u.phone ILIKE $1 OR u.username ILIKE $1
-        ORDER BY u.created_at DESC
-        LIMIT $2 OFFSET $3
-      `;
-      params = [`%${search}%`, limit, offset];
-    } else {
-      sql = `
-        SELECT u.id, u.phone, u.username, u.avatar_path, u.created_at,
-               COALESCE(w.available_balance, 0) AS available_balance,
-               COALESCE(w.reserved_balance, 0)  AS reserved_balance
-        FROM users u
-        LEFT JOIN wallets w ON w.user_id = u.id
-        ORDER BY u.created_at DESC
-        LIMIT $1 OFFSET $2
-      `;
-      params = [limit, offset];
-    }
-
-    const result = await query(sql, params);
-    const countRes = await query(
-      search
-        ? `SELECT COUNT(*) FROM users WHERE phone ILIKE $1 OR username ILIKE $1`
-        : `SELECT COUNT(*) FROM users`,
-      search ? [`%${search}%`] : []
-    );
-
-    const users = result.rows.map((u) => ({
-      id: u.id,
-      phone: u.phone,
-      username: u.username,
-      avatarPath: u.avatar_path,
-      createdAt: u.created_at,
-      wallet: {
-        availableBalance: parseInt(u.available_balance, 10) / 100,
-        reservedBalance: parseInt(u.reserved_balance, 10) / 100,
-        totalBalance: (parseInt(u.available_balance, 10) + parseInt(u.reserved_balance, 10)) / 100,
-      },
-    }));
-
-    res.status(200).json({
-      status: 'success',
-      data: users,
-      meta: {
-        total: parseInt(countRes.rows[0]?.count || 0, 10),
-        limit,
-        offset,
-      },
-    });
-  } catch (err) {
-    logger.error('Failed to list users for admin', { error: err.message });
-    next(err);
-  }
-});
-
-/**
- * GET /api/admin/users/:userId
- * Single user detail — profile + wallet + last 50 transactions + last 20 bets.
- */
-router.get('/:userId', async (req, res, next) => {
-  try {
-    const { userId } = req.params;
-
-    const [userRes, walletRes, txnRes, betRes] = await Promise.all([
-      query('SELECT * FROM users WHERE id = $1', [userId]),
-
-      query('SELECT * FROM wallets WHERE user_id = $1', [userId]),
-
-      query(
-        `SELECT id, type, direction, amount, reference_id, metadata, created_at
-         FROM wallet_ledger WHERE user_id = $1
-         ORDER BY created_at DESC LIMIT 50`,
-        [userId]
-      ),
-
-      query(
-        `SELECT id, round_id, bet_type, stake, win_amount, status, created_at
-         FROM bets WHERE user_id = $1
-         ORDER BY created_at DESC LIMIT 20`,
-        [userId]
-      ),
-    ]);
-
-    if (userRes.rows.length === 0) {
-      return res.status(404).json({ status: 'error', message: 'User not found' });
-    }
-
-    const user = userRes.rows[0];
-    const w = walletRes.rows[0] || {};
-    const avail = parseInt(w.available_balance || 0, 10);
-    const resv = parseInt(w.reserved_balance || 0, 10);
-
-    res.status(200).json({
-      status: 'success',
-      data: {
-        user: {
-          id: user.id,
-          phone: user.phone,
-          username: user.username,
-          avatarPath: user.avatar_path,
-          createdAt: user.created_at,
-          updatedAt: user.updated_at,
-        },
-        wallet: {
-          availableBalance: avail / 100,
-          reservedBalance: resv / 100,
-          totalBalance: (avail + resv) / 100,
-        },
-        recentTransactions: txnRes.rows.map((r) => ({
-          id: r.id,
-          type: r.type,
-          direction: r.direction,
-          amount: parseInt(r.amount, 10) / 100,
-          referenceId: r.reference_id,
-          metadata: r.metadata,
-          createdAt: r.created_at,
-        })),
-        recentBets: betRes.rows.map((b) => ({
-          id: b.id,
-          roundId: b.round_id,
-          betType: b.bet_type,
-          stake: parseInt(b.stake, 10) / 100,
-          winAmount: parseInt(b.win_amount || 0, 10) / 100,
-          status: b.status,
-          createdAt: b.created_at,
-        })),
-      },
-    });
-  } catch (err) {
-    logger.error('Failed to fetch user detail for admin', { error: err.message });
-    next(err);
-  }
-});
-
-/**
  * POST /api/admin/users/:userId/adjust-balance
  * Manual balance adjustment. Requires: amount (rupees), direction (CREDIT|DEBIT), reason.
- * Every adjustment is fully traceable via wallet_ledger + audit log.
+ * Idempotent via req.body.idempotencyKey or X-Idempotency-Key header.
  */
-router.post('/:userId/adjust-balance', async (req, res, next) => {
+router.post('/:userId/adjust-balance', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN'), async (req, res, next) => {
   const { userId } = req.params;
   const { amount, direction, reason } = req.body;
   const adminId = req.admin?.id || 'admin_sys';
+
+  const clientProvidedIdempotencyKey = req.body.idempotencyKey || req.headers['x-idempotency-key'];
+  const idempotencyKey = clientProvidedIdempotencyKey || `admin_adj_${adminId}_${userId}_${Math.floor(Date.now() / 60000)}`;
 
   // Strict validation — no silent adjustments
   if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
@@ -180,10 +31,30 @@ router.post('/:userId/adjust-balance', async (req, res, next) => {
     return res.status(400).json({ status: 'error', message: 'reason is required (min 5 chars) for audit trail' });
   }
 
+  // Check if idempotency key was already executed
+  try {
+    const existingLedger = await query('SELECT * FROM wallet_ledger WHERE idempotency_key = $1', [idempotencyKey]);
+    if (existingLedger.rows.length > 0) {
+      const existing = existingLedger.rows[0];
+      logger.info('Duplicate admin balance adjustment request caught by idempotency key', { idempotencyKey });
+      return res.status(200).json({
+        status: 'success',
+        message: 'Adjustment request already processed (idempotent response)',
+        data: {
+          idempotencyKey,
+          referenceId: existing.reference_id,
+          userId: existing.user_id,
+          amountRupees: parseInt(existing.amount, 10) / 100,
+          direction: existing.direction,
+          alreadyProcessed: true,
+        },
+      });
+    }
+  } catch (_) {}
+
   const client = await getClient();
   try {
     const amountPaise = Math.round(Number(amount) * 100);
-    const idempotencyKey = `admin_adj_${adminId}_${userId}_${Date.now()}`;
     const referenceId = `adj_${Date.now()}`;
 
     let walletResult;
@@ -218,6 +89,7 @@ router.post('/:userId/adjust-balance', async (req, res, next) => {
       amountPaise,
       reason: reason.trim(),
       referenceId,
+      idempotencyKey,
     });
 
     res.status(200).json({

@@ -6,7 +6,12 @@ class AuthApi {
     return res as Map<String, dynamic>;
   }
 
-  static Future<Map<String, dynamic>> verifyLogginToken(String token, {Duration timeout = const Duration(seconds: 90)}) async {
+  static Future<Map<String, dynamic>> checkStatus(String token) async {
+    final res = await ApiClient.get('/auth/loggin/status/$token');
+    return res as Map<String, dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> verifyLogginToken(String token, {Duration timeout = const Duration(seconds: 12)}) async {
     final res = await ApiClient.post('/auth/loggin/verify', {'token': token}, timeout: timeout);
     return res as Map<String, dynamic>;
   }

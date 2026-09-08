@@ -5,85 +5,101 @@ const authMiddleware = require('../middleware/authMiddleware');
 const { query } = require('../database/db');
 const logger = require('../utils/logger');
 const { sevenUpDownEngine } = require('./seven-up-down/engine');
+const { dragonTigerEngine } = require('./dragon-tiger/dragon_tiger.engine');
+const { crushEngine } = require('./crush/crush.engine');
 const gameRepo = require('./seven-up-down/game.repository');
 const walletRepo = require('../wallet/wallet.repository');
 
-// Catalog of Games (Fetched from PostgreSQL DB)
+// Catalog of Games
 router.get('/', async (req, res) => {
   try {
     const dbRes = await query('SELECT * FROM games ORDER BY created_at ASC');
+    const imageMap = {
+      seven_up_down: 'Assets/images/7updown.png',
+      '7updown': 'Assets/images/7updown.png',
+      dragon_tiger: 'Assets/images/dtgame.png',
+      crush: 'Assets/images/classic_dice.png',
+      mines: 'Assets/images/mines.png',
+    };
+
     const gamesList = dbRes.rows.map((row) => ({
       id: row.id,
       title: row.title,
       status: row.status,
+      isAvailable: row.status === 'LIVE',
       entryFee: parseInt(row.entry_fee || 1000, 10) / 100,
       prizePool: (parseInt(row.entry_fee || 1000, 10) * 1.8) / 100,
       route: `/games/${row.id}/index.html`,
-      imagePath: `assets/images/${row.id}.png`,
+      gameUrl: `/games/${row.id}/index.html`,
+      imagePath: imageMap[row.id] || `Assets/images/${row.id}.png`,
     }));
 
-    return res.status(200).json({
-      status: 'success',
-      data: gamesList,
-    });
+    return res.status(200).json({ status: 'success', data: gamesList });
   } catch (err) {
-    logger.error('Failed to fetch games catalog from PostgreSQL', { error: err.message });
-    return res.status(500).json({
-      status: 'error',
-      message: 'Failed to fetch games catalog from database',
-    });
+    logger.error('Failed to fetch games catalog', { error: err.message });
+    return res.status(500).json({ status: 'error', message: 'Failed to fetch games catalog' });
   }
 });
 
-// Deprecated Join Game Endpoint (Return 400 as per specification)
-router.post('/join', authMiddleware, async (req, res) => {
-  return res.status(400).json({
-    status: 'error',
-    message: 'Endpoint deprecated. Use /api/games/7updown/bets to place bets.',
-  });
+// Generic Current State & Resync Endpoint
+router.get('/:gameId/current-state', async (req, res) => {
+  const { gameId } = req.params;
+  try {
+    let engine = null;
+    if (gameId === 'seven_up_down' || gameId === '7updown') engine = sevenUpDownEngine;
+    else if (gameId === 'dragon_tiger') engine = dragonTigerEngine;
+    else if (gameId === 'crush') engine = crushEngine;
+
+    if (!engine) {
+      return res.status(404).json({ status: 'error', message: `Unknown game: ${gameId}` });
+    }
+
+    const currentRound = engine.currentRound || (await engine.createRound());
+    const now = Date.now();
+    const closesAt = new Date(currentRound.bettingClosesAt || currentRound.createdAt).getTime();
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        gameId,
+        currentRound,
+        serverTime: new Date().toISOString(),
+        timeRemainingMs: Math.max(0, closesAt - now),
+      },
+    });
+  } catch (err) {
+    logger.error('Failed to fetch game state', { gameId, error: err.message });
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
 });
 
-// GET /api/games/7updown/current-round
+// 7 Up Down Current Round
 router.get('/7updown/current-round', async (req, res) => {
   try {
     const currentRound = await sevenUpDownEngine.getOrStartCurrentRound();
     return res.status(200).json({
       status: 'success',
-      data: {
-        roundId: currentRound.roundId,
-        gameId: currentRound.gameId,
-        status: currentRound.status,
-        serverSeedHash: currentRound.serverSeedHash,
-        createdAt: currentRound.createdAt,
-      },
+      data: currentRound,
     });
   } catch (err) {
-    logger.error('Failed to fetch current 7 Up Down round', { error: err.message });
-    return res.status(500).json({
-      status: 'error',
-      message: 'Failed to fetch active round state',
-    });
+    return res.status(500).json({ status: 'error', message: err.message });
   }
 });
 
-// POST /api/games/7updown/bets (Authenticated)
+// 7 Up Down Place Bet
 router.post('/7updown/bets', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const { roundId, bets, betType, stake, stakePaise, idempotencyKey } = req.body;
 
     let betList = [];
-
     if (Array.isArray(bets) && bets.length > 0) {
       betList = bets;
     } else if (betType) {
       const computedStakePaise = stakePaise || (stake ? Math.round(parseFloat(stake) * 100) : 0);
       betList = [{ betType, stakePaise: computedStakePaise, idempotencyKey: idempotencyKey || `idemp_bet_${userId}_${Date.now()}` }];
     } else {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Invalid request: bets array or betType is required',
-      });
+      return res.status(400).json({ status: 'error', message: 'bets array or betType is required' });
     }
 
     const placedBets = [];
@@ -110,75 +126,80 @@ router.post('/7updown/bets', authMiddleware, async (req, res) => {
     }
 
     const updatedWallet = await walletRepo.getWalletByUserId(userId);
-
-    return res.status(200).json({
-      status: 'success',
-      data: {
-        bets: placedBets,
-        wallet: updatedWallet,
-      },
-    });
+    return res.status(200).json({ status: 'success', data: { bets: placedBets, wallet: updatedWallet } });
   } catch (err) {
-    logger.error('Failed to place bet in 7 Up Down', { userId: req.user?.id, error: err.message });
-    return res.status(400).json({
-      status: 'error',
-      message: err.message || 'Failed to place bet',
-    });
+    return res.status(400).json({ status: 'error', message: err.message || 'Failed to place bet' });
   }
 });
 
-// GET /api/games/7updown/history
-router.get('/7updown/history', async (req, res) => {
+// Dragon Tiger Place Bet
+router.post('/dragon_tiger/bets', authMiddleware, async (req, res) => {
   try {
-    const history = await gameRepo.getRecentRoundsFromDb(50);
+    const userId = req.user.id;
+    const { betType, stake, stakePaise, idempotencyKey } = req.body;
+    const computedStakePaise = stakePaise || (stake ? Math.round(parseFloat(stake) * 100) : 0);
+
+    const { bet, wallet } = await dragonTigerEngine.placeBet({
+      userId,
+      betType,
+      stakePaise: computedStakePaise,
+      idempotencyKey,
+    });
+
     return res.status(200).json({
       status: 'success',
-      data: history,
+      data: { bet, wallet },
     });
   } catch (err) {
-    logger.error('Failed to fetch 7 Up Down history', { error: err.message });
-    return res.status(500).json({
-      status: 'error',
-      message: 'Failed to fetch round history',
-    });
+    return res.status(400).json({ status: 'error', message: err.message });
   }
 });
 
-// GET /api/games/7updown/round/:roundId
-router.get('/7updown/round/:roundId', async (req, res) => {
+// Crush Place Bet
+router.post('/crush/bets', authMiddleware, async (req, res) => {
   try {
-    const { roundId } = req.params;
-    const round = await gameRepo.getRoundByIdFromDb(roundId);
+    const userId = req.user.id;
+    const { stake, stakePaise, autoCashoutMultiplier, idempotencyKey } = req.body;
+    const computedStakePaise = stakePaise || (stake ? Math.round(parseFloat(stake) * 100) : 0);
 
-    if (!round) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Round not found',
-      });
-    }
-
-    let userBets = [];
-    if (req.user) {
-      userBets = await gameRepo.getUserBetsForRoundInDb(roundId, req.user.id);
-    }
+    const { bet, wallet } = await crushEngine.placeBet({
+      userId,
+      stakePaise: computedStakePaise,
+      autoCashoutMultiplier,
+      idempotencyKey,
+    });
 
     return res.status(200).json({
       status: 'success',
-      data: {
-        round,
-        userBets,
-      },
+      data: { bet, wallet },
     });
   } catch (err) {
-    logger.error('Failed to fetch round details', { roundId: req.params.roundId, error: err.message });
-    return res.status(500).json({
-      status: 'error',
-      message: 'Failed to fetch round details',
-    });
+    return res.status(400).json({ status: 'error', message: err.message });
   }
 });
 
-// Authenticated User Bet History Endpoint (Fetched from PostgreSQL DB)
+// Crush Cashout
+router.post('/crush/cashout', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { betId, multiplier } = req.body;
+
+    const result = await crushEngine.cashoutBet({
+      betId,
+      userId,
+      multiplier: parseFloat(multiplier),
+    });
+
+    return res.status(200).json({
+      status: 'success',
+      data: result,
+    });
+  } catch (err) {
+    return res.status(400).json({ status: 'error', message: err.message });
+  }
+});
+
+// Authenticated User Bet History Endpoint
 router.get('/bet-history', authMiddleware, async (req, res) => {
   try {
     const dbRes = await query(
@@ -202,16 +223,10 @@ router.get('/bet-history', authMiddleware, async (req, res) => {
       timestamp: row.timestamp,
     }));
 
-    return res.status(200).json({
-      status: 'success',
-      data: betsHistory,
-    });
+    return res.status(200).json({ status: 'success', data: betsHistory });
   } catch (err) {
-    logger.error('Failed to fetch user bet history from PostgreSQL', { userId: req.user.id, error: err.message });
-    return res.status(500).json({
-      status: 'error',
-      message: 'Failed to fetch bet history',
-    });
+    logger.error('Failed to fetch user bet history', { userId: req.user.id, error: err.message });
+    return res.status(500).json({ status: 'error', message: 'Failed to fetch bet history' });
   }
 });
 

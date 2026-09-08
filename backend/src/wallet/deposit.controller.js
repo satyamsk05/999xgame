@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const depositRepo = require('./deposit.repository');
+const telegramService = require('../services/telegram.service');
 
 /**
  * POST /api/deposits — Create PENDING Deposit Order
@@ -21,6 +22,12 @@ router.post('/', authMiddleware, async (req, res, next) => {
       amountRupees: parseFloat(amount),
       paymentMethod: paymentMethod || 'UPI',
     });
+
+    telegramService.notifyDepositCreated({
+      depositId: order.deposit_id || order.id,
+      userId: req.user.id,
+      amountRupees: parseFloat(amount),
+    }).catch(() => {});
 
     res.status(201).json({
       status: 'success',
@@ -84,6 +91,13 @@ router.post('/:depositId/utr', authMiddleware, async (req, res, next) => {
       utr,
     });
 
+    telegramService.notifyDepositUtrSubmitted({
+      depositId: updatedOrder.deposit_id || req.params.depositId,
+      userId: req.user.id,
+      amountRupees: parseInt(updatedOrder.amount || 0, 10) / 100,
+      utr: utr.trim(),
+    }).catch(() => {});
+
     res.status(200).json({
       status: 'success',
       message: 'UTR submitted successfully. Pending admin manual verification.',
@@ -101,4 +115,3 @@ router.post('/:depositId/utr', authMiddleware, async (req, res, next) => {
 });
 
 module.exports = router;
-
