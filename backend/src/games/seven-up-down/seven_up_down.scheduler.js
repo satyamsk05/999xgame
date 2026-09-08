@@ -27,6 +27,14 @@ function sleep(ms) {
   });
 }
 
+async function recoverRounds() {
+  try {
+    await sevenUpDownEngine.recoverFromDb();
+  } catch (err) {
+    logger.error('7 Up Down recovery failed after leader acquisition', { error: err.message });
+  }
+}
+
 async function runGameCycle(io = null) {
   let round = await sevenUpDownEngine.getOrStartCurrentRound();
 
@@ -86,10 +94,6 @@ async function runGameCycle(io = null) {
   if (!isRunning) return;
 
   const result = await sevenUpDownEngine.settleRound();
-
-  // Never broadcast per-user settlement rows. They contain internal user identifiers
-  // and wallet details that are not needed by other players. Clients refresh their own
-  // wallet through the authenticated API after settlement.
   const publicSettlement = {
     roundId: round.roundId,
     winningBetType: round.winningBetType,
@@ -111,21 +115,28 @@ async function runGameCycle(io = null) {
 }
 
 async function schedulerLoop(io) {
-  try {
-    await sevenUpDownEngine.recoverFromDb();
-  } catch (err) {
-    logger.error('7 Up Down startup recovery failed', { error: err.message });
-  }
+  let wasLeader = false;
 
   while (isRunning) {
     try {
       const isLeader = await leaderLock.acquire();
       if (!isLeader || !isDatabaseReady()) {
+        wasLeader = false;
         await sleep(LEADER_POLL_MS);
         continue;
       }
+
+      // A new leader may have taken over while the previous process was mid-round.
+      // Recover BEFORE creating another round, otherwise accepted bets can remain
+      // stranded and an orphaned round can be skipped during failover.
+      if (!wasLeader) {
+        await recoverRounds();
+        wasLeader = true;
+      }
+
       await runGameCycle(io);
     } catch (err) {
+      wasLeader = false;
       logger.error('Error in 7 Up Down game loop cycle', { error: err.message });
       await sleep(5000);
     }
