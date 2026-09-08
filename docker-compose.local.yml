@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ingames_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - 999xgame-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ingames_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - 999xgame-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 5050
+      LOG_LEVEL: info
+      TRUST_PROXY: "false"
+      BODY_LIMIT: 1mb
+      CORS_ORIGIN: http://localhost:5050,http://localhost:3000,http://10.0.2.2:5050
+      MAINTENANCE_MODE: "false"
+      MINIMUM_APP_VERSION: 1.0.0
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ingames_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_SSL: "false"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      JWT_SECRET: local-only-user-secret-change-me-999xgame
+      ADMIN_JWT_SECRET: local-only-admin-secret-change-me-999xgame
+      JWT_ISSUER: 999xgame
+      JWT_AUDIENCE: 999xgame-app
+      ADMIN_JWT_AUDIENCE: 999xgame-admin
+      JWT_TTL_SECONDS: 604800
+      ADMIN_JWT_TTL_SECONDS: 43200
+      ADMIN_BREAK_GLASS_ENABLED: "false"
+      LOGGIN_APP_KEY: loggin_app_key_dev
+      TELEGRAM_BOT_TOKEN: ""
+      TELEGRAM_CHAT_ID: ""
+      PAYMENT_UPI_ID: pay.ingames@bank
+      PAYMENT_MERCHANT_NAME: 999x Local Test
+    ports:
+      - "5050:5050"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5050/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  999xgame-postgres:
+  999xgame-redis:
