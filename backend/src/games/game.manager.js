@@ -45,18 +45,24 @@ class GameManager {
   startWorker(gameId) {
     const worker = this.workers.get(gameId);
     if (!worker) throw new Error(`Cannot start worker: game [${gameId}] is not registered`);
+    if (typeof worker.isWorkerRunning === 'function' && worker.isWorkerRunning()) return false;
     worker.startScheduler(this.io);
+    return true;
   }
 
-  stopWorker(gameId) {
+  async stopWorker(gameId) {
     const worker = this.workers.get(gameId);
-    if (worker) return worker.stopScheduler();
-    return undefined;
+    if (!worker) return false;
+    if (typeof worker.isWorkerRunning === 'function' && !worker.isWorkerRunning()) return false;
+    await worker.stopScheduler();
+    return true;
   }
 
   async setGameLive(gameId, live) {
+    if (!this.workers.has(gameId) || !this.getEngine(gameId)) {
+      throw new Error(`Game is not registered: ${gameId}`);
+    }
     if (live) {
-      if (!this.getEngine(gameId)) throw new Error(`Game engine is not registered: ${gameId}`);
       this.startWorker(gameId);
     } else {
       await this.stopWorker(gameId);
