@@ -8,6 +8,18 @@ class ApiClient {
         localStorage.setItem('ingames_token', tokenFromUrl);
         return tokenFromUrl;
       }
+
+      // Game sessions are passed in the URL fragment so the credential is not sent to
+      // the server as part of the HTTP request/referrer. Keep query support for legacy
+      // links, but prefer the short-lived fragment token.
+      const hash = window.location.hash || '';
+      const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.substring(1) : hash);
+      const tokenFromHash = hashParams.get('token');
+      if (tokenFromHash) {
+        localStorage.setItem('ingames_token', tokenFromHash);
+        return tokenFromHash;
+      }
+
       if (window.IN_GAMES_AUTH_TOKEN) return window.IN_GAMES_AUTH_TOKEN;
       return localStorage.getItem('ingames_token');
     } catch (_) {
@@ -97,7 +109,6 @@ class ApiClient {
       } catch (_) {}
     }
   }
-
 }
 
 export const apiClient = new ApiClient();
