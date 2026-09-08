@@ -8,7 +8,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../core/api/api_client.dart';
 import '../features/wallet/data/wallet_api.dart';
-import '../core/storage/token_manager.dart';
 import '../services/api_service.dart';
 import '../widgets/network_error_widget.dart';
 import 'html5_helper.dart';
@@ -41,7 +40,6 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
   bool _hasWebError = false;
   WebViewController? _webViewController;
   StreamSubscription? _msgSubscription;
-  String? _gameSessionToken;
 
   String get _gameId {
     final match = RegExp(r'/games/([^/]+)/').firstMatch(widget.gameUrl);
@@ -67,7 +65,6 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
           statusCode: 500,
         );
       }
-      _gameSessionToken = token;
       await _initializeGameView(token);
     } catch (e) {
       if (!mounted) return;
