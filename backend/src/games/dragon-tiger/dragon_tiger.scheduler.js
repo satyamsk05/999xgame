@@ -3,15 +3,6 @@ const { GameLeaderLock } = require('../scheduler.lock');
 const { isDatabaseReady } = require('../../database/db');
 const logger = require('../../utils/logger');
 
-/**
- * Dragon Tiger game worker (sec 22, 23, 47).
- *
- * Single async loop (no overlapping timers) owning each full cycle. A PostgreSQL
- * advisory leader lock ensures only ONE instance runs this game across a fleet, and
- * the loop fails closed (idles) when the DB is not ready. Orphaned rounds from a
- * previous process are recovered deterministically on startup.
- */
-
 const GAME_ID = 'dragon_tiger';
 const BETTING_WINDOW_MS = 15000;
 const REVEAL_BUFFER_MS = 3000;
@@ -22,7 +13,6 @@ let isRunning = false;
 let loopPromise = null;
 const leaderLock = new GameLeaderLock(GAME_ID);
 
-/** Interruptible sleep so graceful shutdown is responsive. */
 function sleep(ms) {
   return new Promise((resolve) => {
     const step = 200;
@@ -35,6 +25,14 @@ function sleep(ms) {
       }
     }, step);
   });
+}
+
+async function recoverRounds() {
+  try {
+    await dragonTigerEngine.recoverFromDb();
+  } catch (err) {
+    logger.error('Dragon Tiger recovery failed after leader acquisition', { error: err.message });
+  }
 }
 
 async function runGameCycle(io) {
@@ -66,7 +64,6 @@ async function runGameCycle(io) {
     });
   }
 
-  // Draw cards & reveal the committed result (deterministic from the server seed).
   const resultRound = await dragonTigerEngine.drawCardsAndReveal();
 
   if (io) {
@@ -89,7 +86,6 @@ async function runGameCycle(io) {
   await sleep(REVEAL_BUFFER_MS);
   if (!isRunning) return;
 
-  // Settle atomically (sec 23). A failure throws -> logged; recovery settles next boot.
   const settlement = await dragonTigerEngine.settleRound();
 
   if (io) {
@@ -107,23 +103,26 @@ async function runGameCycle(io) {
 }
 
 async function schedulerLoop(io) {
-  // Recover orphaned rounds from a previous process before scheduling new ones.
-  try {
-    await dragonTigerEngine.recoverFromDb();
-  } catch (err) {
-    logger.error('Dragon Tiger startup recovery failed', { error: err.message });
-  }
+  let wasLeader = false;
 
   while (isRunning) {
     try {
       const isLeader = await leaderLock.acquire();
       if (!isLeader || !isDatabaseReady()) {
-        // Not leader, or DB not ready: idle and re-poll. NEVER create rounds here.
+        wasLeader = false;
         await sleep(LEADER_POLL_MS);
         continue;
       }
+
+      // Recover any round left by a failed previous leader before creating a new one.
+      if (!wasLeader) {
+        await recoverRounds();
+        wasLeader = true;
+      }
+
       await runGameCycle(io);
     } catch (err) {
+      wasLeader = false;
       logger.error('Error in Dragon Tiger game loop cycle', { error: err.message });
       await sleep(5000);
     }
