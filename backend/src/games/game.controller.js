@@ -123,9 +123,25 @@ router.get('/:gameId/current-state', async (req, res) => {
 router.get('/7updown/current-round', async (req, res) => {
   try {
     const currentRound = await sevenUpDownEngine.getOrStartCurrentRound();
-    return res.status(200).json({ status: 'success', data: currentRound });
+    const now = Date.now();
+    const createdAtMs = Date.parse(currentRound.createdAt || '');
+    const closedAtMs = Date.parse(currentRound.bettingClosedAt || '');
+    const bettingClosesAtMs = Number.isFinite(closedAtMs) && closedAtMs > 0
+      ? closedAtMs
+      : (Number.isFinite(createdAtMs) ? createdAtMs + 15000 : now);
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        currentRound,
+        serverTime: new Date(now).toISOString(),
+        timeRemainingMs: Math.max(0, bettingClosesAtMs - now),
+        bettingClosesAt: new Date(bettingClosesAtMs).toISOString(),
+      },
+    });
   } catch (err) {
-    return res.status(500).json({ status: 'error', message: err.message });
+    logger.error('Failed to fetch 7 Up Down current round', { error: err.message });
+    return res.status(500).json({ status: 'error', message: 'Failed to fetch current game round' });
   }
 });
 
