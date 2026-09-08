@@ -1,28 +1,28 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:web/web.dart' as web;
-import '../core/api/api_client.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../core/storage/token_manager.dart';
 import 'api_service.dart';
+import 'dashboard_sync_manager.dart';
 
-/// Lightweight browser-compatible realtime synchronizer.
+/// Authoritative realtime synchronization for the Flutter client.
 ///
-/// The backend is authoritative. Realtime messages are treated as hints/events;
-/// after reconnect the service re-reads the authoritative REST state instead of
-/// assuming that no events were missed while offline.
+/// Socket.IO is used only as a realtime transport. Wallet balances, game
+/// state and other financial data are always re-read from the backend after a
+/// reconnect or settlement event, so a missed socket event can never become
+/// the source of truth.
 class RealtimeSyncService {
   static final RealtimeSyncService instance = RealtimeSyncService._();
   RealtimeSyncService._();
 
-  Timer? _reconnectTimer;
+  IO.Socket? _socket;
   bool _running = false;
   bool _refreshInFlight = false;
-  int _reconnectAttempt = 0;
-  web.WebSocket? _socket;
+  Timer? _manualReconnectTimer;
 
   final ValueNotifier<bool> isConnected = ValueNotifier<bool>(false);
-  final ValueNotifier<Map<String, dynamic>?> lastEvent = ValueNotifier<Map<String, dynamic>?>(null);
+  final ValueNotifier<Map<String, dynamic>?> lastEvent =
+      ValueNotifier<Map<String, dynamic>?>(null);
 
   Future<void> start() async {
     if (_running) return;
@@ -32,96 +32,118 @@ class RealtimeSyncService {
 
   Future<void> stop() async {
     _running = false;
-    _reconnectTimer?.cancel();
-    _reconnectTimer = null;
-    _socket?.close();
+    _manualReconnectTimer?.cancel();
+    _manualReconnectTimer = null;
+    _socket?.dispose();
     _socket = null;
     isConnected.value = false;
   }
 
   Future<void> _connect() async {
-    if (!_running || !TokenManager.isAuthenticated) {
-      _scheduleReconnect();
-      return;
-    }
+    if (!_running || !TokenManager.isAuthenticated) return;
+
+    _socket?.dispose();
+    _socket = null;
 
     try {
-      final wsUrl = _buildWebSocketUrl(ApiService.serverDomain, TokenManager.token!);
-      final socket = web.WebSocket(wsUrl);
+      final token = TokenManager.token;
+      if (token == null || token.isEmpty) return;
+
+      final socket = IO.io(
+        ApiService.serverDomain,
+        IO.OptionBuilder()
+            .setTransports(['websocket'])
+            .setAuth({'token': token})
+            .enableReconnection()
+            .setReconnectionAttempts(999999)
+            .setReconnectionDelay(1000)
+            .setReconnectionDelayMax(30000)
+            .build(),
+      );
+
       _socket = socket;
 
-      socket.onopen = (_) async {
-        if (!_running) return;
-        _reconnectAttempt = 0;
+      socket.onConnect((_) async {
+        if (!_running || !identical(_socket, socket)) return;
         isConnected.value = true;
         await _refreshAuthoritativeState();
-      };
+      });
 
-      socket.onmessage = (web.MessageEvent event) {
-        _handleMessage(event.data);
-      };
+      socket.onDisconnect((_) {
+        if (identical(_socket, socket)) isConnected.value = false;
+      });
 
-      socket.onerror = (_) {
+      socket.onConnectError((error) {
+        if (!identical(_socket, socket)) return;
         isConnected.value = false;
-      };
+        _scheduleManualReconnect();
+      });
 
-      socket.onclose = (_) {
-        isConnected.value = false;
-        _socket = null;
-        _scheduleReconnect();
-      };
-    } catch (_) {
-      isConnected.value = false;
-      _scheduleReconnect();
-    }
-  }
+      socket.onError((_) {
+        if (identical(_socket, socket)) isConnected.value = false;
+      });
 
-  String _buildWebSocketUrl(String serverDomain, String token) {
-    final uri = Uri.parse(serverDomain);
-    final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
-    return Uri(
-      scheme: scheme,
-      host: uri.host,
-      port: uri.hasPort ? uri.port : null,
-      path: '/socket.io/',
-      queryParameters: {'token': token},
-    ).toString();
-  }
-
-  void _handleMessage(dynamic raw) {
-    if (raw is! String) return;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        lastEvent.value = decoded;
-        final type = decoded['type']?.toString();
-        if (type == 'GAME_ROUND_SETTLED' || type == 'GAME_RESULT' || type == 'WALLET_UPDATED') {
-          _refreshAuthoritativeState();
-        }
+      // Global authoritative game events. These are intentionally treated as
+      // invalidation signals, not as trusted wallet/balance values.
+      for (final eventName in const [
+        'GAME_ROUND_OPEN',
+        'GAME_BETTING_CLOSED',
+        'GAME_RESULT',
+        'GAME_ROUND_SETTLED',
+        '7ud:round_open',
+        '7ud:dice_rolled',
+        '7ud:round_settled',
+        'dt:round_open',
+        'dt:result',
+        'dt:round_settled',
+        'crush:round_open',
+        'crush:result',
+        'crush:round_settled',
+      ]) {
+        socket.on(eventName, (data) {
+          _handleRealtimeEvent(eventName, data);
+        });
       }
     } catch (_) {
-      // Socket.IO framing is not guaranteed to be plain JSON here.
+      isConnected.value = false;
+      _scheduleManualReconnect();
     }
   }
 
-  void _scheduleReconnect() {
-    if (!_running || _reconnectTimer != null) return;
-    final delaySeconds = [1, 2, 4, 8, 15, 30][(_reconnectAttempt++).clamp(0, 5)];
-    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () async {
-      _reconnectTimer = null;
-      await _connect();
+  void _handleRealtimeEvent(String eventName, dynamic data) {
+    final event = <String, dynamic>{
+      'name': eventName,
+      'data': data,
+      'receivedAt': DateTime.now().toUtc().toIso8601String(),
+    };
+    lastEvent.value = event;
+
+    if (eventName == 'GAME_ROUND_SETTLED' ||
+        eventName == 'GAME_RESULT' ||
+        eventName.endsWith(':round_settled') ||
+        eventName.endsWith(':result')) {
+      _refreshAuthoritativeState();
+    }
+  }
+
+  void _scheduleManualReconnect() {
+    if (!_running || _manualReconnectTimer != null) return;
+    _manualReconnectTimer = Timer(const Duration(seconds: 5), () async {
+      _manualReconnectTimer = null;
+      if (_running && !isConnected.value) await _connect();
     });
   }
 
   Future<void> _refreshAuthoritativeState() async {
-    if (_refreshInFlight || !TokenManager.isAuthenticated) return;
+    if (_refreshInFlight || !_running || !TokenManager.isAuthenticated) return;
     _refreshInFlight = true;
     try {
+      // Profile contains the authoritative wallet summary used by the home UI.
       await ApiService.getUserProfile();
-      await ApiService.getGamesList();
+      await DashboardSyncManager.syncWithServer();
     } catch (_) {
-      // Reconnect loop handles transport failures; do not overwrite authoritative
-      // state with stale local data when refresh fails.
+      // Never replace authoritative data with a local guess. Socket.IO will
+      // reconnect and trigger another refresh when transport recovers.
     } finally {
       _refreshInFlight = false;
     }
