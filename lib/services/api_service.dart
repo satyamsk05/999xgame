@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../core/api/api_client.dart';
 import '../features/wallet/data/wallet_api.dart';
 
@@ -9,6 +10,15 @@ class ApiService {
   );
 
   static String get baseUrl => '$serverDomain/api';
+
+  static Future<bool> isBackendReady({Duration timeout = const Duration(seconds: 5)}) async {
+    try {
+      final response = await http.get(Uri.parse('$serverDomain/ready')).timeout(timeout);
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 
   static Future<Map<String, dynamic>?> getAppConfig() async {
     try {
