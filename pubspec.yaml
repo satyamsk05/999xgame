@@ -35,7 +35,7 @@ flutter:
     - Assets/images/
     - Assets/Avatar/
     - Assets/nav_icon/
-    - assets/game/seven_up_down/
-    - assets/game/seven_up_down/assets/
-    - assets/game/seven_up_down/assets/chips/
+    - Assets/game/seven_up_down/
+    - Assets/game/seven_up_down/assets/
+    - Assets/game/seven_up_down/assets/chips/
     - Assets/chips/
