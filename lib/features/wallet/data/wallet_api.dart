@@ -28,7 +28,6 @@ class WalletApi {
 
   /// Compatibility boundary for existing UI callers. The value is converted to
   /// exact paise before it reaches the API layer.
-  @Deprecated('Use createDepositOrderPaise with MoneyPaise for new code.')
   static Future<Map<String, dynamic>> createDepositOrder({
     required double amount,
     String paymentMethod = 'UPI',
@@ -51,7 +50,6 @@ class WalletApi {
 
   /// Compatibility boundary for existing UI callers. The value is converted to
   /// exact paise before it reaches the API layer.
-  @Deprecated('Use withdrawCashPaise with MoneyPaise for new code.')
   static Future<Map<String, dynamic>> withdrawCash({
     required double amount,
     required String upiId,
