@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server/http.js",
     "dev": "nodemon src/server/http.js",
-    "test": "NODE_ENV=test find tests src -type f -name '*.test.js' -print0 | xargs -0 node --test --test-force-exit --test-concurrency=1"
+    "test": "export NODE_ENV=test && find tests src -type f -name '*.test.js' -print0 | xargs -0 node --test --test-force-exit --test-concurrency=1"
   },
   "dependencies": {
     "@loggin/sdk": "^0.1.1",
