@@ -2,13 +2,10 @@ const express = require('express');
 const router = express.Router();
 const logginService = require('./loggin.service');
 const userRepo = require('../users/user.repository');
-const { signToken } = require('./jwt');
+const { signToken, verifyToken, revokeToken } = require('./jwt');
 const logger = require('../utils/logger');
 
 function serializeWallet(wallet = {}) {
-  // findOrCreateUserByPhone returns the wallet in rupees/camelCase, while some
-  // callers may provide the raw PostgreSQL paise/snake_case row. Support both
-  // shapes so login can never accidentally report a zero wallet.
   const hasPaiseShape = [
     'available_balance',
     'reserved_balance',
@@ -75,6 +72,27 @@ async function completeLoginFromVerifiedSession(token) {
   };
 }
 
+router.post('/logout', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ status: 'error', code: 'UNAUTHORIZED', message: 'Authorization token required.' });
+  }
+
+  try {
+    const token = authHeader.slice('Bearer '.length).trim();
+    const decoded = verifyToken(token);
+    await revokeToken(decoded);
+    return res.status(200).json({ status: 'success', message: 'Logged out successfully.' });
+  } catch (err) {
+    logger.warn('User logout failed', { error: err.message, code: err.code });
+    return res.status(err.statusCode === 503 ? 503 : 401).json({
+      status: 'error',
+      code: err.code || 'LOGOUT_FAILED',
+      message: err.statusCode === 503 ? 'Authentication service temporarily unavailable. Please try again shortly.' : 'Invalid or expired session.',
+    });
+  }
+});
+
 router.post('/loggin/create-token', async (req, res) => {
   try {
     const { token, link, expiresAt } = await logginService.createToken();
@@ -91,18 +109,10 @@ router.get('/loggin/status/:token', async (req, res) => {
 
   try {
     const result = await completeLoginFromVerifiedSession(token);
-    if (!result) {
-      return res.status(410).json({ status: 'error', code: 'TOKEN_EXPIRED', message: 'Loggin verification link expired. Please generate a new link.' });
-    }
-    if (result.pending) {
-      return res.status(200).json({ status: 'success', verificationStatus: 'PENDING', message: 'Verification is pending user action on WhatsApp.' });
-    }
-    if (result.consumed) {
-      return res.status(409).json({ status: 'error', code: 'ALREADY_CONSUMED', message: 'This verification link has already been used.' });
-    }
-    if (result.blocked) {
-      return res.status(403).json({ status: 'error', code: 'ACCOUNT_BLOCKED', message: 'Account is suspended or blocked. Please contact support.' });
-    }
+    if (!result) return res.status(410).json({ status: 'error', code: 'TOKEN_EXPIRED', message: 'Loggin verification link expired. Please generate a new link.' });
+    if (result.pending) return res.status(200).json({ status: 'success', verificationStatus: 'PENDING', message: 'Verification is pending user action on WhatsApp.' });
+    if (result.consumed) return res.status(409).json({ status: 'error', code: 'ALREADY_CONSUMED', message: 'This verification link has already been used.' });
+    if (result.blocked) return res.status(403).json({ status: 'error', code: 'ACCOUNT_BLOCKED', message: 'Account is suspended or blocked. Please contact support.' });
 
     return res.status(200).json({
       status: 'success',
@@ -130,18 +140,10 @@ router.post('/loggin/verify', async (req, res) => {
 
   try {
     const result = await completeLoginFromVerifiedSession(token);
-    if (!result) {
-      return res.status(410).json({ status: 'error', code: 'TOKEN_EXPIRED', message: 'Loggin verification link expired. Please generate a new link.' });
-    }
-    if (result.pending) {
-      return res.status(200).json({ status: 'success', verificationStatus: 'PENDING', message: 'WhatsApp verification is still pending.' });
-    }
-    if (result.consumed) {
-      return res.status(409).json({ status: 'error', code: 'ALREADY_CONSUMED', message: 'Verification token already used.' });
-    }
-    if (result.blocked) {
-      return res.status(403).json({ status: 'error', code: 'ACCOUNT_BLOCKED', message: 'Account is suspended or blocked. Please contact support.' });
-    }
+    if (!result) return res.status(410).json({ status: 'error', code: 'TOKEN_EXPIRED', message: 'Loggin verification link expired. Please generate a new link.' });
+    if (result.pending) return res.status(200).json({ status: 'success', verificationStatus: 'PENDING', message: 'WhatsApp verification is still pending.' });
+    if (result.consumed) return res.status(409).json({ status: 'error', code: 'ALREADY_CONSUMED', message: 'Verification token already used.' });
+    if (result.blocked) return res.status(403).json({ status: 'error', code: 'ACCOUNT_BLOCKED', message: 'Account is suspended or blocked. Please contact support.' });
 
     return res.status(200).json({
       status: 'success',
