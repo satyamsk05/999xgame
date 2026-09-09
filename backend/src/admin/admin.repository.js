@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { query } = require('../database/db');
 const logger = require('../utils/logger');
 
@@ -52,7 +53,9 @@ async function createAdmin({ id, username, password, role = 'SUPPORT_ADMIN', isA
     return updated.rows[0];
   }
 
-  const adminId = id || `adm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  // IDs must be generated with a cryptographically secure source. Math.random()
+  // is not appropriate for security-sensitive admin identities.
+  const adminId = id || `adm_${crypto.randomUUID()}`;
   const inserted = await query(
     `INSERT INTO admins (id, username, password_hash, role, is_active, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
