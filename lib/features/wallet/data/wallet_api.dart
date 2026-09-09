@@ -13,9 +13,14 @@ class WalletApi {
       'paymentMethod': paymentMethod,
     });
 
-    final data = res as Map<String, dynamic>;
-    final order = data['data'];
-    final paymentUrl = order is Map ? order['paymentUrl']?.toString() : null;
+    // ApiClient unwraps successful { success/data } responses and returns
+    // the inner data map directly. Keep a fallback for already-unwrapped APIs.
+    final data = res is Map<String, dynamic>
+        ? res
+        : <String, dynamic>{};
+    final nested = data['data'];
+    final order = nested is Map<String, dynamic> ? nested : data;
+    final paymentUrl = order['paymentUrl']?.toString();
 
     if (paymentUrl == null || paymentUrl.isEmpty) {
       throw Exception('Payment page link was not returned by the server.');
