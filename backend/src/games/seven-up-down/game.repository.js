@@ -58,7 +58,7 @@ async function updateRoundInDb(roundId, status, dice1 = null, dice2 = null, dice
 }
 
 /**
- * Place Bet with Atomic PostgreSQL Wallet Debit + Ledger + DB Idempotency
+ * Place Bet with Atomic PostgreSQL Wallet Debit + DB Idempotency
  */
 async function placeBetInDb({ userId, roundId, betType, stakePaise, idempotencyKey }) {
   const stake = parseInt(stakePaise, 10);
@@ -78,12 +78,16 @@ async function placeBetInDb({ userId, roundId, betType, stakePaise, idempotencyK
     e.statusCode = 400;
     throw e;
   }
+  if (!idempotencyKey) {
+    const e = new Error('Idempotency key is required for a bet');
+    e.statusCode = 400;
+    throw e;
+  }
 
   const client = await getClient();
   try {
     await client.query('BEGIN');
 
-    // 1. DB-authoritative round status (sec 21.6): lock the round row.
     const roundRes = await client.query('SELECT status FROM game_rounds WHERE id = $1 FOR UPDATE', [roundId]);
     if (roundRes.rows.length === 0 || roundRes.rows[0].status !== 'BETTING_OPEN') {
       const e = new Error('Betting is closed or invalid for current round');
@@ -91,7 +95,6 @@ async function placeBetInDb({ userId, roundId, betType, stakePaise, idempotencyK
       throw e;
     }
 
-    // 2. Insert Bet Record (UNIQUE constraint on idempotency_key at SQL level)
     const betId = `bet_${crypto.randomUUID()}`;
     const betRes = await client.query(
       `INSERT INTO bets (id, round_id, user_id, bet_type, stake, payout_multiplier, status, idempotency_key, created_at)
@@ -102,13 +105,26 @@ async function placeBetInDb({ userId, roundId, betType, stakePaise, idempotencyK
     );
 
     if (betRes.rows.length === 0) {
-      // Idempotency triggered — fetch existing bet
-      const existingBetRes = await client.query('SELECT * FROM bets WHERE idempotency_key = $1', [idempotencyKey]);
+      const existingBetRes = await client.query(
+        'SELECT * FROM bets WHERE idempotency_key = $1 FOR UPDATE',
+        [idempotencyKey]
+      );
+      const existingBet = existingBetRes.rows[0];
+      if (!existingBet) {
+        const e = new Error('Unable to resolve idempotency key');
+        e.statusCode = 409;
+        throw e;
+      }
+      if (existingBet.user_id !== userId) {
+        const e = new Error('Idempotency key is already used by another account');
+        e.statusCode = 409;
+        e.code = 'IDEMPOTENCY_KEY_CONFLICT';
+        throw e;
+      }
       await client.query('ROLLBACK');
-      return { bet: existingBetRes.rows[0], isDuplicate: true };
+      return { bet: existingBet, isDuplicate: true };
     }
 
-    // 3. Debit wallet using financialService inside client transaction
     await financialService.debitWallet(client, stake, {
       userId,
       type: 'BET_DEBIT',
@@ -119,9 +135,7 @@ async function placeBetInDb({ userId, roundId, betType, stakePaise, idempotencyK
     });
 
     await client.query('COMMIT');
-
     logger.info('Bet placed & wallet debited in PostgreSQL', { userId, roundId, betId, stakePaise });
-
     return { bet: betRes.rows[0], isDuplicate: false };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -140,25 +154,37 @@ async function settleRoundInDb(roundId, winningBetType) {
   try {
     await client.query('BEGIN');
 
-    // Fetch all accepted bets for this round
+    // Serialize settlement/refund with the same round lock used by betting/recovery.
+    const roundRes = await client.query('SELECT id, status FROM game_rounds WHERE id = $1 FOR UPDATE', [roundId]);
+    if (!roundRes.rows.length) {
+      const e = new Error('Round not found');
+      e.statusCode = 404;
+      throw e;
+    }
+    if (roundRes.rows[0].status === 'SETTLED') {
+      await client.query('COMMIT');
+      return [];
+    }
+    if (roundRes.rows[0].status === 'CANCELLED') {
+      await client.query('COMMIT');
+      return [];
+    }
+
     const betsRes = await client.query('SELECT * FROM bets WHERE round_id = $1 AND status = \'ACCEPTED\' FOR UPDATE', [roundId]);
     const bets = betsRes.rows;
     const settlements = [];
 
     for (const bet of bets) {
       const isWinner = (bet.bet_type === winningBetType);
-
       const stakePaise = parseInt(bet.stake, 10);
       const mult = parseFloat(bet.payout_multiplier);
       const winAmountPaise = isWinner ? Math.floor(stakePaise * mult) : 0;
 
-      // Update bet status
       await client.query(
         `UPDATE bets SET status = $2, win_amount = $3, settled_at = NOW() WHERE id = $1`,
         [bet.id, isWinner ? 'WON' : 'LOST', winAmountPaise]
       );
 
-      // Insert Settlement record (UNIQUE on bet_id at SQL level)
       const settlementId = `set_${bet.id}`;
       await client.query(
         `INSERT INTO settlements (id, bet_id, round_id, user_id, win_amount, status, created_at)
@@ -167,7 +193,6 @@ async function settleRoundInDb(roundId, winningBetType) {
         [settlementId, bet.id, roundId, bet.user_id, winAmountPaise]
       );
 
-      // If Winner, Credit Wallet using financialService inside client transaction
       if (isWinner && winAmountPaise > 0) {
         await financialService.creditWallet(client, winAmountPaise, {
           userId: bet.user_id,
@@ -179,21 +204,12 @@ async function settleRoundInDb(roundId, winningBetType) {
         });
       }
 
-      settlements.push({
-        betId: bet.id,
-        userId: bet.user_id,
-        betType: bet.bet_type,
-        isWinner,
-        winAmountPaise,
-      });
+      settlements.push({ betId: bet.id, userId: bet.user_id, betType: bet.bet_type, isWinner, winAmountPaise });
     }
 
-    // Update Round status to SETTLED
     await client.query(`UPDATE game_rounds SET status = 'SETTLED', ended_at = NOW() WHERE id = $1`, [roundId]);
-
     await client.query('COMMIT');
     logger.info('Round settled in PostgreSQL DB', { roundId, totalBets: bets.length, winningBetType });
-
     return settlements;
   } catch (err) {
     await client.query('ROLLBACK');
@@ -219,64 +235,40 @@ async function getRecentRoundsFromDb(limit = 50) {
     [limit]
   );
   return res.rows.map(row => ({
-    roundId: row.roundId,
-    roundNumber: row.roundNumber,
-    status: row.status,
-    dice1: row.result?.dice1 ?? null,
-    dice2: row.result?.dice2 ?? null,
-    diceSum: row.result?.diceSum ?? null,
-    winningBetType: row.result?.winningBetType ?? null,
-    serverSeed: row.serverSeed ?? null,
-    serverSeedHash: row.serverSeedHash ?? null,
-    createdAt: row.createdAt,
-    endedAt: row.endedAt,
+    roundId: row.roundId, roundNumber: row.roundNumber, status: row.status,
+    dice1: row.result?.dice1 ?? null, dice2: row.result?.dice2 ?? null,
+    diceSum: row.result?.diceSum ?? null, winningBetType: row.result?.winningBetType ?? null,
+    serverSeed: row.serverSeed ?? null, serverSeedHash: row.serverSeedHash ?? null,
+    createdAt: row.createdAt, endedAt: row.endedAt,
   }));
 }
 
-/**
- * Fetch round by ID from DB
- */
 async function getRoundByIdFromDb(roundId) {
   const res = await query(
     `SELECT id as "roundId", round_number as "roundNumber", status, result, created_at as "createdAt", ended_at as "endedAt"
-     FROM game_rounds
-     WHERE id = $1`,
-    [roundId]
+     FROM game_rounds WHERE id = $1`, [roundId]
   );
   if (res.rows.length === 0) return null;
   const row = res.rows[0];
   return {
-    roundId: row.roundId,
-    roundNumber: row.roundNumber,
-    status: row.status,
-    dice1: row.result?.dice1 ?? null,
-    dice2: row.result?.dice2 ?? null,
-    diceSum: row.result?.diceSum ?? null,
-    winningBetType: row.result?.winningBetType ?? null,
-    createdAt: row.createdAt,
-    endedAt: row.endedAt,
+    roundId: row.roundId, roundNumber: row.roundNumber, status: row.status,
+    dice1: row.result?.dice1 ?? null, dice2: row.result?.dice2 ?? null,
+    diceSum: row.result?.diceSum ?? null, winningBetType: row.result?.winningBetType ?? null,
+    createdAt: row.createdAt, endedAt: row.endedAt,
   };
 }
 
-/**
- * Fetch user bets for a given round
- */
 async function getUserBetsForRoundInDb(roundId, userId) {
   const res = await query(
     `SELECT id, round_id as "roundId", bet_type as "betType", stake, payout_multiplier as "payoutMultiplier", win_amount as "winAmount", status, created_at as "createdAt"
-     FROM bets
-     WHERE round_id = $1 AND user_id = $2
-     ORDER BY created_at ASC`,
+     FROM bets WHERE round_id = $1 AND user_id = $2 ORDER BY created_at ASC`,
     [roundId, userId]
   );
   return res.rows.map(row => ({
-    id: row.id,
-    roundId: row.roundId,
-    betType: row.betType,
+    id: row.id, roundId: row.roundId, betType: row.betType,
     stake: parseInt(row.stake || 0, 10) / 100,
     winAmount: parseInt(row.winAmount || 0, 10) / 100,
-    status: row.status,
-    createdAt: row.createdAt,
+    status: row.status, createdAt: row.createdAt,
   }));
 }
 
@@ -324,34 +316,22 @@ async function refundRoundInDb(roundId, reason = 'ROUND_VOIDED') {
     await client.query('ROLLBACK');
     logger.error('Failed to refund 7 Up Down round', { roundId, error: err.message });
     throw err;
-  } finally {
-    client.release();
-  }
+  } finally { client.release(); }
 }
 
-/**
- * Non-terminal rounds for startup recovery (sec 22), oldest first.
- */
 async function getInFlightRoundsFromDb() {
   const res = await query(
     `SELECT id as "roundId", round_number as "roundNumber", status, result,
-            server_seed as "serverSeed", server_seed_hash as "serverSeedHash",
-            created_at as "createdAt"
+            server_seed as "serverSeed", server_seed_hash as "serverSeedHash", created_at as "createdAt"
      FROM game_rounds
-     WHERE game_id = 'seven_up_down'
-       AND status IN ('CREATED','BETTING_OPEN','BETTING_CLOSED','ROLLING','RESULT','SETTLING')
+     WHERE game_id = 'seven_up_down' AND status IN ('CREATED','BETTING_OPEN','BETTING_CLOSED','ROLLING','RESULT','SETTLING')
      ORDER BY created_at ASC`
   );
   return res.rows.map(row => ({
-    roundId: row.roundId,
-    roundNumber: row.roundNumber,
-    status: row.status,
-    dice1: row.result?.dice1 ?? null,
-    dice2: row.result?.dice2 ?? null,
-    diceSum: row.result?.diceSum ?? null,
-    winningBetType: row.result?.winningBetType ?? null,
-    serverSeed: row.serverSeed ?? null,
-    serverSeedHash: row.serverSeedHash ?? null,
+    roundId: row.roundId, roundNumber: row.roundNumber, status: row.status,
+    dice1: row.result?.dice1 ?? null, dice2: row.result?.dice2 ?? null,
+    diceSum: row.result?.diceSum ?? null, winningBetType: row.result?.winningBetType ?? null,
+    serverSeed: row.serverSeed ?? null, serverSeedHash: row.serverSeedHash ?? null,
     createdAt: row.createdAt,
   }));
 }
@@ -363,15 +343,7 @@ function getMultiplier(betType) {
 }
 
 module.exports = {
-  createRoundInDb,
-  updateRoundInDb,
-  placeBetInDb,
-  settleRoundInDb,
-  getStakeLimits,
-  refundRoundInDb,
-  getInFlightRoundsFromDb,
-  getRecentRoundsFromDb,
-  getRoundByIdFromDb,
-  getUserBetsForRoundInDb,
+  createRoundInDb, updateRoundInDb, placeBetInDb, settleRoundInDb,
+  getStakeLimits, refundRoundInDb, getInFlightRoundsFromDb,
+  getRecentRoundsFromDb, getRoundByIdFromDb, getUserBetsForRoundInDb,
 };
-
