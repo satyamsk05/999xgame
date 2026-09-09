@@ -19,6 +19,13 @@ test('user JWTs always contain a unique jti and verify as USER tokens', () => {
   assert.strictEqual(firstDecoded.sub, 'user-1');
 });
 
+test('explicit user JWT jti is preserved', () => {
+  const token = signToken({ userId: 'user-2', jti: 'test-jti-123' });
+  const decoded = verifyToken(token);
+  assert.strictEqual(decoded.jti, 'test-jti-123');
+  assert.strictEqual(decoded.sub, 'user-2');
+});
+
 test('user JWT verification rejects tokens without jti', () => {
   const legacyToken = jwt.sign(
     { type: 'USER', sub: 'legacy-user' },
