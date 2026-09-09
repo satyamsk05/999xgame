@@ -51,7 +51,7 @@ async function checkIdempotency(client, idempotencyKey, userId, referenceType = 
 
 async function assertIdempotencyConflict(client, idempotencyKey, userId) {
   if (!idempotencyKey) return;
-  const res = await client.query('SELECT user_id, reference_type, reference_id FROM wallet_ledger WHERE idempotency_key = $1 LIMIT 1', [idempotencyKey]);
+  const res = await client.query('SELECT user_id FROM wallet_ledger WHERE idempotency_key = $1 LIMIT 1', [idempotencyKey]);
   if (res.rows.length && res.rows[0].user_id !== userId) {
     const err = new Error('Idempotency key is already used by another account');
     err.statusCode = 409;
@@ -94,6 +94,12 @@ async function creditWallet(clientOrUserId, amountPaise, options = {}) {
   });
 }
 
+/**
+ * Debit the aggregate available balance and consume its component buckets in a
+ * deterministic order: deposit funds first, then winnings, then rewards.
+ * This keeps available_balance equal to the sum of spendable buckets after every
+ * normal debit and prevents the UI from showing stale bucket totals after bets.
+ */
 async function debitWallet(clientOrUserId, amountPaise, options = {}) {
   const amount = parseInt(amountPaise, 10);
   if (!Number.isInteger(amount) || amount <= 0) throw new Error('Debit amount must be a positive integer in paise');
@@ -108,14 +114,49 @@ async function debitWallet(clientOrUserId, amountPaise, options = {}) {
 
     const wallet = await lockWallet(client, uId);
     const beforeBalance = parseInt(wallet.available_balance || 0, 10);
-    if (beforeBalance < amount) throw new Error(`Insufficient funds: available balance ₹${(beforeBalance / 100).toFixed(2)}, requested ₹${(amount / 100).toFixed(2)}`);
+    const depositBalance = parseInt(wallet.deposit_balance || 0, 10);
+    const winningsBalance = parseInt(wallet.winnings_balance || 0, 10);
+    const rewardsBalance = parseInt(wallet.rewards_balance || 0, 10);
+
+    if (beforeBalance < amount) {
+      throw new Error(`Insufficient funds: available balance ₹${(beforeBalance / 100).toFixed(2)}, requested ₹${(amount / 100).toFixed(2)}`);
+    }
+
+    let remaining = amount;
+    const depositDebit = Math.min(depositBalance, remaining);
+    remaining -= depositDebit;
+    const winningsDebit = Math.min(winningsBalance, remaining);
+    remaining -= winningsDebit;
+    const rewardsDebit = Math.min(rewardsBalance, remaining);
+    remaining -= rewardsDebit;
+
+    if (remaining !== 0) {
+      // Existing legacy rows can have bucket totals that differ from available_balance.
+      // Never silently create a negative bucket: fail closed until the wallet is reconciled.
+      const err = new Error('Wallet bucket totals are inconsistent with available balance');
+      err.statusCode = 409;
+      throw err;
+    }
+
     const afterBalance = beforeBalance - amount;
-    const updateRes = await client.query('UPDATE wallets SET available_balance = $2, version = version + 1, updated_at = NOW() WHERE id = $1 RETURNING *', [wallet.id, afterBalance]);
+    const updateRes = await client.query(
+      `UPDATE wallets
+       SET available_balance = $2,
+           deposit_balance = deposit_balance - $3,
+           winnings_balance = winnings_balance - $4,
+           rewards_balance = rewards_balance - $5,
+           version = version + 1,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [wallet.id, afterBalance, depositDebit, winningsDebit, rewardsDebit]
+    );
+
     const ledgerId = `ledg_${crypto.randomUUID()}`;
     const ledgerRes = await client.query(
       `INSERT INTO wallet_ledger (id, user_id, wallet_id, type, amount, direction, reference_type, reference_id, balance_before, balance_after, status, idempotency_key, metadata, created_at)
        VALUES ($1, $2, $3, $4, $5, 'DEBIT', $6, $7, $8, $9, 'COMPLETED', $10, $11, NOW()) RETURNING *`,
-      [ledgerId, uId, wallet.id, type, amount, referenceType, referenceId, beforeBalance, afterBalance, idempotencyKey, JSON.stringify(metadata)]
+      [ledgerId, uId, wallet.id, type, amount, referenceType, referenceId, beforeBalance, afterBalance, idempotencyKey, JSON.stringify({ ...metadata, bucketDebit: { deposit: depositDebit, winnings: winningsDebit, rewards: rewardsDebit } })]
     );
     return { wallet: updateRes.rows[0], ledger: ledgerRes.rows[0] };
   });
