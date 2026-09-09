@@ -1,0 +1,3 @@
+# CodeRabbit A-Z Review
+
+Review the entire 999xgame repository. Trace Flutter client, backend APIs, PostgreSQL, realtime/WebSockets, admin operations, Telegram integrations, Docker/AWS deployment and CI/CD. Check auth/login, authorization, game result integrity, race conditions, wallet/balance transactions, idempotency, data consistency, runtime crashes, secrets and production configuration. Report actionable findings by Critical/High/Medium/Low with exact path/line, root cause, impact and concrete fix. Do not restrict the review to this PR's changed files.
