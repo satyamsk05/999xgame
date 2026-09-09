@@ -100,6 +100,7 @@ function validateConfig() {
     if (!process.env.DB_HOST || !process.env.DB_NAME || !process.env.DB_USER || !process.env.DB_PASSWORD) errors.push('DB_HOST, DB_NAME, DB_USER and DB_PASSWORD must be explicitly set in production.');
     if (config.db.password === 'postgres') errors.push('DB_PASSWORD must not use the insecure default value in production.');
     if (!process.env.REDIS_URL && (!process.env.REDIS_HOST || process.env.REDIS_HOST === 'localhost')) errors.push('REDIS_URL or a non-localhost REDIS_HOST must be explicitly configured in production.');
+    if (process.env.DISABLE_REDIS === 'true') errors.push('DISABLE_REDIS=true is not permitted in production.');
     if (config.adminBreakGlass.enabled && (!config.adminBreakGlass.secret || config.adminBreakGlass.secret === 'dev_admin_secret_key_999x' || config.adminBreakGlass.secret.length < 32)) errors.push('ADMIN_BREAK_GLASS_SECRET must be a strong dedicated secret when break-glass is enabled.');
     if (!process.env.CORS_ORIGIN || config.corsOrigin.length === 0 || config.corsOrigin.includes('*')) errors.push('CORS_ORIGIN must be restricted to explicit origins in production.');
     if (config.trustProxy !== true) errors.push('TRUST_PROXY=true is required when running behind an AWS load balancer/proxy.');
