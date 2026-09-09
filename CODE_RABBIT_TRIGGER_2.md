@@ -1,0 +1,1 @@
+Full repository CodeRabbit review requested. Analyze all existing source code end-to-end. Prioritize concrete security, correctness, concurrency, game/wallet integrity, authentication, realtime, Flutter reliability and AWS deployment issues. Give severity, exact location, impact and fix; ignore cosmetic-only findings.
