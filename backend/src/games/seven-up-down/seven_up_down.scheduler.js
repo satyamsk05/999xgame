@@ -14,9 +14,7 @@ let isRunning = false;
 let loopPromise = null;
 const leaderLock = new GameLeaderLock(GAME_ID);
 
-async function wait(ms) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
+async function wait(ms) { await new Promise((resolve) => setTimeout(resolve, ms)); }
 
 async function leaderSleep(ms) {
   const deadline = Date.now() + ms;
@@ -29,8 +27,7 @@ async function leaderSleep(ms) {
 }
 
 async function recoverRounds() {
-  try { await sevenUpDownEngine.recoverFromDb(); }
-  catch (err) { logger.error('7 Up Down recovery failed after leader acquisition', { error: err.message }); }
+  await sevenUpDownEngine.recoverFromDb();
 }
 
 async function runGameCycle(io = null) {
@@ -68,7 +65,7 @@ async function schedulerLoop(io) {
       if (!completed) wasLeader = false;
     } catch (err) {
       wasLeader = false;
-      logger.error('Error in 7 Up Down game loop cycle', { error: err.message });
+      logger.error('Error in 7 Up Down game loop cycle', { error: err.message, code: err.code });
       await wait(5000);
     }
   }
