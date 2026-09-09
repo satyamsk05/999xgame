@@ -26,8 +26,12 @@ android {
 
     buildTypes {
         release {
-            // Release signing is supplied by the deployment/build environment.
-            // Never ship an APK signed with the debug key.
+            // CI artifacts must be signed or Android will reject them as invalid packages.
+            // The CI-only fallback uses the runner's debug key for installable test builds.
+            // Production distribution must provide a dedicated release keystore.
+            if (System.getenv("CI") == "true") {
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
     }
 }
