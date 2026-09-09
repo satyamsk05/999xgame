@@ -14,15 +14,14 @@ let isRunning = false;
 let loopPromise = null;
 const leaderLock = new GameLeaderLock(GAME_ID);
 
-function sleep(ms) {
-  return new Promise((resolve) => {
-    const step = 200;
-    let waited = 0;
-    const timer = setInterval(() => {
-      waited += step;
-      if (!isRunning || waited >= ms) { clearInterval(timer); resolve(); }
-    }, step);
-  });
+async function sleep(ms) {
+  const deadline = Date.now() + ms;
+  while (isRunning && Date.now() < deadline) {
+    const remaining = deadline - Date.now();
+    await new Promise((resolve) => setTimeout(resolve, Math.min(1000, remaining)));
+    if (isRunning && !(await leaderLock.assertLeadership())) return false;
+  }
+  return isRunning && leaderLock.isLeader;
 }
 
 async function recoverRounds() {
@@ -31,28 +30,27 @@ async function recoverRounds() {
 }
 
 async function runGameCycle(io = null) {
+  if (!(await leaderLock.assertLeadership())) return false;
   let round = await sevenUpDownEngine.getOrStartCurrentRound();
   if (io) {
     emitRealtime('GAME_ROUND_OPEN', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString(), payload: { roundId: round.roundId, serverSeedHash: round.serverSeedHash, status: RoundStatus.BETTING_OPEN } });
     emitRealtime('7ud:round_open', { roundId: round.roundId, serverSeedHash: round.serverSeedHash, bettingDurationSeconds: BETTING_WINDOW_MS / 1000, status: RoundStatus.BETTING_OPEN });
   }
-  await sleep(BETTING_WINDOW_MS);
-  if (!isRunning) return;
+  if (!(await sleep(BETTING_WINDOW_MS))) return false;
   round = await sevenUpDownEngine.closeBettingAndRoll();
   if (io) {
     emitRealtime('GAME_BETTING_CLOSED', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString() });
     emitRealtime('GAME_RESULT', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString(), payload: { dice1: round.dice1, dice2: round.dice2, diceSum: round.diceSum, winningBetType: round.winningBetType, serverSeed: round.serverSeed, serverSeedHash: round.serverSeedHash } });
     emitRealtime('7ud:dice_rolled', { roundId: round.roundId, dice1: round.dice1, dice2: round.dice2, diceSum: round.diceSum, winningBetType: round.winningBetType, serverSeed: round.serverSeed });
   }
-  await sleep(REVEAL_BUFFER_MS);
-  if (!isRunning) return;
+  if (!(await sleep(REVEAL_BUFFER_MS))) return false;
   const result = await sevenUpDownEngine.settleRound();
   const publicSettlement = { roundId: round.roundId, winningBetType: round.winningBetType, settledAt: result.round.endedAt };
   if (io) {
     emitRealtime('GAME_ROUND_SETTLED', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString(), payload: publicSettlement });
     emitRealtime('7ud:round_settled', publicSettlement);
   }
-  await sleep(INTER_ROUND_PAUSE_MS);
+  return (await sleep(INTER_ROUND_PAUSE_MS));
 }
 
 async function schedulerLoop(io) {
@@ -62,11 +60,12 @@ async function schedulerLoop(io) {
       const isLeader = await leaderLock.acquire();
       if (!isLeader || !isDatabaseReady()) { wasLeader = false; await sleep(LEADER_POLL_MS); continue; }
       if (!wasLeader) { await recoverRounds(); wasLeader = true; }
-      await runGameCycle(io);
+      const completed = await runGameCycle(io);
+      if (!completed) wasLeader = false;
     } catch (err) {
       wasLeader = false;
       logger.error('Error in 7 Up Down game loop cycle', { error: err.message });
-      await sleep(5000);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
 }
