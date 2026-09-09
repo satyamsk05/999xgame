@@ -64,44 +64,6 @@ void main() async {
 class InGamesApp extends StatelessWidget {
   const InGamesApp({super.key});
 
-  void _handleLogout() {
-    unawaited(_performLogout());
-  }
-
-  Future<void> _performLogout() async {
-    try {
-      if (TokenManager.token != null && TokenManager.token!.isNotEmpty) {
-        await ApiService.logout();
-      }
-    } catch (_) {
-      // Local logout must still complete if the backend is unavailable.
-    } finally {
-      await TokenManager.clearSession();
-      await SupabaseService.signOut();
-      if (!mounted) return;
-      setState(() {
-        _isLoggedIn = false;
-        _isProfilePageActive = false;
-        _isWithdrawPageActive = false;
-        _isSettingsPageActive = false;
-        _isTransactionsPageActive = false;
-        _isHelpCentrePageActive = false;
-        _isReportedIssuesPageActive = false;
-        _isAboutUsPageActive = false;
-        _isContactUsPageActive = false;
-        _isFairPlayPageActive = false;
-        _isHtml5GameActive = false;
-        _currentNavIndex = 0;
-        _depositBalance = 0.0;
-        _winningsBalance = 0.0;
-        _userName = 'Player';
-        _phoneNumber = '';
-        _currentAvatarPath = 'Assets/Avatar/avatar_1.png';
-        _transactionsList.clear();
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -275,6 +237,44 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
         _currentNavIndex = 0;
       }
     });
+  }
+
+  void _handleLogout() {
+    unawaited(_performLogout());
+  }
+
+  Future<void> _performLogout() async {
+    try {
+      if (TokenManager.token != null && TokenManager.token!.isNotEmpty) {
+        await ApiService.logout();
+      }
+    } catch (_) {
+      // Local logout must still complete if the backend is unavailable.
+    } finally {
+      await TokenManager.clearSession();
+      await SupabaseService.signOut();
+      if (!mounted) return;
+      setState(() {
+        _isLoggedIn = false;
+        _isProfilePageActive = false;
+        _isWithdrawPageActive = false;
+        _isSettingsPageActive = false;
+        _isTransactionsPageActive = false;
+        _isHelpCentrePageActive = false;
+        _isReportedIssuesPageActive = false;
+        _isAboutUsPageActive = false;
+        _isContactUsPageActive = false;
+        _isFairPlayPageActive = false;
+        _isHtml5GameActive = false;
+        _currentNavIndex = 0;
+        _depositBalance = 0.0;
+        _winningsBalance = 0.0;
+        _userName = 'Player';
+        _phoneNumber = '';
+        _currentAvatarPath = 'Assets/Avatar/avatar_1.png';
+        _transactionsList.clear();
+      });
+    }
   }
 
   @override
