@@ -18,10 +18,10 @@ const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 const MIGRATION_LOCK_KEY = migrationLockKey();
 
 function migrationLockKey() {
-  // PostgreSQL advisory locks accept signed 64-bit integers. Derive a stable
-  // key from the application name rather than using a magic random value.
+  // Use PostgreSQL's two-int32 advisory-lock variant so the derived key is
+  // represented exactly without JavaScript's unsafe 64-bit Number range.
   const digest = crypto.createHash('sha256').update('999xgame:schema-migrations', 'utf8').digest();
-  return digest.readInt32BE(0) * 0x100000000 + digest.readUInt32BE(4);
+  return [digest.readInt32BE(0), digest.readInt32BE(4)];
 }
 
 function migrationChecksum(sql) {
@@ -65,7 +65,7 @@ async function runMigrations(client) {
   let lockAcquired = false;
 
   try {
-    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY]);
+    await client.query('SELECT pg_advisory_lock($1, $2)', MIGRATION_LOCK_KEY);
     lockAcquired = true;
 
     await ensureMigrationsTable(client);
@@ -126,7 +126,7 @@ async function runMigrations(client) {
   } finally {
     if (lockAcquired) {
       try {
-        await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]);
+        await client.query('SELECT pg_advisory_unlock($1, $2)', MIGRATION_LOCK_KEY);
       } catch (err) {
         logger.error('Failed to release database migration advisory lock', {
           error: err.message || String(err),
