@@ -28,23 +28,27 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
-      - name: Validate production API URL
+      - name: Resolve production API URL
         env:
           SERVER_DOMAIN: ${{ secrets.SERVER_DOMAIN }}
         run: |
           if [ -z "$SERVER_DOMAIN" ]; then
-            echo "SERVER_DOMAIN GitHub Actions secret is required for release APK builds."
-            exit 1
+            echo "SERVER_DOMAIN secret is not configured; using the repository's built-in API configuration."
+          else
+            case "$SERVER_DOMAIN" in
+              https://*) ;;
+              *) echo "SERVER_DOMAIN must use HTTPS for release builds."; exit 1 ;;
+            esac
+            echo "SERVER_DOMAIN=$SERVER_DOMAIN" >> "$GITHUB_ENV"
           fi
-          case "$SERVER_DOMAIN" in
-            https://*) ;;
-            *) echo "SERVER_DOMAIN must use HTTPS for release builds."; exit 1 ;;
-          esac
 
       - name: Build release APK
-        env:
-          SERVER_DOMAIN: ${{ secrets.SERVER_DOMAIN }}
-        run: flutter build apk --release --dart-define=SERVER_DOMAIN="$SERVER_DOMAIN"
+        run: |
+          if [ -n "${SERVER_DOMAIN:-}" ]; then
+            flutter build apk --release --dart-define=SERVER_DOMAIN="$SERVER_DOMAIN"
+          else
+            flutter build apk --release
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
