@@ -52,14 +52,12 @@ class ApiService {
     return res is Map<String, dynamic> ? res : null;
   }
 
-  static Future<Map<String, dynamic>?> completeOnboarding({required String username, String? dateOfBirth}) async {
+  static Future<Map<String, dynamic>?> completeOnboarding({required String username}) async {
     final name = username.trim();
     if (name.length < 2) {
       throw ApiException(code: 'INVALID_USERNAME', message: 'Name must be at least 2 characters.', statusCode: 400);
     }
-    final body = <String, dynamic>{'username': name};
-    if (dateOfBirth != null && dateOfBirth.isNotEmpty) body['dateOfBirth'] = dateOfBirth;
-    final res = await ApiClient.post('/user/complete-onboarding', body);
+    final res = await ApiClient.post('/user/complete-onboarding', {'username': name});
     return res is Map<String, dynamic> ? res : null;
   }
 
