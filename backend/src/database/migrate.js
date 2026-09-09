@@ -15,9 +15,9 @@ const logger = require('../utils/logger');
  */
 
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
-const MIGRATION_LOCK_KEY = 999xgameMigrationLockKey();
+const MIGRATION_LOCK_KEY = migrationLockKey();
 
-function 999xgameMigrationLockKey() {
+function migrationLockKey() {
   // PostgreSQL advisory locks accept signed 64-bit integers. Derive a stable
   // key from the application name rather than using a magic random value.
   const digest = crypto.createHash('sha256').update('999xgame:schema-migrations', 'utf8').digest();
