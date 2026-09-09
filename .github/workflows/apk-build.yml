@@ -29,7 +29,7 @@ jobs:
         run: flutter analyze
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --dart-define=SERVER_DOMAIN=http://65.1.92.155
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
