@@ -61,6 +61,12 @@ class ApiService {
     return res is Map<String, dynamic> ? res : null;
   }
 
+  static Future<void> logout() async {
+    // The backend revokes the current JWT. Local session cleanup must still be
+    // performed by the caller so logout succeeds even when the network is down.
+    await ApiClient.post('/auth/logout', const <String, dynamic>{});
+  }
+
   static Future<List<dynamic>?> getGamesList() async {
     final res = await ApiClient.get('/games');
     if (res is List<dynamic>) return res;
