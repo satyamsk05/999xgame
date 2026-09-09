@@ -1,0 +1,15 @@
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  poem: false
+  path_filters:
+    - "!**/*.lock"
+    - "!**/build/**"
+    - "!**/.dart_tool/**"
+chat:
+  auto_reply: true
+knowledge_base:
+  web_search:
+    enabled: true
