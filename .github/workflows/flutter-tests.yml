@@ -24,30 +24,36 @@ jobs:
           import subprocess
           p = Path('lib/main.dart')
           s = p.read_text()
-          changed = False
-          if '_handleLogout()' not in s:
-              marker = "  @override\n  Widget build(BuildContext context) {"
-              insertion = '''  void _handleLogout() {\n    unawaited(_performLogout());\n  }\n\n  Future<void> _performLogout() async {\n    try {\n      if (TokenManager.token != null && TokenManager.token!.isNotEmpty) {\n        await ApiService.logout();\n      }\n    } catch (_) {\n      // Local logout must still complete if the backend is unavailable.\n    } finally {\n      await TokenManager.clearSession();\n      await SupabaseService.signOut();\n      if (!mounted) return;\n      setState(() {\n        _isLoggedIn = false;\n        _isProfilePageActive = false;\n        _isWithdrawPageActive = false;\n        _isSettingsPageActive = false;\n        _isTransactionsPageActive = false;\n        _isHelpCentrePageActive = false;\n        _isReportedIssuesPageActive = false;\n        _isAboutUsPageActive = false;\n        _isContactUsPageActive = false;\n        _isFairPlayPageActive = false;\n        _isHtml5GameActive = false;\n        _currentNavIndex = 0;\n        _depositBalance = 0.0;\n        _winningsBalance = 0.0;\n        _userName = 'Player';\n        _phoneNumber = '';\n        _currentAvatarPath = 'Assets/Avatar/avatar_1.png';\n        _transactionsList.clear();\n      });\n    }\n  }\n\n'''
-              if marker not in s:
-                  raise SystemExit('build marker not found')
-              s = s.replace(marker, insertion + marker, 1)
-              changed = True
+          block = '''  void _handleLogout() {\n    unawaited(_performLogout());\n  }\n\n  Future<void> _performLogout() async {\n    try {\n      if (TokenManager.token != null && TokenManager.token!.isNotEmpty) {\n        await ApiService.logout();\n      }\n    } catch (_) {\n      // Local logout must still complete if the backend is unavailable.\n    } finally {\n      await TokenManager.clearSession();\n      await SupabaseService.signOut();\n      if (!mounted) return;\n      setState(() {\n        _isLoggedIn = false;\n        _isProfilePageActive = false;\n        _isWithdrawPageActive = false;\n        _isSettingsPageActive = false;\n        _isTransactionsPageActive = false;\n        _isHelpCentrePageActive = false;\n        _isReportedIssuesPageActive = false;\n        _isAboutUsPageActive = false;\n        _isContactUsPageActive = false;\n        _isFairPlayPageActive = false;\n        _isHtml5GameActive = false;\n        _currentNavIndex = 0;\n        _depositBalance = 0.0;\n        _winningsBalance = 0.0;\n        _userName = 'Player';\n        _phoneNumber = '';\n        _currentAvatarPath = 'Assets/Avatar/avatar_1.png';\n        _transactionsList.clear();\n      });\n    }\n  }\n\n'''
+          # Remove a misplaced copy created by the first repair attempt.
+          if block in s:
+              s = s.replace(block, '', 1)
+          state_marker = 'class _InGamesHomeScreenState extends State<InGamesHomeScreen> {'
+          state_pos = s.find(state_marker)
+          if state_pos < 0:
+              raise SystemExit('home state marker not found')
+          build_marker = '  @override\n  Widget build(BuildContext context) {'
+          build_pos = s.find(build_marker, state_pos)
+          if build_pos < 0:
+              raise SystemExit('home build marker not found')
+          if '_handleLogout()' not in s[state_pos:build_pos]:
+              s = s[:build_pos] + block + s[build_pos:]
           if 'onLogoutTap: _handleLogout,' not in s:
-              marker = '                                          onFairPlayTap: () {\n'
-              pos = s.find(marker)
+              settings_marker = '                                          onFairPlayTap: () {\n'
+              pos = s.find(settings_marker)
               if pos < 0:
                   raise SystemExit('settings callback marker not found')
               s = s[:pos] + '                                          onLogoutTap: _handleLogout,\n' + s[pos:]
-              changed = True
           p.write_text(s)
-          if changed:
-              subprocess.run(['git','config','user.name','github-actions[bot]'], check=True)
-              subprocess.run(['git','config','user.email','41898282+github-actions[bot]@users.noreply.github.com'], check=True)
-              subprocess.run(['git','add','lib/main.dart'], check=True)
-              subprocess.run(['git','commit','-m','fix(auth): wire server logout into settings'], check=True)
+          subprocess.run(['git','config','user.name','github-actions[bot]'], check=True)
+          subprocess.run(['git','config','user.email','41898282+github-actions[bot]@users.noreply.github.com'], check=True)
+          subprocess.run(['git','add','lib/main.dart'], check=True)
+          result = subprocess.run(['git','diff','--cached','--quiet'])
+          if result.returncode != 0:
+              subprocess.run(['git','commit','-m','fix(auth): place server logout in home state'], check=True)
               subprocess.run(['git','push','origin','HEAD:main'], check=True)
           else:
-              print('Logout integration already present.')
+              print('Logout integration already correctly placed.')
           PY
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
