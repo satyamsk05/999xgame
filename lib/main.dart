@@ -253,8 +253,9 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
     } finally {
       await TokenManager.clearSession();
       await SupabaseService.signOut();
-      if (!mounted) return;
-      setState(() {
+    }
+    if (!mounted) return;
+    setState(() {
         _isLoggedIn = false;
         _isProfilePageActive = false;
         _isWithdrawPageActive = false;
