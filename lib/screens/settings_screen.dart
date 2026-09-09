@@ -12,6 +12,7 @@ class SettingsScreen extends StatelessWidget {
   final VoidCallback? onAboutUsTap;
   final VoidCallback? onContactUsTap;
   final VoidCallback? onFairPlayTap;
+  final VoidCallback? onLogoutTap;
 
   const SettingsScreen({
     super.key,
@@ -24,6 +25,7 @@ class SettingsScreen extends StatelessWidget {
     this.onAboutUsTap,
     this.onContactUsTap,
     this.onFairPlayTap,
+    this.onLogoutTap,
   });
 
   @override
@@ -34,7 +36,6 @@ class SettingsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
               child: Row(
@@ -61,7 +62,6 @@ class SettingsScreen extends StatelessWidget {
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 children: [
-                  // SECTION 1: Money
                   _buildSectionHeader('Money'),
                   const SizedBox(height: 8),
                   _buildSettingsItem(
@@ -83,7 +83,6 @@ class SettingsScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // SECTION 2: Help
                   _buildSectionHeader('Help & Updates'),
                   const SizedBox(height: 8),
                   _buildSettingsItem(
@@ -117,6 +116,18 @@ class SettingsScreen extends StatelessWidget {
                     onTap: onFairPlayTap ?? () => _showHelpMessage(context, 'Fair Play Policy'),
                     isLastInSection: true,
                   ),
+
+                  if (onLogoutTap != null) ...[
+                    const SizedBox(height: 24),
+                    _buildSectionHeader('Account'),
+                    const SizedBox(height: 8),
+                    _buildSettingsItem(
+                      icon: Icons.logout_rounded,
+                      title: 'Log out',
+                      onTap: onLogoutTap!,
+                      isLastInSection: true,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -152,11 +163,7 @@ class SettingsScreen extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 16.0),
             child: Row(
               children: [
-                Icon(
-                  icon,
-                  color: Colors.white70,
-                  size: 22,
-                ),
+                Icon(icon, color: Colors.white70, size: 22),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
@@ -168,20 +175,12 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Colors.white38,
-                  size: 24,
-                ),
+                const Icon(Icons.chevron_right_rounded, color: Colors.white38, size: 24),
               ],
             ),
           ),
           if (!isLastInSection)
-            const Divider(
-              color: Colors.white12,
-              height: 1,
-              indent: 38,
-            ),
+            const Divider(color: Colors.white12, height: 1, indent: 38),
         ],
       ),
     );
@@ -190,10 +189,7 @@ class SettingsScreen extends StatelessWidget {
   void _showHelpMessage(BuildContext context, String featureName) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          '$featureName opened',
-          style: GoogleFonts.poppins(),
-        ),
+        content: Text('$featureName opened', style: GoogleFonts.poppins()),
         backgroundColor: const Color(0xFF6B1884),
         behavior: SnackBarBehavior.floating,
       ),
