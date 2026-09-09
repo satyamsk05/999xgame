@@ -239,45 +239,6 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
     });
   }
 
-  void _handleLogout() {
-    unawaited(_performLogout());
-  }
-
-  Future<void> _performLogout() async {
-    try {
-      if (TokenManager.token != null && TokenManager.token!.isNotEmpty) {
-        await ApiService.logout();
-      }
-    } catch (_) {
-      // Local logout must still complete if the backend is unavailable.
-    } finally {
-      await TokenManager.clearSession();
-      await SupabaseService.signOut();
-    }
-    if (!mounted) return;
-    setState(() {
-        _isLoggedIn = false;
-        _isProfilePageActive = false;
-        _isWithdrawPageActive = false;
-        _isSettingsPageActive = false;
-        _isTransactionsPageActive = false;
-        _isHelpCentrePageActive = false;
-        _isReportedIssuesPageActive = false;
-        _isAboutUsPageActive = false;
-        _isContactUsPageActive = false;
-        _isFairPlayPageActive = false;
-        _isHtml5GameActive = false;
-        _currentNavIndex = 0;
-        _depositBalance = 0.0;
-        _winningsBalance = 0.0;
-        _userName = 'Player';
-        _phoneNumber = '';
-        _currentAvatarPath = 'Assets/Avatar/avatar_1.png';
-        _transactionsList.clear();
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (!_isLoggedIn) {
@@ -325,6 +286,7 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
         ),
         child: Column(
           children: [
+            // Top Profile Header & Live Online Ticker (Wrapped in SafeArea top only)
             if (_currentNavIndex == 0 &&
                 !_isProfilePageActive &&
                 !_isSettingsPageActive &&
@@ -346,6 +308,7 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                       builder: (context, data, child) {
                         final profileMap = data['profile'] as Map<String, dynamic>? ?? {};
                         final onlineMap = data['onlinePlayers'] as Map<String, dynamic>? ?? {};
+
                         final name = (profileMap['username'] != null && profileMap['username'].toString().isNotEmpty)
                             ? profileMap['username'].toString()
                             : _userName;
@@ -355,6 +318,7 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                             : _currentAvatarPath;
                         final countVal = onlineMap['totalOnline'];
 
+                        // Parse server-driven UI theme config
                         Color parseHex(String? hex, Color fallback) {
                           if (hex == null || hex.isEmpty) return fallback;
                           try {
@@ -372,6 +336,7 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                         final currencySymbol = (profileMap['currencySymbol'] as String?) ?? '₹';
                         final addCashLabel = (profileMap['addCashLabel'] as String?) ?? '+';
                         final userTag = (profileMap['profileTag'] as String?) ?? 'Profile';
+
                         final isHeaderLoading = syncing && data.isEmpty;
 
                         return Column(
@@ -416,6 +381,8 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                   },
                 ),
               ),
+
+            // Main Screen Content
             Expanded(
               child: _isOffline
                   ? NetworkErrorWidget(
@@ -428,302 +395,312 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                     )
                   : _isHtml5GameActive
                       ? Html5GameScreen(
-                          gameTitle: _selectedGameTitle,
-                          entryFee: _selectedEntryFee,
-                          prizePool: _selectedPrizePool,
-                          gameUrl: _selectedGameUrl,
+                      gameTitle: _selectedGameTitle,
+                      entryFee: _selectedEntryFee,
+                      prizePool: _selectedPrizePool,
+                      gameUrl: _selectedGameUrl,
+                      onBackPressed: () {
+                        setState(() {
+                          _isHtml5GameActive = false;
+                        });
+                        _fetchUserData();
+                      },
+                      onBalanceUpdated: (newBalance) {
+                        _fetchUserData();
+                      },
+                    )
+                  : _isHelpCentrePageActive
+                  ? HelpCentreScreen(
+                      onBackPressed: () {
+                        setState(() {
+                          _isHelpCentrePageActive = false;
+                        });
+                      },
+                    )
+                  : _isReportedIssuesPageActive
+                      ? ReportedIssuesScreen(
                           onBackPressed: () {
                             setState(() {
-                              _isHtml5GameActive = false;
+                              _isReportedIssuesPageActive = false;
                             });
-                            _fetchUserData();
-                          },
-                          onBalanceUpdated: (newBalance) {
-                            _fetchUserData();
                           },
                         )
-                      : _isHelpCentrePageActive
-                          ? HelpCentreScreen(
+                      : _isAboutUsPageActive
+                          ? AboutUsScreen(
                               onBackPressed: () {
                                 setState(() {
-                                  _isHelpCentrePageActive = false;
+                                  _isAboutUsPageActive = false;
                                 });
                               },
                             )
-                          : _isReportedIssuesPageActive
-                              ? ReportedIssuesScreen(
+                          : _isContactUsPageActive
+                              ? ContactUsScreen(
                                   onBackPressed: () {
                                     setState(() {
-                                      _isReportedIssuesPageActive = false;
+                                      _isContactUsPageActive = false;
                                     });
                                   },
                                 )
-                              : _isAboutUsPageActive
-                                  ? AboutUsScreen(
+                              : _isFairPlayPageActive
+                                  ? FairPlayScreen(
                                       onBackPressed: () {
                                         setState(() {
-                                          _isAboutUsPageActive = false;
+                                          _isFairPlayPageActive = false;
                                         });
                                       },
                                     )
-                                  : _isContactUsPageActive
-                                      ? ContactUsScreen(
+                                  : _isSettingsPageActive
+                                      ? SettingsScreen(
                                           onBackPressed: () {
                                             setState(() {
-                                              _isContactUsPageActive = false;
+                                              _isSettingsPageActive = false;
+                                            });
+                                          },
+                                          onAddCashTap: () {
+                                            setState(() {
+                                              _isSettingsPageActive = false;
+                                              _isWithdrawPageActive = false;
+                                              _isTransactionsPageActive = false;
+                                              _isProfilePageActive = true;
+                                            });
+                                          },
+                                          onTransactionHistoryTap: () {
+                                            setState(() {
+                                              _isSettingsPageActive = false;
+                                              _isProfilePageActive = false;
+                                              _isWithdrawPageActive = false;
+                                              _isTransactionsPageActive = true;
+                                              _transactionsFilter = 'All';
+                                            });
+                                          },
+                                          onWithdrawalsTap: () {
+                                            setState(() {
+                                              _isSettingsPageActive = false;
+                                              _isProfilePageActive = false;
+                                              _isWithdrawPageActive = false;
+                                              _isTransactionsPageActive = true;
+                                              _transactionsFilter = 'Withdraw';
+                                            });
+                                          },
+                                          onHelpCentreTap: () {
+                                            setState(() {
+                                              _isHelpCentrePageActive = true;
+                                            });
+                                          },
+                                          onReportedIssuesTap: () {
+                                            setState(() {
+                                              _isReportedIssuesPageActive = true;
+                                            });
+                                          },
+                                          onAboutUsTap: () {
+                                            setState(() {
+                                              _isAboutUsPageActive = true;
+                                            });
+                                          },
+                                          onContactUsTap: () {
+                                            setState(() {
+                                              _isContactUsPageActive = true;
+                                            });
+                                          },
+                                          onFairPlayTap: () {
+                                            setState(() {
+                                              _isFairPlayPageActive = true;
                                             });
                                           },
                                         )
-                                      : _isFairPlayPageActive
-                                          ? FairPlayScreen(
-                                              onBackPressed: () {
-                                                setState(() {
-                                                  _isFairPlayPageActive = false;
-                                                });
-                                              },
-                                            )
-                                          : _isSettingsPageActive
-                                              ? SettingsScreen(
-                                                  onBackPressed: () {
-                                                    setState(() {
-                                                      _isSettingsPageActive = false;
-                                                    });
-                                                  },
-                                                  onAddCashTap: () {
-                                                    setState(() {
-                                                      _isSettingsPageActive = false;
-                                                      _isWithdrawPageActive = false;
-                                                      _isTransactionsPageActive = false;
-                                                      _isProfilePageActive = true;
-                                                    });
-                                                  },
-                                                  onTransactionHistoryTap: () {
-                                                    setState(() {
-                                                      _isSettingsPageActive = false;
-                                                      _isProfilePageActive = false;
-                                                      _isWithdrawPageActive = false;
-                                                      _isTransactionsPageActive = true;
-                                                      _transactionsFilter = 'All';
-                                                    });
-                                                  },
-                                                  onWithdrawalsTap: () {
-                                                    setState(() {
-                                                      _isSettingsPageActive = false;
-                                                      _isProfilePageActive = false;
-                                                      _isWithdrawPageActive = false;
-                                                      _isTransactionsPageActive = true;
-                                                      _transactionsFilter = 'Withdraw';
-                                                    });
-                                                  },
-                                                  onHelpCentreTap: () {
-                                                    setState(() {
-                                                      _isHelpCentrePageActive = true;
-                                                    });
-                                                  },
-                                                  onReportedIssuesTap: () {
-                                                    setState(() {
-                                                      _isReportedIssuesPageActive = true;
-                                                    });
-                                                  },
-                                                  onAboutUsTap: () {
-                                                    setState(() {
-                                                      _isAboutUsPageActive = true;
-                                                    });
-                                                  },
-                                                  onContactUsTap: () {
-                                                    setState(() {
-                                                      _isContactUsPageActive = true;
-                                                    });
-                                                  },
-                                                  onFairPlayTap: () {
-                                                    setState(() {
-                                                      _isFairPlayPageActive = true;
-                                                    });
-                                                  },
-                                                  onLogoutTap: _handleLogout,
-                                                )
-                                              : _isTransactionsPageActive
-                                                  ? TransactionsScreen(
-                                                      transactions: _transactionsList,
-                                                      initialFilter: _transactionsFilter,
-                                                      onBackPressed: () {
-                                                        setState(() {
-                                                          _isTransactionsPageActive = false;
-                                                        });
-                                                      },
-                                                    )
-                                                  : _isProfilePageActive
-                                                      ? SafeArea(
-                                                          bottom: false,
-                                                          child: ProfileScreen(
-                                                            username: _userName,
-                                                            phoneNumber: _phoneNumber,
-                                                            walletBalance: _totalBalance,
-                                                            avatarPath: _currentAvatarPath,
-                                                            onBackPressed: () {
-                                                              setState(() {
-                                                                _isProfilePageActive = false;
-                                                              });
-                                                            },
-                                                            onAddCashTap: () {
-                                                              setState(() {
-                                                                _isProfilePageActive = false;
-                                                                _currentNavIndex = 2;
-                                                              });
-                                                            },
-                                                            onContactSupportTap: () {
-                                                              setState(() {
-                                                                _isHelpCentrePageActive = true;
-                                                              });
-                                                            },
-                                                            onAvatarChanged: (newPath) async {
-                                                              setState(() {
-                                                                _currentAvatarPath = newPath;
-                                                              });
-                                                              await ApiService.updateUserProfile(avatarPath: newPath);
-                                                              _fetchUserData();
-                                                            },
-                                                            onUsernameChanged: (newName) async {
-                                                              setState(() {
-                                                                _userName = newName;
-                                                              });
-                                                              await ApiService.updateUserProfile(username: newName);
-                                                              _fetchUserData();
-                                                            },
-                                                            onTransactionHistoryTap: () {
-                                                              setState(() {
-                                                                _isProfilePageActive = false;
-                                                                _isTransactionsPageActive = true;
-                                                                _transactionsFilter = 'All';
-                                                              });
-                                                            },
-                                                            onSettingsTap: () {
-                                                              setState(() {
-                                                                _isProfilePageActive = false;
-                                                                _isSettingsPageActive = true;
-                                                              });
-                                                            },
-                                                            onLogoutTap: _handleLogout,
-                                                          ),
-                                                        )
-                                                      : _isWithdrawPageActive
-                                                          ? WithdrawScreen(
-                                                              winningsBalance: _winningsBalance,
-                                                              onBackPressed: () {
-                                                                setState(() {
-                                                                  _isWithdrawPageActive = false;
-                                                                });
-                                                              },
-                                                              onWithdrawCompleted: (grossAmount, netAmount, isDepositBack) {
-                                                                setState(() {
-                                                                  _isWithdrawPageActive = false;
-                                                                });
-                                                                _fetchUserData();
-                                                              },
-                                                            )
-                                                          : IndexedStack(
-                                                              index: _currentNavIndex,
-                                                              children: [
-                                                                _buildHomeTab(),
-                                                                SafeArea(
-                                                                  bottom: false,
-                                                                  child: const ShareScreen(),
-                                                                ),
-                                                                SafeArea(
-                                                                  bottom: false,
-                                                                  child: AddCashScreen(
-                                                                    currentBalance: _totalBalance,
-                                                                    onAddCashCompleted: (addedAmount) {
-                                                                      _fetchUserData();
-                                                                    },
-                                                                  ),
-                                                                ),
-                                                                SafeArea(
-                                                                  bottom: false,
-                                                                  child: WalletScreen(
-                                                                    totalBalance: _totalBalance,
-                                                                    depositBalance: _depositBalance,
-                                                                    winningsBalance: _winningsBalance,
-                                                                    rewardsBalance: _rewardsBalance,
-                                                                    onAddCashTap: () {
-                                                                      setState(() {
-                                                                        _isProfilePageActive = false;
-                                                                        _currentNavIndex = 2;
-                                                                      });
-                                                                    },
-                                                                    onWithdrawTap: () {
-                                                                      setState(() {
-                                                                        _isProfilePageActive = false;
-                                                                        _isWithdrawPageActive = true;
-                                                                      });
-                                                                    },
-                                                                    onAllTransactionsTap: () {
-                                                                      setState(() {
-                                                                        _isProfilePageActive = false;
-                                                                        _isWithdrawPageActive = false;
-                                                                        _isSettingsPageActive = false;
-                                                                        _isTransactionsPageActive = true;
-                                                                        _transactionsFilter = 'All';
-                                                                      });
-                                                                    },
-                                                                    onSupportTap: () {
-                                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                                        SnackBar(
-                                                                          content: Text(
-                                                                            'Customer Support opened',
-                                                                            style: GoogleFonts.poppins(),
-                                                                          ),
-                                                                          backgroundColor: const Color(0xFF6A1B82),
-                                                                          behavior: SnackBarBehavior.floating,
-                                                                        ),
-                                                                      );
-                                                                    },
-                                                                    onSettingsTap: () {
-                                                                      setState(() {
-                                                                        _isProfilePageActive = false;
-                                                                        _isWithdrawPageActive = false;
-                                                                        _isTransactionsPageActive = false;
-                                                                        _isSettingsPageActive = true;
-                                                                      });
-                                                                    },
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
+                  : _isTransactionsPageActive
+                      ? TransactionsScreen(
+                          transactions: _transactionsList,
+                          initialFilter: _transactionsFilter,
+                          onBackPressed: () {
+                            setState(() {
+                              _isTransactionsPageActive = false;
+                            });
+                          },
+                        )
+                      : _isProfilePageActive
+                          ? SafeArea(
+                              bottom: false,
+                              child: ProfileScreen(
+                                username: _userName,
+                                phoneNumber: _phoneNumber,
+                                walletBalance: _totalBalance,
+                                avatarPath: _currentAvatarPath,
+                                onBackPressed: () {
+                                  setState(() {
+                                    _isProfilePageActive = false;
+                                  });
+                                },
+                                onAddCashTap: () {
+                                  setState(() {
+                                    _isProfilePageActive = false;
+                                    _currentNavIndex = 2;
+                                  });
+                                },
+                                onContactSupportTap: () {
+                                  setState(() {
+                                    _isHelpCentrePageActive = true;
+                                  });
+                                },
+                                onAvatarChanged: (newPath) async {
+                                  setState(() {
+                                    _currentAvatarPath = newPath;
+                                  });
+                                  await ApiService.updateUserProfile(avatarPath: newPath);
+                                  _fetchUserData();
+                                },
+                                onUsernameChanged: (newName) async {
+                                  setState(() {
+                                    _userName = newName;
+                                  });
+                                  await ApiService.updateUserProfile(username: newName);
+                                  _fetchUserData();
+                                },
+                                onTransactionHistoryTap: () {
+                                  setState(() {
+                                    _isProfilePageActive = false;
+                                    _isTransactionsPageActive = true;
+                                    _transactionsFilter = 'All';
+                                  });
+                                },
+                                onSettingsTap: () {
+                                  setState(() {
+                                    _isProfilePageActive = false;
+                                    _isSettingsPageActive = true;
+                                  });
+                                },
+                                onLogoutTap: () async {
+                                   await TokenManager.clearSession();
+                                   await SupabaseService.signOut();
+                                   if (mounted) {
+                                     setState(() {
+                                       _isProfilePageActive = false;
+                                       _isLoggedIn = false;
+                                     });
+                                   }
+                                 },
+                              ),
+                            )
+                          : _isWithdrawPageActive
+                              ? WithdrawScreen(
+                                  winningsBalance: _winningsBalance,
+                                  onBackPressed: () {
+                                    setState(() {
+                                      _isWithdrawPageActive = false;
+                                    });
+                                  },
+                                  onWithdrawCompleted: (grossAmount, netAmount, isDepositBack) {
+                                    setState(() {
+                                      _isWithdrawPageActive = false;
+                                    });
+                                    _fetchUserData();
+                                  },
+                                )
+                              : IndexedStack(
+                      index: _currentNavIndex,
+                      children: [
+                        _buildHomeTab(),
+                        SafeArea(
+                          bottom: false,
+                          child: const ShareScreen(),
+                        ),
+                        SafeArea(
+                          bottom: false,
+                          child: AddCashScreen(
+                            currentBalance: _totalBalance,
+                            onAddCashCompleted: (addedAmount) {
+                              _fetchUserData();
+                            },
+                          ),
+                        ),
+                        SafeArea(
+                          bottom: false,
+                          child: WalletScreen(
+                            totalBalance: _totalBalance,
+                            depositBalance: _depositBalance,
+                            winningsBalance: _winningsBalance,
+                            rewardsBalance: _rewardsBalance,
+                            onAddCashTap: () {
+                              setState(() {
+                                _isProfilePageActive = false;
+                                _currentNavIndex = 2;
+                              });
+                            },
+                            onWithdrawTap: () {
+                              setState(() {
+                                _isProfilePageActive = false;
+                                _isWithdrawPageActive = true;
+                              });
+                            },
+                            onAllTransactionsTap: () {
+                              setState(() {
+                                _isProfilePageActive = false;
+                                _isWithdrawPageActive = false;
+                                _isSettingsPageActive = false;
+                                _isTransactionsPageActive = true;
+                                _transactionsFilter = 'All';
+                              });
+                            },
+                            onSupportTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Customer Support opened',
+                                    style: GoogleFonts.poppins(),
+                                  ),
+                                  backgroundColor: const Color(0xFF6A1B82),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                            onSettingsTap: () {
+                              setState(() {
+                                _isProfilePageActive = false;
+                                _isWithdrawPageActive = false;
+                                _isTransactionsPageActive = false;
+                                _isSettingsPageActive = true;
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
             ),
+
+            // Custom Bottom Navigation Bar (Extends to screen edge - Hidden during HTML5 gameplay)
             if (!_isHtml5GameActive)
               CustomBottomNavBar(
-                selectedIndex: (_isProfilePageActive ||
-                        _isWithdrawPageActive ||
-                        _isSettingsPageActive ||
-                        _isTransactionsPageActive ||
-                        _isHelpCentrePageActive ||
-                        _isReportedIssuesPageActive ||
-                        _isAboutUsPageActive ||
-                        _isContactUsPageActive ||
-                        _isFairPlayPageActive)
-                    ? -1
-                    : _currentNavIndex,
-                onItemSelected: (index) {
-                  setState(() {
-                    _isProfilePageActive = false;
-                    _isWithdrawPageActive = false;
-                    _isSettingsPageActive = false;
-                    _isTransactionsPageActive = false;
-                    _isHelpCentrePageActive = false;
-                    _isReportedIssuesPageActive = false;
-                    _isAboutUsPageActive = false;
-                    _isContactUsPageActive = false;
-                    _isFairPlayPageActive = false;
-                    _currentNavIndex = index;
-                  });
-                },
-              ),
+              selectedIndex: (_isProfilePageActive ||
+                      _isWithdrawPageActive ||
+                      _isSettingsPageActive ||
+                      _isTransactionsPageActive ||
+                      _isHelpCentrePageActive ||
+                      _isReportedIssuesPageActive ||
+                      _isAboutUsPageActive ||
+                      _isContactUsPageActive ||
+                      _isFairPlayPageActive)
+                  ? -1
+                  : _currentNavIndex,
+              onItemSelected: (index) {
+                setState(() {
+                  _isProfilePageActive = false;
+                  _isWithdrawPageActive = false;
+                  _isSettingsPageActive = false;
+                  _isTransactionsPageActive = false;
+                  _isHelpCentrePageActive = false;
+                  _isReportedIssuesPageActive = false;
+                  _isAboutUsPageActive = false;
+                  _isContactUsPageActive = false;
+                  _isFairPlayPageActive = false;
+                  _currentNavIndex = index;
+                });
+              },
+            ),
           ],
         ),
       ),
     ),
-  );
+    );
   }
 
   void _launchHtml5Game(String title, double entryFee, double prizePool, String gameUrl) {
@@ -806,57 +783,59 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                     );
                   }
 
-                  return SizedBox(
-                    height: 270,
-                    child: ListView.builder(
-                      clipBehavior: Clip.none,
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 5),
-                      itemCount: gamesListRaw.length,
-                      itemBuilder: (ctx, index) {
-                        final gameObj = gamesListRaw[index] as Map<String, dynamic>? ?? {};
-                        final id = gameObj['id']?.toString() ?? '';
-                        final title = gameObj['title']?.toString() ?? 'Game';
-                        final imagePath = gameObj['imagePath']?.toString() ?? 'Assets/images/7updown.png';
-                        final gameUrl = gameObj['gameUrl']?.toString() ?? '/games/seven_up_down/index.html';
-                        final isAvailable = gameObj['isAvailable'] == true || gameObj['status'] == 'LIVE';
+              return SizedBox(
+                height: 270,
+                child: ListView.builder(
+                  clipBehavior: Clip.none,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 5),
+                  itemCount: gamesListRaw.length,
+                  itemBuilder: (ctx, index) {
+                    final gameObj = gamesListRaw[index] as Map<String, dynamic>? ?? {};
+                    final id = gameObj['id']?.toString() ?? '';
+                    final title = gameObj['title']?.toString() ?? 'Game';
+                    final imagePath = gameObj['imagePath']?.toString() ?? 'Assets/images/7updown.png';
+                    final gameUrl = gameObj['gameUrl']?.toString() ?? '/games/seven_up_down/index.html';
+                    final isAvailable = gameObj['isAvailable'] == true || gameObj['status'] == 'LIVE';
 
-                        Color accentColor = const Color(0xFF00E676);
-                        if (gameObj['accentColor'] != null) {
-                          final hex = gameObj['accentColor'].toString().replaceAll('#', '');
-                          if (hex.length == 6) {
-                            accentColor = Color(int.parse('FF$hex', radix: 16));
-                          }
+                    Color accentColor = const Color(0xFF00E676);
+                    if (gameObj['accentColor'] != null) {
+                      final hex = gameObj['accentColor'].toString().replaceAll('#', '');
+                      if (hex.length == 6) {
+                        accentColor = Color(int.parse('FF$hex', radix: 16));
+                      }
+                    }
+
+                    return GameCard(
+                      data: GameCardData(
+                        id: id,
+                        title: title,
+                        imagePath: imagePath,
+                        accentColor: accentColor,
+                        gameUrl: gameUrl,
+                      ),
+                      onTap: () {
+                        if (isAvailable || id == 'seven_up_down' || id == '7updown' || id == 'dragon_tiger' || id == 'crush' || id == 'classic_dice') {
+                          _launchHtml5Game(title, 10.0, 20.0, gameUrl);
+                        } else {
+                          _showComingSoon(title);
                         }
-
-                        return GameCard(
-                          data: GameCardData(
-                            id: id,
-                            title: title,
-                            imagePath: imagePath,
-                            accentColor: accentColor,
-                            gameUrl: gameUrl,
-                          ),
-                          onTap: () {
-                            if (isAvailable || id == 'seven_up_down' || id == '7updown' || id == 'dragon_tiger' || id == 'crush' || id == 'classic_dice') {
-                              _launchHtml5Game(title, 10.0, 20.0, gameUrl);
-                            } else {
-                              _showComingSoon(title);
-                            }
-                          },
-                        );
                       },
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               );
             },
-          ),
-          const SizedBox(height: 20),
+          );
+        },
+      ),
+      const SizedBox(height: 20),
         ],
       ),
     );
   }
 
   static void _noop() {}
+
+
 }
