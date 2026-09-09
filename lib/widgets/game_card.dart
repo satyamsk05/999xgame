@@ -31,6 +31,9 @@ class GameCard extends StatelessWidget {
     this.isLoading = false,
   });
 
+  bool get _hasPlayableFrontend =>
+      data.id == 'seven_up_down' || data.id == '7updown';
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -45,7 +48,7 @@ class GameCard extends StatelessWidget {
     }
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: _hasPlayableFrontend ? onTap : () => _showComingSoon(context),
       child: Container(
         width: 260,
         height: 260,
@@ -65,11 +68,45 @@ class GameCard extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Main Game Poster Image with Multi-Path Resolution
               _buildImageWithFallbacks(data.imagePath),
+              if (!_hasPlayableFrontend)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                    color: const Color(0xCC130221),
+                    child: Text(
+                      'COMING SOON',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showComingSoon(BuildContext context) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${data.title} - Coming Soon!',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: const Color(0xFF260435),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
       ),
     );
   }
