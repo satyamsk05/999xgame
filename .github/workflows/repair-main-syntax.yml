@@ -1,21 +1,17 @@
-name: Repair Flutter main syntax
+name: repair-flutter-main-syntax
 
-on:
-  push:
-    branches: [main]
+on: push
 
 permissions:
   contents: write
 
 jobs:
   repair:
-    if: github.event.head_commit.message != 'chore: repair Flutter main syntax'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Repair missing PopScope close
+      - uses: actions/checkout@v4
+      - name: Fix main.dart
+        shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -24,11 +20,11 @@ jobs:
           marker = "          ],\n        ),\n      ),\n    );\n  }\n\n  void _launchHtml5Game"
           fixed = "          ],\n        ),\n      ),\n    ),\n  );\n  }\n\n  void _launchHtml5Game"
           if marker not in text:
-              raise SystemExit('Expected main.dart tail pattern was not found; refusing to modify source.')
+              raise SystemExit('Expected main.dart tail pattern not found')
           path.write_text(text.replace(marker, fixed, 1))
           PY
-
-      - name: Commit repair and remove one-shot workflow
+      - name: Commit and remove repair workflow
+        shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
