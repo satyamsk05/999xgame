@@ -4,11 +4,6 @@ const config = require('../config/env');
 const logger = require('../utils/logger');
 const financialService = require('../services/financial.service');
 
-/**
- * Map a withdrawals row to the API response contract (camelCase).
- * Shared by the duplicate-replay paths so a repeated create returns the exact
- * same shape as the original (sec 16).
- */
 function toWithdrawalResponse(row, extra = {}) {
   return {
     id: row.id,
@@ -26,13 +21,10 @@ function toWithdrawalResponse(row, extra = {}) {
   };
 }
 
-/**
- * Create Withdrawal Request in PostgreSQL (Initial Status: PENDING)
- * Funds are ATOMICALLY reserved from available_balance -> reserved_balance.
- */
 async function createWithdrawalRequest({ userId, amountRupees, upiId, clientRequestId = null, idempotencyKey = null }) {
-  const amountRupeeNum = parseFloat(amountRupees);
-  if (isNaN(amountRupeeNum) || amountRupeeNum <= 0) {
+  const amountRupeeNum = Number(amountRupees);
+  const amountPaise = Number.isSafeInteger(Math.round(amountRupeeNum * 100)) ? Math.round(amountRupeeNum * 100) : 0;
+  if (!Number.isFinite(amountRupeeNum) || amountPaise <= 0) {
     const err = new Error('Valid numeric withdrawal amount is required');
     err.statusCode = 400;
     throw err;
@@ -41,7 +33,7 @@ async function createWithdrawalRequest({ userId, amountRupees, upiId, clientRequ
   const minRupees = config.withdrawal.minAmountRupees || 100;
   const maxRupees = config.withdrawal.maxAmountRupees || 50000;
 
-  if (amountRupeeNum < minRupees || amountRupeeNum > maxRupees) {
+  if (amountPaise < Math.round(minRupees * 100) || amountPaise > Math.round(maxRupees * 100)) {
     const err = new Error(`Withdrawal amount must be between ₹${minRupees} and ₹${maxRupees}`);
     err.statusCode = 400;
     throw err;
@@ -54,18 +46,15 @@ async function createWithdrawalRequest({ userId, amountRupees, upiId, clientRequ
   }
 
   const cleanUpi = upiId.trim();
-  const amountPaise = Math.round(amountRupeeNum * 100);
-
   const withdrawalId = `WDR_${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
   const id = `wdr_${crypto.randomUUID()}`;
 
-  // sec 16: deterministic operation id WITHDRAW_CREATE:{clientRequestId}.
-  // A client-supplied request id makes a retry of the SAME logical withdrawal map
-  // to the SAME key, so withdrawals.idempotency_key UNIQUE prevents a double
-  // reserve. NEVER derive this key from Date.now()/Math.random(). When the client
-  // sends no request id, fall back to the unique withdrawalId (still deterministic
-  // per row, no time-based collisions).
   const resolvedRequestId = clientRequestId || idempotencyKey;
+  if (resolvedRequestId !== null && (typeof resolvedRequestId !== 'string' || resolvedRequestId.length < 1 || resolvedRequestId.length > 100)) {
+    const err = new Error('Invalid withdrawal idempotency key');
+    err.statusCode = 400;
+    throw err;
+  }
   const effectiveIdempKey = resolvedRequestId
     ? `WITHDRAW_CREATE:${resolvedRequestId}`
     : `WITHDRAW_CREATE:${withdrawalId}`;
@@ -100,30 +89,13 @@ async function createWithdrawalRequest({ userId, amountRupees, upiId, clientRequ
     );
 
     await client.query('COMMIT');
-
     const row = res.rows[0];
-    logger.info('Created PENDING withdrawal request & reserved funds in PostgreSQL', {
-      userId,
-      withdrawalId: row.withdrawal_id,
-      amountPaise,
-      upiId: cleanUpi,
-    });
+    logger.info('Created PENDING withdrawal request & reserved funds in PostgreSQL', { userId, withdrawalId: row.withdrawal_id, amountPaise });
 
     const availPaise = parseInt(reserveResult.wallet.available_balance, 10);
     const resvPaise = parseInt(reserveResult.wallet.reserved_balance, 10);
-
     return {
-      id: row.id,
-      withdrawalId: row.withdrawal_id,
-      userId: row.user_id,
-      amountRupees: amountPaise / 100,
-      amountPaise,
-      currency: row.currency,
-      status: row.status,
-      payoutMethod: row.payout_method,
-      upiId: row.payout_address_or_upi,
-      requestedAt: row.requested_at,
-      createdAt: row.created_at,
+      ...toWithdrawalResponse(row),
       reservedWallet: {
         totalBalance: (availPaise + resvPaise) / 100,
         availableBalance: availPaise / 100,
@@ -132,15 +104,17 @@ async function createWithdrawalRequest({ userId, amountRupees, upiId, clientRequ
     };
   } catch (err) {
     await client.query('ROLLBACK');
-    // sec 16: a unique-violation on idempotency_key means a concurrent duplicate
-    // create for the SAME client request id. Return the existing withdrawal instead
-    // of double-reserving (fail-safe, no partial financial mutation).
     if (err && err.code === '23505' && resolvedRequestId) {
       const existing = await query(
-        'SELECT * FROM withdrawals WHERE idempotency_key = $1 AND user_id = $2',
-        [effectiveIdempKey, userId]
+        'SELECT * FROM withdrawals WHERE idempotency_key = $1',
+        [effectiveIdempKey]
       );
       if (existing.rows.length > 0) {
+        if (existing.rows[0].user_id !== userId) {
+          const conflict = new Error('Withdrawal idempotency key is already used by another user');
+          conflict.statusCode = 409;
+          throw conflict;
+        }
         return toWithdrawalResponse(existing.rows[0], { isDuplicate: true });
       }
     }
@@ -156,18 +130,11 @@ async function createWithdrawalRequest({ userId, amountRupees, upiId, clientRequ
   }
 }
 
-/**
- * Get Withdrawal Request by ID or withdrawal_id
- */
 async function getWithdrawalById(withdrawalId, userId = null) {
   try {
     let sql = 'SELECT * FROM withdrawals WHERE (withdrawal_id = $1 OR id = $1)';
     const params = [withdrawalId];
-    if (userId) {
-      sql += ' AND user_id = $2';
-      params.push(userId);
-    }
-
+    if (userId) { sql += ' AND user_id = $2'; params.push(userId); }
     const res = await query(sql, params);
     if (res.rows.length === 0) return null;
     return res.rows[0];
@@ -177,9 +144,6 @@ async function getWithdrawalById(withdrawalId, userId = null) {
   }
 }
 
-/**
- * Admin: Fetch pending withdrawal requests
- */
 async function getPendingWithdrawalsForAdmin({ limit = 50, offset = 0 } = {}) {
   try {
     const res = await query(
@@ -191,21 +155,12 @@ async function getPendingWithdrawalsForAdmin({ limit = 50, offset = 0 } = {}) {
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
-
     return res.rows.map((row) => ({
-      id: row.id,
-      withdrawalId: row.withdrawal_id,
-      userId: row.user_id,
-      userPhone: row.user_phone,
-      userUsername: row.user_username,
-      amountRupees: parseInt(row.amount, 10) / 100,
-      amountPaise: parseInt(row.amount, 10),
-      currency: row.currency,
-      status: row.status,
-      payoutMethod: row.payout_method,
-      upiId: row.payout_address_or_upi,
-      requestedAt: row.requested_at,
-      createdAt: row.created_at,
+      id: row.id, withdrawalId: row.withdrawal_id, userId: row.user_id,
+      userPhone: row.user_phone, userUsername: row.user_username,
+      amountRupees: parseInt(row.amount, 10) / 100, amountPaise: parseInt(row.amount, 10),
+      currency: row.currency, status: row.status, payoutMethod: row.payout_method,
+      upiId: row.payout_address_or_upi, requestedAt: row.requested_at, createdAt: row.created_at,
     }));
   } catch (err) {
     logger.error('Failed to fetch pending withdrawals for admin', { error: err.message });
@@ -213,250 +168,68 @@ async function getPendingWithdrawalsForAdmin({ limit = 50, offset = 0 } = {}) {
   }
 }
 
-/**
- * Admin: Confirm Withdrawal Payout & Finalize Reserved Funds (Atomic PostgreSQL Transaction)
- */
 async function confirmWithdrawalByAdmin({ withdrawalId, adminId = 'admin_sys', adminNote = '' }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
-
-    const findRes = await client.query(
-      `SELECT * FROM withdrawals WHERE withdrawal_id = $1 OR id = $1 FOR UPDATE`,
-      [withdrawalId]
-    );
-
-    if (findRes.rows.length === 0) {
-      const err = new Error('Withdrawal request not found');
-      err.statusCode = 404;
-      throw err;
-    }
-
+    const findRes = await client.query(`SELECT * FROM withdrawals WHERE withdrawal_id = $1 OR id = $1 FOR UPDATE`, [withdrawalId]);
+    if (findRes.rows.length === 0) { const err = new Error('Withdrawal request not found'); err.statusCode = 404; throw err; }
     const withdrawal = findRes.rows[0];
-
-    if (['SUCCESS', 'CONFIRMED'].includes(withdrawal.status)) {
-      const err = new Error('Withdrawal request is already SUCCESS / CONFIRMED. Cannot double process.');
-      err.statusCode = 400;
-      throw err;
-    }
-
-    if (withdrawal.status === 'REJECTED') {
-      const err = new Error('Cannot confirm a REJECTED withdrawal request');
-      err.statusCode = 400;
-      throw err;
-    }
-
+    if (['SUCCESS', 'CONFIRMED'].includes(withdrawal.status)) { const err = new Error('Cannot confirm an already completed SUCCESS withdrawal'); err.statusCode = 400; throw err; }
+    if (withdrawal.status === 'REJECTED') { const err = new Error('Cannot confirm a REJECTED withdrawal'); err.statusCode = 400; throw err; }
     const amountPaise = parseInt(withdrawal.amount, 10);
-
-    // Finalize reserved funds
     const finalizeResult = await financialService.finalizeReservedFunds(client, amountPaise, {
-      userId: withdrawal.user_id,
-      referenceType: 'WITHDRAWAL',
-      referenceId: withdrawal.withdrawal_id,
+      userId: withdrawal.user_id, referenceType: 'WITHDRAWAL', referenceId: withdrawal.withdrawal_id,
       idempotencyKey: `WITHDRAW_CONFIRM:${withdrawal.withdrawal_id}`,
       metadata: { adminId, adminNote, upiId: withdrawal.payout_address_or_upi },
     });
-
-    const updateRes = await client.query(
-      `UPDATE withdrawals
-       SET status = 'SUCCESS', completed_at = NOW(), admin_id = $2, admin_note = $3, updated_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
-      [withdrawal.id, adminId, adminNote]
-    );
-
+    const updateRes = await client.query(`UPDATE withdrawals SET status = 'SUCCESS', completed_at = NOW(), admin_id = $2, admin_note = $3, updated_at = NOW() WHERE id = $1 RETURNING *`, [withdrawal.id, adminId, adminNote]);
     await client.query('COMMIT');
-
     const row = updateRes.rows[0];
-    logger.info('Admin confirmed withdrawal payout in PostgreSQL', {
-      withdrawalId: row.withdrawal_id,
-      userId: row.user_id,
-      amountPaise,
-      adminId,
-    });
-
     const availPaise = parseInt(finalizeResult.wallet.available_balance, 10);
     const resvPaise = parseInt(finalizeResult.wallet.reserved_balance, 10);
-
-    return {
-      id: row.id,
-      withdrawalId: row.withdrawal_id,
-      userId: row.user_id,
-      amountRupees: row.amount / 100,
-      amountPaise: row.amount,
-      status: row.status,
-      upiId: row.payout_address_or_upi,
-      completedAt: row.completed_at,
-      adminId: row.admin_id,
-      adminNote: row.admin_note,
-      updatedWallet: {
-        totalBalance: (availPaise + resvPaise) / 100,
-        availableBalance: availPaise / 100,
-        reservedBalance: resvPaise / 100,
-      },
-    };
+    return { ...toWithdrawalResponse(row), completedAt: row.completed_at, adminId: row.admin_id, adminNote: row.admin_note, updatedWallet: { totalBalance: (availPaise + resvPaise) / 100, availableBalance: availPaise / 100, reservedBalance: resvPaise / 100 } };
   } catch (err) {
-    await client.query('ROLLBACK');
-    logger.error('Failed to confirm withdrawal by admin', { withdrawalId, adminId, error: err.message });
-    throw err;
-  } finally {
-    client.release();
-  }
+    await client.query('ROLLBACK'); logger.error('Failed to confirm withdrawal by admin', { withdrawalId, adminId, error: err.message }); throw err;
+  } finally { client.release(); }
 }
 
-/**
- * Admin: Reject Withdrawal Payout & Release Reserved Funds back to Available (Atomic PostgreSQL Transaction)
- */
 async function rejectWithdrawalByAdmin({ withdrawalId, adminId = 'admin_sys', adminNote = '' }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
-
-    const findRes = await client.query(
-      `SELECT * FROM withdrawals WHERE withdrawal_id = $1 OR id = $1 FOR UPDATE`,
-      [withdrawalId]
-    );
-
-    if (findRes.rows.length === 0) {
-      const err = new Error('Withdrawal request not found');
-      err.statusCode = 404;
-      throw err;
-    }
-
+    const findRes = await client.query(`SELECT * FROM withdrawals WHERE withdrawal_id = $1 OR id = $1 FOR UPDATE`, [withdrawalId]);
+    if (findRes.rows.length === 0) { const err = new Error('Withdrawal request not found'); err.statusCode = 404; throw err; }
     const withdrawal = findRes.rows[0];
-
-    if (['SUCCESS', 'CONFIRMED'].includes(withdrawal.status)) {
-      const err = new Error('Cannot reject an already completed SUCCESS withdrawal');
-      err.statusCode = 400;
-      throw err;
-    }
-
-    if (withdrawal.status === 'REJECTED') {
-      const err = new Error('Withdrawal request is already REJECTED');
-      err.statusCode = 400;
-      throw err;
-    }
-
+    if (['SUCCESS', 'CONFIRMED'].includes(withdrawal.status)) { const err = new Error('Cannot reject an already completed SUCCESS withdrawal'); err.statusCode = 400; throw err; }
+    if (withdrawal.status === 'REJECTED') { const err = new Error('Withdrawal request is already REJECTED'); err.statusCode = 400; throw err; }
     const amountPaise = parseInt(withdrawal.amount, 10);
-
-    // Release reserved funds back to available
     const releaseResult = await financialService.releaseReservedFunds(client, amountPaise, {
-      userId: withdrawal.user_id,
-      referenceType: 'WITHDRAWAL',
-      referenceId: withdrawal.withdrawal_id,
+      userId: withdrawal.user_id, referenceType: 'WITHDRAWAL', referenceId: withdrawal.withdrawal_id,
       idempotencyKey: `WITHDRAW_REJECT:${withdrawal.withdrawal_id}`,
       metadata: { adminId, adminNote, upiId: withdrawal.payout_address_or_upi },
     });
-
-    const updateRes = await client.query(
-      `UPDATE withdrawals
-       SET status = 'REJECTED', rejected_at = NOW(), admin_id = $2, admin_note = $3, updated_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
-      [withdrawal.id, adminId, adminNote]
-    );
-
+    const updateRes = await client.query(`UPDATE withdrawals SET status = 'REJECTED', rejected_at = NOW(), admin_id = $2, admin_note = $3, updated_at = NOW() WHERE id = $1 RETURNING *`, [withdrawal.id, adminId, adminNote]);
     await client.query('COMMIT');
-
     const row = updateRes.rows[0];
-    logger.info('Admin rejected withdrawal payout in PostgreSQL', {
-      withdrawalId: row.withdrawal_id,
-      userId: row.user_id,
-      amountPaise,
-      adminId,
-    });
-
     const availPaise = parseInt(releaseResult.wallet.available_balance, 10);
     const resvPaise = parseInt(releaseResult.wallet.reserved_balance, 10);
-
-    return {
-      id: row.id,
-      withdrawalId: row.withdrawal_id,
-      userId: row.user_id,
-      amountRupees: row.amount / 100,
-      amountPaise: row.amount,
-      status: row.status,
-      upiId: row.payout_address_or_upi,
-      rejectedAt: row.rejected_at,
-      adminId: row.admin_id,
-      adminNote: row.admin_note,
-      updatedWallet: {
-        totalBalance: (availPaise + resvPaise) / 100,
-        availableBalance: availPaise / 100,
-        reservedBalance: resvPaise / 100,
-      },
-    };
+    return { ...toWithdrawalResponse(row), rejectedAt: row.rejected_at, adminId: row.admin_id, adminNote: row.admin_note, updatedWallet: { totalBalance: (availPaise + resvPaise) / 100, availableBalance: availPaise / 100, reservedBalance: resvPaise / 100 } };
   } catch (err) {
-    await client.query('ROLLBACK');
-    logger.error('Failed to reject withdrawal by admin', { withdrawalId, adminId, error: err.message });
-    throw err;
-  } finally {
-    client.release();
-  }
+    await client.query('ROLLBACK'); logger.error('Failed to reject withdrawal by admin', { withdrawalId, adminId, error: err.message }); throw err;
+  } finally { client.release(); }
 }
 
-/**
- * Admin: Mark Withdrawal as PROCESSING (Admin started manual payout handling)
- */
 async function processWithdrawalByAdmin({ withdrawalId, adminId = 'admin_sys', adminNote = '' }) {
   try {
     const withdrawal = await getWithdrawalById(withdrawalId);
-    if (!withdrawal) {
-      const err = new Error('Withdrawal request not found');
-      err.statusCode = 404;
-      throw err;
-    }
-
-    if (withdrawal.status !== 'PENDING') {
-      const err = new Error(`Cannot start processing. Withdrawal is in status ${withdrawal.status}`);
-      err.statusCode = 400;
-      throw err;
-    }
-
-    const res = await query(
-      `UPDATE withdrawals
-       SET status = 'PROCESSING', processing_at = NOW(), admin_id = $2, admin_note = $3, updated_at = NOW()
-       WHERE id = $1 AND status = 'PENDING'
-       RETURNING *`,
-      [withdrawal.id, adminId, adminNote]
-    );
-
-    if (res.rows.length === 0) {
-      const err = new Error('Withdrawal is no longer PENDING (already processing/confirmed/rejected)');
-      err.statusCode = 409;
-      throw err;
-    }
-
+    if (!withdrawal) { const err = new Error('Withdrawal request not found'); err.statusCode = 404; throw err; }
+    if (withdrawal.status !== 'PENDING') { const err = new Error(`Cannot start processing. Withdrawal is in status ${withdrawal.status}`); err.statusCode = 400; throw err; }
+    const res = await query(`UPDATE withdrawals SET status = 'PROCESSING', processing_at = NOW(), admin_id = $2, admin_note = $3, updated_at = NOW() WHERE id = $1 AND status = 'PENDING' RETURNING *`, [withdrawal.id, adminId, adminNote]);
+    if (res.rows.length === 0) { const err = new Error('Withdrawal is no longer PENDING (already processing/confirmed/rejected)'); err.statusCode = 409; throw err; }
     const row = res.rows[0];
-    logger.info('Admin started processing withdrawal payout in PostgreSQL', {
-      withdrawalId: row.withdrawal_id,
-      userId: row.user_id,
-      adminId,
-    });
-
-    return {
-      id: row.id,
-      withdrawalId: row.withdrawal_id,
-      userId: row.user_id,
-      amountRupees: row.amount / 100,
-      amountPaise: row.amount,
-      status: row.status,
-      upiId: row.payout_address_or_upi,
-      processingAt: row.processing_at,
-      adminId: row.admin_id,
-      adminNote: row.admin_note,
-    };
-  } catch (err) {
-    logger.error('Failed to process withdrawal by admin', { withdrawalId, adminId, error: err.message });
-    throw err;
-  }
+    return { ...toWithdrawalResponse(row), processingAt: row.processing_at, adminId: row.admin_id, adminNote: row.admin_note };
+  } catch (err) { logger.error('Failed to process withdrawal by admin', { withdrawalId, adminId, error: err.message }); throw err; }
 }
 
-module.exports = {
-  createWithdrawalRequest,
-  getWithdrawalById,
-  getPendingWithdrawalsForAdmin,
-  processWithdrawalByAdmin,
-  confirmWithdrawalByAdmin,
-  rejectWithdrawalByAdmin,
-};
+module.exports = { createWithdrawalRequest, getWithdrawalById, getPendingWithdrawalsForAdmin, processWithdrawalByAdmin, confirmWithdrawalByAdmin, rejectWithdrawalByAdmin };
