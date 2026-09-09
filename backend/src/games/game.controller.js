@@ -128,11 +128,11 @@ router.post('/7updown/bets', betLimiter, authMiddleware, async (req, res) => {
     const activeRoundId = sevenUpDownEngine.currentRound?.roundId || roundId;
     if (!activeRoundId) return res.status(503).json({ status: 'error', code: 'GAME_NOT_READY', message: 'Game worker is not ready yet.' });
     const batchKey = validation.validateIdempotencyKey(idempotencyKey);
-    const normalizedBets = betList.map((betItem) => {
+    const normalizedBets = betList.map((betItem, index) => {
       const itemStakePaise = validation.resolveStakePaise({ stakePaise: betItem.stakePaise, stake: betItem.stake }, 'stake');
       validation.validateBetType(betItem.betType, 'seven_up_down');
       const clientKey = validation.validateIdempotencyKey(betItem.idempotencyKey);
-      const itemKey = clientKey || batchKey || `sud_req_${crypto.randomUUID()}`;
+      const itemKey = clientKey || (batchKey ? `sud_batch_${batchKey}_${index}` : `sud_req_${crypto.randomUUID()}`);
       return { betType: betItem.betType, stakePaise: itemStakePaise, idempotencyKey: itemKey };
     });
 
