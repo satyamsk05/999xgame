@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TokenManager {
@@ -9,13 +10,30 @@ class TokenManager {
   static const String _keyUserPhone = 'auth_user_phone';
   static const String _keyUserAvatar = 'auth_user_avatar';
 
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+
   static String? _cachedToken;
   static String? _cachedUserId;
 
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_keyToken);
     final storedUserId = prefs.getString(_keyUserId);
+
+    // Migrate legacy JWTs that were stored in SharedPreferences. The token is
+    // removed from the legacy store only after secure storage confirms the write.
+    var token = await _secureStorage.read(key: _keyToken);
+    if (token == null || token.isEmpty) {
+      final legacyToken = prefs.getString(_keyToken);
+      if (legacyToken != null && legacyToken.isNotEmpty && storedUserId != null) {
+        if (_isUsableToken(legacyToken, storedUserId)) {
+          await _secureStorage.write(key: _keyToken, value: legacyToken);
+          token = legacyToken;
+          await prefs.remove(_keyToken);
+        } else {
+          await prefs.remove(_keyToken);
+        }
+      }
+    }
 
     if (_isUsableToken(token, storedUserId)) {
       _cachedToken = token;
@@ -47,15 +65,24 @@ class TokenManager {
       throw const FormatException('Invalid or expired authentication token.');
     }
 
+    final prefs = await SharedPreferences.getInstance();
+
+    // Persist the sensitive credential first. If secure storage fails, don't
+    // mark the session authenticated or leave a plaintext fallback behind.
+    await _secureStorage.write(key: _keyToken, value: token);
+    try {
+      await prefs.setString(_keyUserId, userId);
+      if (username != null) await prefs.setString(_keyUserName, username);
+      if (phone != null) await prefs.setString(_keyUserPhone, phone);
+      if (avatarPath != null) await prefs.setString(_keyUserAvatar, avatarPath);
+      await prefs.remove(_keyToken);
+    } catch (_) {
+      await _secureStorage.delete(key: _keyToken);
+      rethrow;
+    }
+
     _cachedToken = token;
     _cachedUserId = userId;
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyToken, token);
-    await prefs.setString(_keyUserId, userId);
-    if (username != null) await prefs.setString(_keyUserName, username);
-    if (phone != null) await prefs.setString(_keyUserPhone, phone);
-    if (avatarPath != null) await prefs.setString(_keyUserAvatar, avatarPath);
   }
 
   static Future<void> clearSession() async {
@@ -63,6 +90,7 @@ class TokenManager {
     _cachedUserId = null;
 
     final prefs = await SharedPreferences.getInstance();
+    await _secureStorage.delete(key: _keyToken);
     await _clearPersistedSession(prefs);
   }
 
