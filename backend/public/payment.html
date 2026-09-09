@@ -2,64 +2,72 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#170020">
-<title>999x Payment</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>999x UPI Payment</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#170020;color:#fff;font-family:Inter,Arial,sans-serif;min-height:100vh;display:flex;justify-content:center}.wrap{width:min(460px,100%);padding:24px 16px 40px}.card{background:#240535;border:1px solid #5c1675;border-radius:22px;padding:22px;box-shadow:0 12px 40px #0008}.brand{text-align:center;font-size:24px;font-weight:900}.muted{color:#b9a8c2}.amount{text-align:center;font-size:38px;font-weight:900;margin:12px 0}.upi{text-align:center;background:#170020;border:1px solid #6d2088;border-radius:14px;padding:14px;margin:18px 0}.qr{width:230px;height:230px;background:#fff;border-radius:16px;padding:10px;display:block;margin:16px auto}.btn{width:100%;border:0;border-radius:14px;padding:15px;font-size:16px;font-weight:800;cursor:pointer}.pay{background:#00e676;color:#07120b}.submit{background:#fff;color:#4d1264}.input{width:100%;padding:14px;border-radius:12px;border:1px solid #6d2088;background:#170020;color:#fff;font-size:18px;letter-spacing:2px;margin:10px 0 14px}.status{text-align:center;padding:12px;border-radius:12px;background:#311044;margin-top:14px}.hidden{display:none}.small{font-size:12px;color:#a993ad;text-align:center;margin-top:12px}.error{background:#4a1020;color:#ffd7df}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#fff;color:#111;font-family:Inter,Arial,sans-serif}body{display:flex;justify-content:center}.page{width:min(430px,100%);min-height:100vh;padding:18px 18px 28px}.top{display:flex;align-items:center;justify-content:space-between;padding:4px 2px 14px;font-size:15px;font-weight:800}.top .time{font-weight:500;color:#555}.card{border:1px solid #d8d8df;border-radius:18px;padding:18px 14px 20px;background:#fff;box-shadow:0 4px 18px #00000012}.brand{text-align:left;font-size:15px;font-weight:900;margin-bottom:8px}.amount{text-align:center;font-size:34px;font-weight:900;margin:10px 0 16px}.upi{text-align:center;color:#222;font-size:13px;line-height:1.45}.upi strong{display:block;font-size:17px;margin-top:2px}.merchant{color:#777}.qr{width:245px;height:245px;object-fit:contain;display:block;margin:16px auto 14px;border:1px solid #5ddddd;background:#fff}.pay-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 14px}.pay{border:0;border-radius:10px;padding:11px 6px;font-size:14px;font-weight:900;cursor:pointer;text-decoration:none;text-align:center;color:#111}.gpay{background:#cbd5f0}.phonepe{background:#93aaf5}.note{text-align:center;font-size:11px;color:#777;line-height:1.45;margin:4px 10px 18px}.divider{border:0;border-top:1px solid #e4e4e8;margin:0 0 18px}.label{font-size:13px;font-weight:900;margin-bottom:7px}.input{width:100%;height:44px;padding:0 13px;border-radius:9px;border:1px solid #b8b8c2;background:#fff;color:#222;font-size:16px;letter-spacing:1.5px;outline:none}.input:focus{border-color:#7890ee;box-shadow:0 0 0 2px #7890ee22}.submit{width:100%;height:44px;margin-top:10px;border:0;border-radius:9px;background:#8fa8f5;color:#536aa9;font-size:14px;font-weight:900;cursor:pointer}.submit:disabled{opacity:.65}.status{text-align:center;font-size:12px;line-height:1.4;margin-top:12px;padding:10px;border-radius:9px;background:#f2f2f6;color:#555}.error{background:#ffe9ed;color:#a51f38}.hidden{display:none}.loading{text-align:center;padding:45px 12px;color:#777;font-size:13px}.security{text-align:center;color:#aaa;font-size:10px;margin-top:14px}
 </style>
 </head>
-<body><main class="wrap"><section class="card">
-<div class="brand">999x</div><div class="muted" style="text-align:center">Secure UPI payment</div>
-<div id="loading" class="status">Loading payment details…</div>
+<body><main class="page">
+<div class="top"><span>999xgame</span><span class="time">UPI PAYMENT</span></div>
+<section class="card">
+<div id="loading" class="loading">Loading payment details…</div>
 <div id="content" class="hidden">
+<div class="brand">999xgame</div>
 <div class="amount" id="amount">₹0.00</div>
-<div class="upi"><div class="muted">Pay to UPI ID</div><strong id="upi">—</strong><div class="muted" id="merchant"></div></div>
+<div class="upi">Pay to UPI ID<strong id="upi">—</strong><span class="merchant" id="merchant"></span></div>
 <img id="qr" class="qr" alt="UPI QR code">
-<a id="payLink" class="btn pay" style="display:block;text-align:center;text-decoration:none">OPEN UPI APP</a>
-<p class="small">Pay the exact amount shown above. After payment, enter the 12-digit UTR/Reference number below.</p>
-<hr style="border:0;border-top:1px solid #ffffff18;margin:22px 0">
-<div style="font-weight:800">Submit UTR</div>
-<input id="utr" class="input" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="12-digit UTR / reference">
-<button id="submit" class="btn submit">SUBMIT UTR</button>
+<div class="pay-grid">
+<a id="gpay" class="pay gpay">GOOGLE PAY</a>
+<a id="phonepe" class="pay phonepe">PHONEPE</a>
+</div>
+<div class="note">Pay the exact amount shown above. After successful payment, enter the 12-digit UTR / Reference number below.</div>
+<hr class="divider">
+<div class="label">UTR Address</div>
+<input id="utr" class="input" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="UTR Enter">
+<button id="submit" class="submit">SUBMIT UTR</button>
 <div id="status" class="status hidden"></div>
-</div></section></main>
+</div>
+</section>
+<div class="security">Secure UPI payment • Manual verification</div>
+</main>
 <script>
 const qs=new URLSearchParams(location.search),depositId=qs.get('depositId'),token=qs.get('token');
 const $=id=>document.getElementById(id);
 function show(t,error=false){$('status').textContent=t;$('status').classList.remove('hidden');$('status').classList.toggle('error',error)}
+function openUpi(url){if(url) window.location.href=url;}
 async function boot(){
  if(!depositId||!token){$('loading').textContent='Invalid payment link.';return}
  try{
   const r=await fetch('/api/deposits/payment/'+encodeURIComponent(depositId)+'?token='+encodeURIComponent(token),{cache:'no-store'});
   let j={};try{j=await r.json()}catch(_){throw new Error('Payment service returned an invalid response.')}
   if(!r.ok||j.status!=='success') throw new Error(j.message||'Payment link expired or is invalid.');
-  const d=j.data||{};
+  const d=j.data||{};const amount=Number(d.amountRupees);
   if(!d.upiId) throw new Error('UPI payment is temporarily unavailable. Please contact support.');
-  const amount=Number(d.amountRupees);
   if(!Number.isFinite(amount)||amount<=0) throw new Error('Invalid deposit amount. Please create a new deposit request.');
+  const upi=d.upiId,merchant=d.merchantName||'999xgame';
+  const qr=d.qrData||('upi://pay?pa='+encodeURIComponent(upi)+'&pn='+encodeURIComponent(merchant)+'&am='+amount.toFixed(2)+'&cu=INR&tn='+encodeURIComponent(d.depositId||depositId));
   $('amount').textContent='₹'+amount.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
-  $('upi').textContent=d.upiId;
-  $('merchant').textContent=d.merchantName||'999x';
-  $('qr').src='https://api.qrserver.com/v1/create-qr-code/?size=460x460&margin=8&data='+encodeURIComponent(d.qrData||'');
-  $('qr').onerror=()=>show('QR could not be loaded. You can still use the UPI ID above.',true);
-  if(d.qrData) $('payLink').href=d.qrData; else $('payLink').style.display='none';
+  $('upi').textContent=upi;$('merchant').textContent=merchant;
+  $('qr').src='https://api.qrserver.com/v1/create-qr-code/?size=490x490&margin=8&data='+encodeURIComponent(qr);
+  $('qr').onerror=()=>show('QR could not be loaded. You can still pay using the UPI ID.',true);
+  $('gpay').href=qr;$('phonepe').href=qr;
   $('loading').classList.add('hidden');$('content').classList.remove('hidden');
   if(d.status==='UTR_SUBMITTED'){show('UTR already submitted. Waiting for admin verification.');$('utr').disabled=true;$('submit').disabled=true;}
  }catch(e){$('loading').textContent=e.message||'Could not load payment details.';$('loading').classList.add('error')}
 }
 $('utr').addEventListener('input',()=>{$('utr').value=$('utr').value.replace(/\D/g,'').slice(0,12)});
 $('submit').onclick=async()=>{
- const utr=$('utr').value.trim();
- if(!/^\d{12}$/.test(utr)){show('Enter exactly 12 numeric digits.',true);return}
+ const utr=$('utr').value.trim();if(!/^\d{12}$/.test(utr)){show('Enter exactly 12 numeric digits.',true);return}
  $('submit').disabled=true;$('submit').textContent='SUBMITTING…';
  try{
   const r=await fetch('/api/deposits/payment/'+encodeURIComponent(depositId)+'/utr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,utr})});
   let j={};try{j=await r.json()}catch(_){throw new Error('Server returned an invalid response.')}
   if(!r.ok||j.status!=='success') throw new Error(j.message||'Unable to submit UTR.');
-  show(j.message||'UTR submitted. Pending admin verification.');
-  $('utr').disabled=true;$('submit').textContent='UTR SUBMITTED';
+  show(j.message||'UTR submitted. Pending admin verification.');$('utr').disabled=true;$('submit').textContent='UTR SUBMITTED';
  }catch(e){show(e.message||'Unable to submit UTR.',true);$('submit').disabled=false;$('submit').textContent='SUBMIT UTR'}
 };
 boot();
-</script></body></html>
+</script>
+</body></html>
