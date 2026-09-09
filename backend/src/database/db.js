@@ -8,13 +8,15 @@ const { runMigrations } = require('./migrate');
  *
  * SECURITY / MONEY-INTEGRITY RULE (fail closed):
  *  - If PostgreSQL is unavailable, financial operations MUST fail with HTTP 503.
- *  - There is NO in-memory fallback in production. A failed DB connection must
- *    never look healthy and must never produce fake wallet/bet/deposit/settlement
- *    success.
- *
- * A dedicated mock client for tests lives in the test suite itself
- * (see tests/financial.test.js createMockClient) and is NOT wired into runtime.
+ *  - There is NO in-memory fallback in production.
  */
+
+const ssl = config.db.ssl
+  ? {
+      rejectUnauthorized: config.db.sslRejectUnauthorized,
+      ...(config.db.sslCa ? { ca: config.db.sslCa } : {}),
+    }
+  : false;
 
 const pool = new Pool({
   host: config.db.host,
@@ -22,24 +24,19 @@ const pool = new Pool({
   database: config.db.name,
   user: config.db.user,
   password: config.db.password,
-  ssl: config.db.ssl ? { rejectUnauthorized: false } : false,
+  ssl,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
+  statement_timeout: parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || '15000', 10),
+  query_timeout: parseInt(process.env.DB_QUERY_TIMEOUT_MS || '20000', 10),
 });
 
 pool.on('error', (err) => {
-  // An idle client errored. Mark DB as not-ready so callers fail closed until it recovers.
   dbState.ready = false;
   logger.warn('PostgreSQL pool connection error', { error: err.message || String(err) });
 });
 
-/**
- * Explicit database availability state.
- *  - ready: a live connection + schema migration succeeded.
- *  - schemaInitialized: all pending migrations have been applied this process.
- *  - lastInitAttempt: throttle so we do not hammer a down DB on every query.
- */
 const dbState = {
   ready: false,
   schemaInitialized: false,
@@ -49,9 +46,6 @@ const dbState = {
 
 const INIT_RETRY_INTERVAL_MS = 5000;
 
-/**
- * Build the standardized fail-closed error surfaced to the error handler.
- */
 function databaseUnavailableError(cause) {
   const err = new Error('Database is currently unavailable. Please try again shortly.');
   err.statusCode = 503;
@@ -60,12 +54,6 @@ function databaseUnavailableError(cause) {
   return err;
 }
 
-/**
- * Initialize the DB connection and apply the (idempotent) schema.
- * Safe to call repeatedly. Sets explicit readiness state. Never throws for a
- * down database — it records the failure and leaves the DB marked not-ready so
- * that query()/getClient() fail closed.
- */
 async function initDb({ force = false } = {}) {
   if (dbState.ready && dbState.schemaInitialized && !force) return dbState.ready;
 
@@ -78,13 +66,9 @@ async function initDb({ force = false } = {}) {
   let client = null;
   try {
     client = await pool.connect();
-    // Connectivity confirmed.
     await client.query('SELECT 1');
 
     if (!dbState.schemaInitialized) {
-      // sec 29: apply ordered, idempotent migrations (tracked in schema_migrations)
-      // instead of executing a huge schema.sql on every startup. The runner never
-      // drops tables and never deletes data; a failure rolls back and fails closed.
       await runMigrations(client);
       dbState.schemaInitialized = true;
       logger.info('PostgreSQL money-flow schema initialized & migrated successfully');
@@ -106,9 +90,6 @@ async function initDb({ force = false } = {}) {
   }
 }
 
-/**
- * Explicit readiness probe used by /ready and health checks.
- */
 async function checkDatabase() {
   try {
     await pool.query('SELECT 1');
@@ -134,31 +115,19 @@ function getDatabaseState() {
   };
 }
 
-/**
- * Ensure we have attempted initialization and that the DB is ready.
- * Throws a fail-closed 503 error when PostgreSQL is unavailable.
- */
 async function ensureReady() {
-  if (!dbState.ready) {
-    await initDb();
-  }
-  if (!dbState.ready) {
-    throw databaseUnavailableError(dbState.lastError);
-  }
+  if (!dbState.ready) await initDb();
+  if (!dbState.ready) throw databaseUnavailableError(dbState.lastError);
 }
 
 async function query(text, params) {
   await ensureReady();
-
   const start = Date.now();
   try {
     const res = await pool.query(text, params);
-    const duration = Date.now() - start;
-    logger.debug('Executed DB Query', { duration, rows: res.rowCount });
+    logger.debug('Executed DB Query', { duration: Date.now() - start, rows: res.rowCount });
     return res;
   } catch (err) {
-    // Connection-level failures mark the DB not-ready so subsequent calls fail
-    // closed fast (and recover automatically once PG is back).
     if (isConnectionError(err)) dbState.ready = false;
     logger.warn('DB Query failed', { error: err.message || String(err), code: err.code });
     throw err;
@@ -179,16 +148,10 @@ async function getClient() {
 function isConnectionError(err) {
   if (!err) return false;
   const code = err.code;
-  // Common pg connection/system error codes.
   return (
-    code === 'ECONNREFUSED' ||
-    code === 'ECONNRESET' ||
-    code === 'ETIMEDOUT' ||
-    code === '57P01' || // admin_shutdown
-    code === '57P02' || // crash_shutdown
-    code === '57P03' || // cannot_connect_now
-    code === '28000' || // auth failure
-    code === '3D000' || // invalid catalog name (db does not exist)
+    code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'ETIMEDOUT' ||
+    code === '57P01' || code === '57P02' || code === '57P03' ||
+    code === '28000' || code === '3D000' ||
     err.message === 'Connection terminated unexpectedly'
   );
 }
