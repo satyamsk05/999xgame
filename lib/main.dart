@@ -721,7 +721,8 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   void _launchHtml5Game(String title, double entryFee, double prizePool, String gameUrl) {
