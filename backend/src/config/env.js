@@ -53,6 +53,8 @@ const config = {
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
     ssl: process.env.DB_SSL === 'true',
+    sslRejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+    sslCa: process.env.DB_SSL_CA || '',
   },
   redis: parseRedisConfig(),
   jwtSecret: process.env.JWT_SECRET || 'dev_jwt_secret_key_999x',
@@ -104,6 +106,7 @@ function validateConfig() {
     if (!process.env.PAYMENT_UPI_ID) errors.push('PAYMENT_UPI_ID must be explicitly configured in production.');
     if (!process.env.PAYMENT_MERCHANT_NAME) errors.push('PAYMENT_MERCHANT_NAME must be explicitly configured in production.');
     if (!process.env.MINIMUM_APP_VERSION) errors.push('MINIMUM_APP_VERSION must be explicitly configured in production.');
+    if (!process.env.DB_SSL || config.db.ssl !== true) errors.push('DB_SSL=true is required in production.');
   }
 
   if (errors.length) throw new Error(`FATAL configuration error(s):\n- ${errors.join('\n- ')}`);
