@@ -14,15 +14,18 @@ let isRunning = false;
 let loopPromise = null;
 const leaderLock = new GameLeaderLock(GAME_ID);
 
-function sleep(ms) {
-  return new Promise((resolve) => {
-    const step = 200;
-    let waited = 0;
-    const timer = setInterval(() => {
-      waited += step;
-      if (!isRunning || waited >= ms) { clearInterval(timer); resolve(); }
-    }, step);
-  });
+async function wait(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function leaderSleep(ms) {
+  const deadline = Date.now() + ms;
+  while (isRunning && Date.now() < deadline) {
+    const remaining = deadline - Date.now();
+    await wait(Math.min(1000, remaining));
+    if (isRunning && !(await leaderLock.assertLeadership())) return false;
+  }
+  return isRunning && leaderLock.isLeader;
 }
 
 async function recoverRounds() {
@@ -31,28 +34,27 @@ async function recoverRounds() {
 }
 
 async function runGameCycle(io) {
+  if (!(await leaderLock.assertLeadership())) return false;
   const round = await dragonTigerEngine.createRound();
   await dragonTigerEngine.openBetting();
   if (io) {
     emitRealtime('GAME_ROUND_OPEN', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString(), bettingClosesAt: round.bettingClosesAt, timeRemainingMs: BETTING_WINDOW_MS, payload: { ...round, serverSeed: undefined } });
     emitRealtime('dt:round_open', { ...round, serverSeed: undefined });
   }
-  await sleep(BETTING_WINDOW_MS);
-  if (!isRunning) return;
+  if (!(await leaderSleep(BETTING_WINDOW_MS))) return false;
   if (io) emitRealtime('GAME_BETTING_CLOSED', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString() });
   const resultRound = await dragonTigerEngine.drawCardsAndReveal();
   if (io) {
     emitRealtime('GAME_RESULT', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString(), payload: { dragonCard: resultRound.dragonCard, tigerCard: resultRound.tigerCard, winningBetType: resultRound.winningBetType, serverSeed: resultRound.serverSeed, serverSeedHash: resultRound.serverSeedHash } });
     emitRealtime('dt:cards_dealt', resultRound);
   }
-  await sleep(REVEAL_BUFFER_MS);
-  if (!isRunning) return;
+  if (!(await leaderSleep(REVEAL_BUFFER_MS))) return false;
   const settlement = await dragonTigerEngine.settleRound();
   if (io) {
     emitRealtime('GAME_ROUND_SETTLED', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString(), payload: settlement });
     emitRealtime('dt:round_settled', settlement);
   }
-  await sleep(INTER_ROUND_PAUSE_MS);
+  return leaderSleep(INTER_ROUND_PAUSE_MS);
 }
 
 async function schedulerLoop(io) {
@@ -60,13 +62,14 @@ async function schedulerLoop(io) {
   while (isRunning) {
     try {
       const isLeader = await leaderLock.acquire();
-      if (!isLeader || !isDatabaseReady()) { wasLeader = false; await sleep(LEADER_POLL_MS); continue; }
+      if (!isLeader || !isDatabaseReady()) { wasLeader = false; await wait(LEADER_POLL_MS); continue; }
       if (!wasLeader) { await recoverRounds(); wasLeader = true; }
-      await runGameCycle(io);
+      const completed = await runGameCycle(io);
+      if (!completed) wasLeader = false;
     } catch (err) {
       wasLeader = false;
       logger.error('Error in Dragon Tiger game loop cycle', { error: err.message });
-      await sleep(5000);
+      await wait(5000);
     }
   }
 }
