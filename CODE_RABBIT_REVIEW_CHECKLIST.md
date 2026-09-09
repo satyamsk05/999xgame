@@ -1,0 +1,3 @@
+# CodeRabbit Checklist
+
+Review the complete existing repository. Prioritize production correctness and security: authentication/login; authorization/admin; game integrity and concurrency; wallet/balance and transaction idempotency; database consistency; realtime/WebSockets; Flutter runtime/state/network; integrations; secrets; Docker/AWS; CI/CD; tests. Findings should be actionable, severity-ranked, location-specific, explain root cause and impact, and include concrete remediation. Do not focus on cosmetic style.
