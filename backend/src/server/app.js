@@ -5,7 +5,7 @@ const requestIdMiddleware = require('../middleware/requestId');
 const responseContract = require('../middleware/responseContract');
 const errorHandler = require('../middleware/errorHandler');
 const { authLimiter, adminAuthLimiter, depositLimiter, withdrawalLimiter } = require('../middleware/rateLimit');
-const { initRedis } = require('../database/redis');
+const { initRedis, isRedisReady } = require('../database/redis');
 
 const path = require('path');
 const authController = require('../auth/auth.controller');
@@ -55,9 +55,25 @@ app.get('/health', (req, res) => res.status(200).json({ status: 'ok', service: '
 app.get('/ready', async (req, res) => {
   try {
     await query('SELECT 1');
-    return res.status(200).json({ status: 'ready', db: 'connected', service: 'ingames-backend', timestamp: new Date().toISOString() });
+    const redisReady = process.env.DISABLE_REDIS === 'true' || isRedisReady();
+    if (!redisReady) {
+      return res.status(503).json({
+        status: 'unready',
+        db: 'connected',
+        redis: 'disconnected',
+        code: 'REDIS_UNAVAILABLE',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return res.status(200).json({
+      status: 'ready',
+      db: 'connected',
+      redis: 'connected',
+      service: 'ingames-backend',
+      timestamp: new Date().toISOString(),
+    });
   } catch (_) {
-    return res.status(503).json({ status: 'unready', db: 'disconnected', code: 'DATABASE_UNAVAILABLE', timestamp: new Date().toISOString() });
+    return res.status(503).json({ status: 'unready', db: 'disconnected', redis: isRedisReady() ? 'connected' : 'disconnected', code: 'DATABASE_UNAVAILABLE', timestamp: new Date().toISOString() });
   }
 });
 
