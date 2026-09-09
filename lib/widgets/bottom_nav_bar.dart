@@ -38,7 +38,7 @@ class CustomBottomNavBar extends StatelessWidget {
                       index: 0,
                       isSelected: selectedIndex == 0,
                       label: 'Home',
-                      size: 26,
+                      size: 27.3,
                       onTap: () => onItemSelected(0),
                     ),
                   ),
@@ -49,7 +49,7 @@ class CustomBottomNavBar extends StatelessWidget {
                       index: 1,
                       isSelected: selectedIndex == 1,
                       label: 'Share',
-                      size: 26,
+                      size: 27.3,
                       onTap: () => onItemSelected(1),
                     ),
                   ),
@@ -60,7 +60,7 @@ class CustomBottomNavBar extends StatelessWidget {
                       index: 2,
                       isSelected: selectedIndex == 2,
                       label: 'Add Cash',
-                      size: 26,
+                      size: 27.3,
                       onTap: () => onItemSelected(2),
                     ),
                   ),
@@ -71,7 +71,7 @@ class CustomBottomNavBar extends StatelessWidget {
                       index: 3,
                       isSelected: selectedIndex == 3,
                       label: 'Profile',
-                      size: 26,
+                      size: 27.3,
                       onTap: () => onItemSelected(3),
                     ),
                   ),
@@ -160,7 +160,7 @@ class _NavBarItemState extends State<_NavBarItem> with SingleTickerProviderState
 
   static const String _shareArrow = '''
 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M17.6703 1.90726L20.2633 4.15452C22.0483 5.70149 22.9408 6.47497 22.9408 7.47955C22.9408 8.48414 22.0483 9.25762 20.2633 10.8046L17.6703 13.0519C16.8855 13.7321 16.493 14.0722 16.1715 13.9254C15.8499 13.7786 15.8499 13.2592 15.8499 12.2206V10.5438C13.1999 10.5438 10.3726 11.5318 8.64962 13.2434C8.12486 13.7646 7.86248 14.0252 7.72286 13.9591C7.58324 13.8929 7.61571 13.5563 7.68065 12.883C8.32892 6.1615 12.7424 4.41527 15.8499 4.41527V2.73851C15.8499 1.69987 15.8499 1.18055 16.1715 1.03373C16.493 0.886898 16.8855 1.22702 17.6703 1.90726Z" fill="HEXCOLOR"/>
+<path d="M17.6703 1.90726L20.2633 4.15452C22.0483 5.70149 22.9408 6.47497 22.9408 7.47955C22.9408 8.48414 22.0483 9.25762 20.2633 10.8046L17.6703 13.0519C16.8855 13.7321 16.493 14.0722 16.1715 13.9254C15.8499 13.7786 15.8499 13.2592 15.8499 12.2206V10.5438C13.1999 10.5438 10.3726 11.5318 8.64962 13.2434C8.12486 13.7646 7.86248 14.0252 7.72286 13.9591C7.58324 13.8929 7.61571 13.5563 7.68065 12.883C8.32892 6.1615 12.7424 4.41527 15.8499 4.41527V2.73851C15.8499 1.69987 15.8499 1.18055 16.1715 1.03373C16.493 0.886898 16.8851 1.22702 17.6703 1.90726Z" fill="HEXCOLOR"/>
 </svg>''';
 
   // 3. ADD MONEY / WALLET
@@ -194,7 +194,6 @@ class _NavBarItemState extends State<_NavBarItem> with SingleTickerProviderState
         final val = _partAnimation.value;
 
         if (widget.index == 0) {
-          // Home Icon: Bottom line expands & shrinks horizontally from center
           final lineScaleX = 1.0 + (val * 0.8) - (val > 0.5 ? (val - 0.5) * 1.6 : 0);
           return SizedBox(
             width: widget.size,
@@ -219,7 +218,6 @@ class _NavBarItemState extends State<_NavBarItem> with SingleTickerProviderState
             ),
           );
         } else if (widget.index == 1) {
-          // Share Icon: Arrow (Teer) slides out towards top-right and returns
           final offsetX = val * 5.0;
           final offsetY = -val * 5.0;
           return SizedBox(
@@ -245,7 +243,6 @@ class _NavBarItemState extends State<_NavBarItem> with SingleTickerProviderState
             ),
           );
         } else if (widget.index == 2) {
-          // Add Cash / Wallet Icon: Coin clasp pops out right and snaps back
           final coinScale = 1.0 + (val * 0.25);
           final coinShiftX = val * 2.5;
           return SizedBox(
@@ -274,7 +271,6 @@ class _NavBarItemState extends State<_NavBarItem> with SingleTickerProviderState
             ),
           );
         } else {
-          // Profile Icon: Head circle nods / bounces up & down
           final headShiftY = -val * 3.5;
           return SizedBox(
             width: widget.size,
