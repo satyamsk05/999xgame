@@ -1,0 +1,1 @@
+CodeRabbit review: analyze the entire current codebase at senior production level. Prioritize security, correctness, concurrency, game/wallet integrity, authentication/authorization, realtime, database, Flutter reliability, integrations and AWS/Docker deployment. Include severity, exact location, root cause, impact and remediation. Review beyond changed files.
