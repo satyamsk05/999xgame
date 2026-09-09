@@ -26,13 +26,26 @@ async function lockWallet(client, userId) {
   let wallet = res.rows[0];
   if (!wallet) {
     const walletId = `wlt_${userId}`;
-    const insertRes = await client.query(
-      `INSERT INTO wallets (id, user_id, available_balance, reserved_balance, deposit_balance, winnings_balance, rewards_balance, locked_balance, version, created_at, updated_at)
-       VALUES ($1, $2, 0, 0, 0, 0, 0, 0, 1, NOW(), NOW()) RETURNING *`,
-      [walletId, userId]
-    );
-    wallet = insertRes.rows[0];
+    try {
+      const insertRes = await client.query(
+        `INSERT INTO wallets (id, user_id, available_balance, reserved_balance, deposit_balance, winnings_balance, rewards_balance, locked_balance, version, created_at, updated_at)
+         VALUES ($1, $2, 0, 0, 0, 0, 0, 0, 1, NOW(), NOW()) RETURNING *`,
+        [walletId, userId]
+      );
+      wallet = insertRes.rows[0];
+    } catch (err) {
+      // Another transaction may have created the wallet after our initial SELECT.
+      // PostgreSQL's unique user_id constraint makes that insert fail; re-read while
+      // holding the row lock so callers always operate on one authoritative wallet.
+      if (err && err.code === '23505') {
+        const retry = await client.query('SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE', [userId]);
+        wallet = retry.rows[0];
+      } else {
+        throw err;
+      }
+    }
   }
+  if (!wallet) throw new Error(`Unable to create or lock wallet for user ${userId}`);
   return wallet;
 }
 
@@ -131,8 +144,6 @@ async function debitWallet(clientOrUserId, amountPaise, options = {}) {
     remaining -= rewardsDebit;
 
     if (remaining !== 0) {
-      // Existing legacy rows can have bucket totals that differ from available_balance.
-      // Never silently create a negative bucket: fail closed until the wallet is reconciled.
       const err = new Error('Wallet bucket totals are inconsistent with available balance');
       err.statusCode = 409;
       throw err;
