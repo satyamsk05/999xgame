@@ -32,6 +32,13 @@ app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 app.use(requestIdMiddleware);
 app.use(responseContract);
 
+// Payment pages contain transaction-specific state; never let a browser/proxy reuse an old HTML document.
+app.get('/payment.html', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.sendFile(path.join(__dirname, '../../public/payment.html'));
+});
 app.use(express.static(path.join(__dirname, '../../public')));
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, '../../public/admin.html'));
