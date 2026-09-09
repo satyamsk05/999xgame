@@ -25,6 +25,19 @@ function sleep(ms) {
   });
 }
 
+function publicBettingRound(round) {
+  return {
+    roundId: round.roundId,
+    gameId: GAME_ID,
+    status: round.status,
+    serverSeedHash: round.serverSeedHash,
+    currentMultiplier: round.currentMultiplier,
+    createdAt: round.createdAt,
+    bettingClosesAt: round.bettingClosesAt,
+    endedAt: null,
+  };
+}
+
 async function recoverRounds() {
   try { await crushEngine.recoverFromDb(); }
   catch (err) { logger.error('Crush recovery failed after leader acquisition', { error: err.message }); }
@@ -34,8 +47,17 @@ async function runGameCycle(io) {
   const round = await crushEngine.createRound();
   await crushEngine.openBetting();
   if (io) {
-    emitRealtime('GAME_ROUND_OPEN', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString(), bettingClosesAt: round.bettingClosesAt, timeRemainingMs: BETTING_WINDOW_MS, payload: { ...round, serverSeed: undefined } });
-    emitRealtime('crush:round_open', { ...round, serverSeed: undefined });
+    const safeRound = publicBettingRound(round);
+    emitRealtime('GAME_ROUND_OPEN', {
+      version: 1,
+      gameId: GAME_ID,
+      roundId: round.roundId,
+      serverTime: new Date().toISOString(),
+      bettingClosesAt: round.bettingClosesAt,
+      timeRemainingMs: BETTING_WINDOW_MS,
+      payload: safeRound,
+    });
+    emitRealtime('crush:round_open', safeRound);
   }
   await sleep(BETTING_WINDOW_MS);
   if (!isRunning) return;
@@ -55,8 +77,23 @@ async function runGameCycle(io) {
   if (!isRunning) return;
   const crashedRound = await crushEngine.crashRound();
   if (io) {
-    emitRealtime('GAME_RESULT', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString(), payload: { crashPoint: crashedRound.crashPoint, serverSeed: crashedRound.serverSeed, serverSeedHash: crashedRound.serverSeedHash } });
-    emitRealtime('crush:crashed', { roundId: round.roundId, crashPoint: crashedRound.crashPoint });
+    emitRealtime('GAME_RESULT', {
+      version: 1,
+      gameId: GAME_ID,
+      roundId: round.roundId,
+      serverTime: new Date().toISOString(),
+      payload: {
+        crashPoint: crashedRound.crashPoint,
+        serverSeed: crashedRound.serverSeed,
+        serverSeedHash: crashedRound.serverSeedHash,
+      },
+    });
+    emitRealtime('crush:crashed', {
+      roundId: round.roundId,
+      crashPoint: crashedRound.crashPoint,
+      serverSeed: crashedRound.serverSeed,
+      serverSeedHash: crashedRound.serverSeedHash,
+    });
   }
   await sleep(INTER_ROUND_PAUSE_MS);
 }
