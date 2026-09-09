@@ -14,15 +14,18 @@ let isRunning = false;
 let loopPromise = null;
 const leaderLock = new GameLeaderLock(GAME_ID);
 
-function sleep(ms) {
-  return new Promise((resolve) => {
-    const step = 200;
-    let waited = 0;
-    const timer = setInterval(() => {
-      waited += step;
-      if (!isRunning || waited >= ms) { clearInterval(timer); resolve(); }
-    }, step);
-  });
+async function wait(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function leaderSleep(ms) {
+  const deadline = Date.now() + ms;
+  while (isRunning && Date.now() < deadline) {
+    const remaining = deadline - Date.now();
+    await wait(Math.min(1000, remaining));
+    if (isRunning && !(await leaderLock.assertLeadership())) return false;
+  }
+  return isRunning && leaderLock.isLeader;
 }
 
 function publicBettingRound(round) {
@@ -44,6 +47,7 @@ async function recoverRounds() {
 }
 
 async function runGameCycle(io) {
+  if (!(await leaderLock.assertLeadership())) return false;
   const round = await crushEngine.createRound();
   await crushEngine.openBetting();
   if (io) {
@@ -59,11 +63,11 @@ async function runGameCycle(io) {
     });
     emitRealtime('crush:round_open', safeRound);
   }
-  await sleep(BETTING_WINDOW_MS);
-  if (!isRunning) return;
+  if (!(await leaderSleep(BETTING_WINDOW_MS))) return false;
   if (io) emitRealtime('GAME_BETTING_CLOSED', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString() });
   await crushEngine.startFlying();
-  while (isRunning && !crushEngine.isCrashed()) {
+  while (isRunning && crushEngine.isLeaderSafe?.() !== false && !crushEngine.isCrashed()) {
+    if (!(await leaderLock.assertLeadership())) return false;
     const mult = crushEngine.getCurrentMultiplier();
     round.currentMultiplier = mult;
     try {
@@ -72,9 +76,9 @@ async function runGameCycle(io) {
     } catch (err) { logger.error('Crush auto-cashout tick failed', { roundId: round.roundId, error: err.message }); }
     if (io) emitRealtime('crush:tick', { roundId: round.roundId, multiplier: mult });
     if (crushEngine.isCrashed()) break;
-    await sleep(TICK_MS);
+    await wait(TICK_MS);
   }
-  if (!isRunning) return;
+  if (!isRunning || !leaderLock.isLeader) return false;
   const crashedRound = await crushEngine.crashRound();
   if (io) {
     emitRealtime('GAME_RESULT', {
@@ -95,7 +99,7 @@ async function runGameCycle(io) {
       serverSeedHash: crashedRound.serverSeedHash,
     });
   }
-  await sleep(INTER_ROUND_PAUSE_MS);
+  return leaderSleep(INTER_ROUND_PAUSE_MS);
 }
 
 async function schedulerLoop(io) {
@@ -103,13 +107,14 @@ async function schedulerLoop(io) {
   while (isRunning) {
     try {
       const isLeader = await leaderLock.acquire();
-      if (!isLeader || !isDatabaseReady()) { wasLeader = false; await sleep(LEADER_POLL_MS); continue; }
+      if (!isLeader || !isDatabaseReady()) { wasLeader = false; await wait(LEADER_POLL_MS); continue; }
       if (!wasLeader) { await recoverRounds(); wasLeader = true; }
-      await runGameCycle(io);
+      const completed = await runGameCycle(io);
+      if (!completed) wasLeader = false;
     } catch (err) {
       wasLeader = false;
       logger.error('Error in Crush game loop cycle', { error: err.message });
-      await sleep(5000);
+      await wait(5000);
     }
   }
 }
