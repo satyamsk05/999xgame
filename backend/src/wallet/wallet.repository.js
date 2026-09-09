@@ -27,7 +27,8 @@ async function getTransactionsByUserId(userId, category = 'All') {
       game: ['BET_DEBIT', 'WIN_CREDIT'],
       reward: ['BONUS_CREDIT', 'REWARD_CREDIT', 'REWARD_DEBIT'],
     };
-    let ledgerSql = 'SELECT id, type, amount, direction, created_at, reference_id FROM wallet_ledger WHERE user_id = $1 AND type <> \'DEPOSIT\'';
+    let ledgerSql = `SELECT id, type, amount, direction, created_at, reference_id, NULL::varchar AS deposit_status, NULL::varchar AS deposit_utr
+                     FROM wallet_ledger WHERE user_id = $1 AND type <> 'DEPOSIT'`;
     const params = [userId];
     if (normalizedCategory !== 'all' && normalizedCategory !== 'deposit') {
       const types = categoryTypes[normalizedCategory];
@@ -35,25 +36,15 @@ async function getTransactionsByUserId(userId, category = 'All') {
       ledgerSql += ` AND type = ANY($2::varchar[])`;
       params.push(types);
     }
-
     const includeDeposits = normalizedCategory === 'all' || normalizedCategory === 'deposit';
-    let depositSql = '';
-    if (includeDeposits) {
-      depositSql = `SELECT id, 'DEPOSIT' AS type, amount, 'CREDIT' AS direction, created_at, deposit_id AS reference_id,
-                           status AS deposit_status, utr AS deposit_utr
-                    FROM deposits WHERE user_id = $1`;
-    }
-
     let sql;
     if (includeDeposits) {
-      sql = `SELECT * FROM (${ledgerSql}) ledger_items
-             UNION ALL
-             SELECT id, type, amount, direction, created_at, reference_id, deposit_status, deposit_utr FROM (${depositSql}) deposit_items
-             ORDER BY created_at DESC LIMIT 50`;
+      const depositSql = `SELECT id, 'DEPOSIT' AS type, amount, 'CREDIT' AS direction, created_at, deposit_id AS reference_id,
+                                 status AS deposit_status, utr AS deposit_utr FROM deposits WHERE user_id = $1`;
+      sql = `SELECT * FROM (${ledgerSql}) ledger_items UNION ALL SELECT * FROM (${depositSql}) deposit_items ORDER BY created_at DESC LIMIT 50`;
     } else {
       sql = `${ledgerSql} ORDER BY created_at DESC LIMIT 50`;
     }
-
     const res = await query(sql, params);
     return res.rows.map((row) => ({
       id: row.id,
@@ -73,15 +64,15 @@ async function getTransactionsByUserId(userId, category = 'All') {
 function mapDepositStatus(status) {
   switch (String(status || '').toUpperCase()) {
     case 'CONFIRMED': return 'SUCCESS';
-    case 'REJECTED': return 'REJECTED';
+    case 'REJECTED':
+    case 'EXPIRED': return 'REJECTED';
     case 'PENDING':
     case 'UTR_SUBMITTED': return 'PENDING';
-    case 'EXPIRED': return 'REJECTED';
     default: return 'PENDING';
   }
 }
 
-function formatLedgerTitle(type, refId) {
+function formatLedgerTitle(type) {
   switch (type) {
     case 'DEPOSIT': return 'Cash Deposit';
     case 'CREDIT': return 'Account Credited';
