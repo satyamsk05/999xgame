@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const config = require('../config/env');
 
@@ -35,6 +36,7 @@ function signToken(payload = {}, optionsOrSeconds) {
 function signAdminToken(payload = {}, optionsOrSeconds) {
   const expiresIn = resolveExpiresIn(optionsOrSeconds, config.jwt.adminTtlSeconds);
   const body = buildBody(payload, 'ADMIN', payload.adminId || payload.sub);
+  if (!body.jti) body.jti = crypto.randomUUID();
   return jwt.sign(body, config.adminJwtSecret, { algorithm: ALGORITHM, issuer: config.jwt.issuer, audience: config.jwt.adminAudience, expiresIn });
 }
 
