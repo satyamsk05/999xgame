@@ -26,3 +26,4 @@ jobs:
             git commit -m 'fix: increase bottom nav icons by 5 percent'
             git push
           fi
+# one-time trigger
