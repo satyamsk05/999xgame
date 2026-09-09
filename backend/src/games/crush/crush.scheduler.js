@@ -15,9 +15,7 @@ let isRunning = false;
 let loopPromise = null;
 const leaderLock = new GameLeaderLock(GAME_ID);
 
-async function wait(ms) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
+async function wait(ms) { await new Promise((resolve) => setTimeout(resolve, ms)); }
 
 async function leaderSleep(ms) {
   const deadline = Date.now() + ms;
@@ -43,8 +41,7 @@ function publicBettingRound(round) {
 }
 
 async function recoverRounds() {
-  try { await crushEngine.recoverFromDb(); }
-  catch (err) { logger.error('Crush recovery failed after leader acquisition', { error: err.message }); }
+  await crushEngine.recoverFromDb();
 }
 
 async function runGameCycle(io) {
@@ -53,15 +50,7 @@ async function runGameCycle(io) {
   await crushEngine.openBetting();
   if (io) {
     const safeRound = publicBettingRound(round);
-    emitRealtime('GAME_ROUND_OPEN', {
-      version: 1,
-      gameId: GAME_ID,
-      roundId: round.roundId,
-      serverTime: new Date().toISOString(),
-      bettingClosesAt: round.bettingClosesAt,
-      timeRemainingMs: BETTING_WINDOW_MS,
-      payload: safeRound,
-    });
+    emitRealtime('GAME_ROUND_OPEN', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString(), bettingClosesAt: round.bettingClosesAt, timeRemainingMs: BETTING_WINDOW_MS, payload: safeRound });
     emitRealtime('crush:round_open', safeRound);
   }
   if (!(await leaderSleep(BETTING_WINDOW_MS))) return false;
@@ -74,7 +63,6 @@ async function runGameCycle(io) {
       if (!(await leaderLock.assertLeadership())) return false;
       lastLeadershipCheck = Date.now();
     }
-
     const mult = crushEngine.getCurrentMultiplier();
     round.currentMultiplier = mult;
     try {
@@ -88,23 +76,8 @@ async function runGameCycle(io) {
   if (!isRunning || !leaderLock.isLeader) return false;
   const crashedRound = await crushEngine.crashRound();
   if (io) {
-    emitRealtime('GAME_RESULT', {
-      version: 1,
-      gameId: GAME_ID,
-      roundId: round.roundId,
-      serverTime: new Date().toISOString(),
-      payload: {
-        crashPoint: crashedRound.crashPoint,
-        serverSeed: crashedRound.serverSeed,
-        serverSeedHash: crashedRound.serverSeedHash,
-      },
-    });
-    emitRealtime('crush:crashed', {
-      roundId: round.roundId,
-      crashPoint: crashedRound.crashPoint,
-      serverSeed: crashedRound.serverSeed,
-      serverSeedHash: crashedRound.serverSeedHash,
-    });
+    emitRealtime('GAME_RESULT', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString(), payload: { crashPoint: crashedRound.crashPoint, serverSeed: crashedRound.serverSeed, serverSeedHash: crashedRound.serverSeedHash } });
+    emitRealtime('crush:crashed', { roundId: round.roundId, crashPoint: crashedRound.crashPoint, serverSeed: crashedRound.serverSeed, serverSeedHash: crashedRound.serverSeedHash });
   }
   return leaderSleep(INTER_ROUND_PAUSE_MS);
 }
@@ -120,7 +93,7 @@ async function schedulerLoop(io) {
       if (!completed) wasLeader = false;
     } catch (err) {
       wasLeader = false;
-      logger.error('Error in Crush game loop cycle', { error: err.message });
+      logger.error('Error in Crush game loop cycle', { error: err.message, code: err.code });
       await wait(5000);
     }
   }
