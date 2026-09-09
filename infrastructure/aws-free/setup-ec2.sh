@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Run this script on a fresh Ubuntu EC2 instance from the repository root.
-# It intentionally installs only the low-cost/free-tier-friendly pieces:
-# Docker Engine + Compose. PostgreSQL and Redis run as local containers.
+# Run this script on an Ubuntu EC2 instance from the repository root.
+# Docker runs the backend and Redis; PostgreSQL is provided by Supabase.
 
-# SSM/non-interactive shells may not define HOME, so derive a stable default.
 DEFAULT_HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
 REPO_DIR="${REPO_DIR:-${DEFAULT_HOME:-/home/ubuntu}/999xgame}"
 STACK_DIR="$REPO_DIR/infrastructure/aws-free"
@@ -38,13 +36,14 @@ if [[ ! -f "$ENV_FILE" ]]; then
   chmod 600 "$ENV_FILE"
   echo
   echo "Created $ENV_FILE"
-  echo "Edit it before starting the backend:"
+  echo "Edit it before starting the production stack:"
   echo "  nano $ENV_FILE"
   echo
-  echo "Set POSTGRES_PASSWORD, JWT_SECRET, ADMIN_JWT_SECRET and CORS_ORIGIN."
+  echo "Set DB_PASSWORD, JWT_SECRET, ADMIN_JWT_SECRET and CORS_ORIGIN."
   exit 0
 fi
 
+chmod 600 "$ENV_FILE"
 cd "$STACK_DIR"
 
 echo "Building and starting 999xgame..."
@@ -57,8 +56,9 @@ echo
 if curl -fsS http://127.0.0.1:5050/ready >/dev/null 2>&1; then
   echo "Backend readiness: OK"
 else
-  echo "Backend readiness: not reachable on host port 5050 (expected if no host port is published)."
-  echo "Use: docker compose --env-file $ENV_FILE -f $STACK_DIR/docker-compose.aws.yml logs backend"
+  echo "Backend readiness: not OK. Check backend logs and Supabase connectivity."
+  echo "Use: sudo docker compose --env-file $ENV_FILE -f $STACK_DIR/docker-compose.aws.yml logs --tail=200 backend"
+  exit 1
 fi
 
 echo
