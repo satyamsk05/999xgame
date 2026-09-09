@@ -1,6 +1,18 @@
+import 'dart:math';
+
 import '../../../core/api/api_client.dart';
 
 class GameApi {
+  static final Random _secureRandom = Random.secure();
+
+  /// Creates a backend-compatible idempotency key for one logical bet action.
+  /// The caller should retain the key and reuse it when retrying that action.
+  static String newIdempotencyKey() {
+    final bytes = List<int>.generate(16, (_) => _secureRandom.nextInt(256));
+    final hex = bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
+    return 'bet_$hex';
+  }
+
   static Future<List<dynamic>> getGamesList() async {
     final res = await ApiClient.get('/games');
     if (res is Map<String, dynamic> && res.containsKey('data') && res['data'] is List) {
@@ -24,11 +36,17 @@ class GameApi {
     required double stakeAmount,
     String? idempotencyKey,
   }) async {
+    // Backward-compatible fallback for existing callers. New UI flows should
+    // create the key once with newIdempotencyKey() and reuse it for retries.
+    final key = (idempotencyKey == null || idempotencyKey.trim().isEmpty)
+        ? newIdempotencyKey()
+        : idempotencyKey.trim();
+
     final res = await ApiClient.post('/games/7updown/bets', {
       'roundId': roundId,
       'betType': betType,
       'stake': stakeAmount,
-      'idempotencyKey': idempotencyKey,
+      'idempotencyKey': key,
     });
     if (res is Map<String, dynamic> && res.containsKey('data') && res['data'] is Map<String, dynamic>) {
       return res['data'] as Map<String, dynamic>;
