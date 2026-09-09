@@ -356,7 +356,11 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                               addCashLabel: addCashLabel,
                               onAddMoneyPressed: () {
                                 setState(() {
-                                  _isProfilePageActive = true;
+                                  _isProfilePageActive = false;
+                                  _isWithdrawPageActive = false;
+                                  _isSettingsPageActive = false;
+                                  _isTransactionsPageActive = false;
+                                  _currentNavIndex = 2;
                                 });
                               },
                               onProfilePressed: () {
