@@ -5,6 +5,7 @@ const requestIdMiddleware = require('../middleware/requestId');
 const responseContract = require('../middleware/responseContract');
 const errorHandler = require('../middleware/errorHandler');
 const { authLimiter, adminAuthLimiter, depositLimiter, withdrawalLimiter } = require('../middleware/rateLimit');
+const { initRedis } = require('../database/redis');
 
 const path = require('path');
 const authController = require('../auth/auth.controller');
@@ -23,8 +24,10 @@ const adminPromotionsController = require('../admin/admin_promotions.controller'
 const adminReportsController = require('../admin/admin_reports.controller');
 
 const app = express();
-
 if (config.trustProxy) app.set('trust proxy', config.trustProxy);
+
+// Initialize the shared Redis client before any Redis-backed middleware can serve requests.
+if (process.env.DISABLE_REDIS !== 'true') initRedis();
 
 app.use(cors({ origin: config.corsOrigin, credentials: true }));
 app.use(express.json({ limit: config.bodyLimit }));
@@ -32,7 +35,6 @@ app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 app.use(requestIdMiddleware);
 app.use(responseContract);
 
-// Payment pages contain transaction-specific state; never let a browser/proxy reuse an old HTML document.
 app.get('/payment.html', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.set('Pragma', 'no-cache');
@@ -40,93 +42,38 @@ app.get('/payment.html', (req, res) => {
   res.sendFile(path.join(__dirname, '../../public/payment.html'));
 });
 app.use(express.static(path.join(__dirname, '../../public')));
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../public/admin.html'));
-});
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, '../../public/admin.html')));
 
 let activeSocketCountGetter = () => 0;
-app.setOnlineUsersGetter = (fn) => {
-  activeSocketCountGetter = typeof fn === 'function' ? fn : () => 0;
-};
+app.setOnlineUsersGetter = (fn) => { activeSocketCountGetter = typeof fn === 'function' ? fn : () => 0; };
 app.getOnlineUsersCount = () => activeSocketCountGetter();
 
 const { query } = require('../database/db');
 
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    service: 'ingames-backend',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
-});
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok', service: 'ingames-backend', timestamp: new Date().toISOString(), uptime: process.uptime() }));
 
 app.get('/ready', async (req, res) => {
   try {
     await query('SELECT 1');
-    return res.status(200).json({
-      status: 'ready',
-      db: 'connected',
-      service: 'ingames-backend',
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    return res.status(503).json({
-      status: 'unready',
-      db: 'disconnected',
-      code: 'DATABASE_UNAVAILABLE',
-      timestamp: new Date().toISOString(),
-    });
+    return res.status(200).json({ status: 'ready', db: 'connected', service: 'ingames-backend', timestamp: new Date().toISOString() });
+  } catch (_) {
+    return res.status(503).json({ status: 'unready', db: 'disconnected', code: 'DATABASE_UNAVAILABLE', timestamp: new Date().toISOString() });
   }
 });
 
-app.get('/api/config', (req, res) => {
-  const realtimeOnlineUsers = activeSocketCountGetter();
-  res.status(200).json({
-    status: 'success',
-    data: {
-      onlineUsers: realtimeOnlineUsers,
-      maintenanceMode: config.maintenanceMode,
-      minimumAppVersion: config.minimumAppVersion,
-    },
-  });
-});
-
+app.get('/api/config', (req, res) => res.status(200).json({ status: 'success', data: { onlineUsers: activeSocketCountGetter(), maintenanceMode: config.maintenanceMode, minimumAppVersion: config.minimumAppVersion } }));
 app.get('/api/online-ticker', (req, res) => {
   const realtimeCount = activeSocketCountGetter();
-  res.status(200).json({
-    status: 'success',
-    data: {
-      totalOnline: realtimeCount,
-      label: 'online',
-      formattedText: `${realtimeCount.toLocaleString()} online`,
-      ringColors: config.onlineTickerRingColors,
-      avatars: config.onlineTickerAvatars,
-      isLive: true,
-    },
-  });
+  res.status(200).json({ status: 'success', data: { totalOnline: realtimeCount, label: 'online', formattedText: `${realtimeCount.toLocaleString()} online`, ringColors: config.onlineTickerRingColors, avatars: config.onlineTickerAvatars, isLive: true } });
 });
 
 app.get('/api/banners', async (req, res) => {
   try {
     const dbRes = await query(`SELECT * FROM promotions WHERE status = 'ACTIVE' ORDER BY created_at DESC`);
-    const banners = dbRes.rows.map((row) => ({
-      id: row.id,
-      tag: row.tag || 'DEPOSIT',
-      title: row.title,
-      subtitle: row.subtitle || 'DEPOSIT -> GET BONUS',
-      buttonText: row.button_text || 'DEPOSIT NOW',
-      imageUrl: row.image_url || '/banners/deposit_banner.png',
-      targetScreen: row.target_screen || '/add-cash',
-    }));
-
+    const banners = dbRes.rows.map((row) => ({ id: row.id, tag: row.tag || 'DEPOSIT', title: row.title, subtitle: row.subtitle || 'DEPOSIT -> GET BONUS', buttonText: row.button_text || 'DEPOSIT NOW', imageUrl: row.image_url || '/banners/deposit_banner.png', targetScreen: row.target_screen || '/add-cash' }));
     return res.status(200).json({ status: 'success', data: banners });
-  } catch (err) {
-    return res.status(503).json({
-      status: 'error',
-      code: 'SERVICE_UNAVAILABLE',
-      message: 'Failed to retrieve active promotions from database',
-    });
+  } catch (_) {
+    return res.status(503).json({ status: 'error', code: 'SERVICE_UNAVAILABLE', message: 'Failed to retrieve active promotions from database' });
   }
 });
 
@@ -146,15 +93,6 @@ app.use('/api/admin/games', adminGamesController);
 app.use('/api/admin/promotions', adminPromotionsController);
 app.use('/api/admin/reports', adminReportsController);
 
-app.use((req, res) => {
-  res.status(404).json({
-    status: 'error',
-    code: 'NOT_FOUND',
-    requestId: req.id,
-    message: `Route not found: ${req.method} ${req.originalUrl}`,
-  });
-});
-
+app.use((req, res) => res.status(404).json({ status: 'error', code: 'NOT_FOUND', requestId: req.id, message: `Route not found: ${req.method} ${req.originalUrl}` }));
 app.use(errorHandler);
-
 module.exports = app;
