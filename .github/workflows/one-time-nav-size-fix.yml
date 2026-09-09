@@ -13,17 +13,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Increase nav icon size by 5 percent
-        run: sed -i 's/size: 26,/size: 27.3,/g' lib/widgets/bottom_nav_bar.dart
-      - name: Commit change
+      - name: Apply final nav fix
+        run: |
+          sed -i 's/size: 26,/size: 27.3,/g' lib/widgets/bottom_nav_bar.dart
+          sed -i 's/16\.8851/16.4930/g' lib/widgets/bottom_nav_bar.dart
+          rm .github/workflows/one-time-nav-size-fix.yml
+      - name: Commit final change and remove helper
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          if git diff --quiet; then
-            echo 'No change needed'
-          else
-            git add lib/widgets/bottom_nav_bar.dart
-            git commit -m 'fix: increase bottom nav icons by 5 percent'
-            git push
-          fi
-# one-time trigger
+          git add lib/widgets/one-time-nav-size-fix.yml lib/widgets/bottom_nav_bar.dart .github/workflows/one-time-nav-size-fix.yml 2>/dev/null || true
+          git add -A
+          git commit -m 'fix: finalize bottom nav icon size'
+          git push
+# final trigger
