@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "com.ingames.ingames"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_secure_storage 11 requires Android API 37 for compilation.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
