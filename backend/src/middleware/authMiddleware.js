@@ -1,4 +1,4 @@
-const { verifyToken } = require('../auth/jwt');
+const { verifyToken, assertTokenNotRevoked } = require('../auth/jwt');
 const userRepo = require('../users/user.repository');
 const logger = require('../utils/logger');
 
@@ -49,7 +49,6 @@ function isAllowedGameSessionRoute(req, decoded) {
   if (req.baseUrl === '/api/user' && req.method === 'GET' && req.path === '/profile') return true;
   if (req.baseUrl !== '/api/games') return false;
 
-  // Session creation and aggregate history must use the normal USER token.
   if (req.path === '/session' || req.path === '/bet-history') return false;
 
   const requestedGame = routeGameId(req);
@@ -74,13 +73,15 @@ async function authMiddleware(req, res, next) {
   let decoded;
   try {
     decoded = verifyToken(token);
+    await assertTokenNotRevoked(decoded);
   } catch (err) {
     const maskedToken = token ? `${token.substring(0, 8)}***` : 'none';
     logger.warn('JWT verification failed', { maskedToken, error: err.message });
-    return res.status(401).json({
+    const statusCode = err.statusCode === 503 ? 503 : 401;
+    return res.status(statusCode).json({
       status: 'error',
       code: err.code || 'UNAUTHORIZED',
-      message: `Unauthorized: ${err.message}`,
+      message: statusCode === 503 ? 'Authentication service temporarily unavailable. Please try again shortly.' : `Unauthorized: ${err.message}`,
     });
   }
 
