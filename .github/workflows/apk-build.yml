@@ -50,6 +50,36 @@ jobs:
             flutter build apk --release
           fi
 
+      - name: Sign CI APK
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner was not found in the Android SDK." >&2
+            exit 1
+          fi
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/app-release-unsigned.apk
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-pass pass:android \
+            --ks-key-alias androiddebugkey \
+            --key-pass pass:android \
+            --out build/app/outputs/flutter-apk/app-release.apk \
+            build/app/outputs/flutter-apk/app-release-unsigned.apk
+          "$APKSIGNER" verify --verbose build/app/outputs/flutter-apk/app-release.apk
+          rm -f build/app/outputs/flutter-apk/app-release-unsigned.apk
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -58,4 +88,5 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-# Always build the APK from the latest main commit after source fixes.
+# CI artifacts use an ephemeral debug certificate only to make test APKs installable.
+# Production distribution must use a persistent dedicated release keystore.
