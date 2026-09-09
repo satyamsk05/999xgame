@@ -38,3 +38,5 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 7
+
+# Always build the APK from the latest main commit after source fixes.
