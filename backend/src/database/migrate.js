@@ -9,9 +9,20 @@ const logger = require('../utils/logger');
  * Applied migrations are tracked by filename + SHA-256 checksum. Once a
  * migration has been applied, changing its contents is treated as a startup
  * error instead of silently running a different schema history.
+ *
+ * A PostgreSQL advisory lock serializes migration runners so multiple AWS
+ * instances cannot concurrently create/update the schema.
  */
 
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
+const MIGRATION_LOCK_KEY = 999xgameMigrationLockKey();
+
+function 999xgameMigrationLockKey() {
+  // PostgreSQL advisory locks accept signed 64-bit integers. Derive a stable
+  // key from the application name rather than using a magic random value.
+  const digest = crypto.createHash('sha256').update('999xgame:schema-migrations', 'utf8').digest();
+  return digest.readInt32BE(0) * 0x100000000 + digest.readUInt32BE(4);
+}
 
 function migrationChecksum(sql) {
   return crypto.createHash('sha256').update(sql, 'utf8').digest('hex');
@@ -51,61 +62,78 @@ function readMigrationFiles() {
 }
 
 async function runMigrations(client) {
-  await ensureMigrationsTable(client);
+  let lockAcquired = false;
 
-  const files = readMigrationFiles();
-  const appliedRes = await client.query('SELECT version, checksum FROM schema_migrations');
-  const appliedMap = new Map(appliedRes.rows.map((r) => [r.version, r.checksum]));
+  try {
+    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY]);
+    lockAcquired = true;
 
-  const applied = [];
-  let skipped = 0;
+    await ensureMigrationsTable(client);
 
-  for (const file of files) {
-    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
-    const checksum = migrationChecksum(sql);
+    const files = readMigrationFiles();
+    const appliedRes = await client.query('SELECT version, checksum FROM schema_migrations');
+    const appliedMap = new Map(appliedRes.rows.map((r) => [r.version, r.checksum]));
 
-    if (appliedMap.has(file)) {
-      const storedChecksum = appliedMap.get(file);
+    const applied = [];
+    let skipped = 0;
 
-      // Existing databases from the old runner have no checksum. Backfill it
-      // once, without re-running the already-applied migration.
-      if (!storedChecksum) {
-        await client.query(
-          'UPDATE schema_migrations SET checksum = $2 WHERE version = $1 AND checksum IS NULL',
-          [file, checksum]
-        );
-      } else if (storedChecksum !== checksum) {
-        throw new Error(
-          `Migration checksum mismatch for ${file}. Applied=${storedChecksum}, current=${checksum}. Restore the original migration file or create a new migration.`
-        );
+    for (const file of files) {
+      const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+      const checksum = migrationChecksum(sql);
+
+      if (appliedMap.has(file)) {
+        const storedChecksum = appliedMap.get(file);
+
+        // Existing databases from the old runner have no checksum. Backfill it
+        // once, without re-running the already-applied migration.
+        if (!storedChecksum) {
+          await client.query(
+            'UPDATE schema_migrations SET checksum = $2 WHERE version = $1 AND checksum IS NULL',
+            [file, checksum]
+          );
+        } else if (storedChecksum !== checksum) {
+          throw new Error(
+            `Migration checksum mismatch for ${file}. Applied=${storedChecksum}, current=${checksum}. Restore the original migration file or create a new migration.`
+          );
+        }
+
+        skipped += 1;
+        continue;
       }
 
-      skipped += 1;
-      continue;
+      try {
+        await client.query('BEGIN');
+        await client.query(sql);
+        await client.query(
+          `INSERT INTO schema_migrations (version, checksum, applied_at)
+           VALUES ($1, $2, NOW())`,
+          [file, checksum]
+        );
+        await client.query('COMMIT');
+        applied.push(file);
+        logger.info('Applied database migration', { migration: file, checksum });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        logger.error('Database migration failed; rolled back', {
+          migration: file,
+          error: err.message || String(err),
+        });
+        throw err;
+      }
     }
 
-    try {
-      await client.query('BEGIN');
-      await client.query(sql);
-      await client.query(
-        `INSERT INTO schema_migrations (version, checksum, applied_at)
-         VALUES ($1, $2, NOW())`,
-        [file, checksum]
-      );
-      await client.query('COMMIT');
-      applied.push(file);
-      logger.info('Applied database migration', { migration: file, checksum });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      logger.error('Database migration failed; rolled back', {
-        migration: file,
-        error: err.message || String(err),
-      });
-      throw err;
+    return { applied, skipped };
+  } finally {
+    if (lockAcquired) {
+      try {
+        await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]);
+      } catch (err) {
+        logger.error('Failed to release database migration advisory lock', {
+          error: err.message || String(err),
+        });
+      }
     }
   }
-
-  return { applied, skipped };
 }
 
 module.exports = { runMigrations, readMigrationFiles, MIGRATIONS_DIR, migrationChecksum };
