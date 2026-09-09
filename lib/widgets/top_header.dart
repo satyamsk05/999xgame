@@ -35,8 +35,8 @@ class TopHeader extends StatelessWidget {
 
   Widget _avatar(String p) {
     final url = p.startsWith('http://') || p.startsWith('https://') ? p : '${ApiService.serverDomain}$p';
-    if (p.startsWith('/')) return Image.network(url,width:60,height:60,fit:BoxFit.cover,errorBuilder:(_,__,___)=>Container(color:AppColors.avatarBg,child:const Icon(Icons.person,color:Colors.white70,size:36)));
+    if (p.startsWith('/')) return Image.network(url,width:60,height:60,fit:BoxFit.cover,errorBuilder:(context,error,stackTrace)=>Container(color:AppColors.avatarBg,child:const Icon(Icons.person,color:Colors.white70,size:36)));
     final name=p.split('/').last.isEmpty?'avatar_1.png':p.split('/').last;
-    return Image.asset('Assets/Avatar/$name',width:60,height:60,fit:BoxFit.cover,errorBuilder:(_,__,___)=>Container(color:AppColors.avatarBg,child:const Icon(Icons.person,color:Colors.white70,size:36)));
+    return Image.asset('Assets/Avatar/$name',width:60,height:60,fit:BoxFit.cover,errorBuilder:(context,error,stackTrace)=>Container(color:AppColors.avatarBg,child:const Icon(Icons.person,color:Colors.white70,size:36)));
   }
 }
