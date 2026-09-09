@@ -3,7 +3,7 @@ const { Server } = require('socket.io');
 const app = require('./app');
 const config = require('../config/env');
 const logger = require('../utils/logger');
-const { verifyToken } = require('../auth/jwt');
+const { verifyToken, assertTokenNotRevoked } = require('../auth/jwt');
 const userRepo = require('../users/user.repository');
 const { gameManager } = require('../games/game.manager');
 const { initDb } = require('../database/db');
@@ -17,6 +17,7 @@ io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token || (socket.handshake.headers?.authorization || '').replace(/^Bearer\s+/i, '');
     if (!token) { socket.user = null; return next(); }
     const decoded = verifyToken(token);
+    await assertTokenNotRevoked(decoded);
     if (!decoded || decoded.type !== 'USER') return next(new Error('UNAUTHORIZED'));
     const userId = decoded.sub || decoded.userId;
     if (!userId) return next(new Error('UNAUTHORIZED'));
@@ -29,8 +30,9 @@ io.use(async (socket, next) => {
     return next();
   } catch (err) {
     const isDb = err && (err.statusCode === 503 || err.code === 'DATABASE_UNAVAILABLE');
-    logger.warn('Socket authentication rejected', { socketId: socket.id, error: err.message, dbUnavailable: !!isDb });
-    return next(new Error(isDb ? 'SERVICE_UNAVAILABLE' : 'UNAUTHORIZED'));
+    const isAuthService = err && (err.code === 'AUTH_REDIS_UNAVAILABLE' || err.code === 'AUTH_REVOKE_FAILED');
+    logger.warn('Socket authentication rejected', { socketId: socket.id, error: err.message, dbUnavailable: !!isDb, authServiceUnavailable: !!isAuthService });
+    return next(new Error(isDb || isAuthService ? 'SERVICE_UNAVAILABLE' : 'UNAUTHORIZED'));
   }
 });
 
@@ -60,7 +62,6 @@ server.listen(config.port, async () => {
   if (!dbReady) logger.error('Database not ready at boot — game workers will stay stopped until DB is ready.');
   if (dbReady) {
     try {
-      // Must initialize cross-instance event fanout before game workers start emitting.
       await initRealtime(io);
       await gameManager.init(io);
     } catch (err) {
