@@ -1,74 +1,100 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const logger = require('../utils/logger');
 
 /**
- * Idempotent, ordered SQL migration runner (sec 29).
+ * Idempotent, ordered SQL migration runner.
  *
- * Design rules:
- *  - Migrations live in ./migrations as NNN_name.sql and are applied in lexical
- *    (numeric) order exactly once. Applied versions are tracked in the
- *    `schema_migrations` table.
- *  - Each migration runs inside its own transaction. If it throws, the
- *    transaction is rolled back and the error propagates so initDb() can mark the
- *    database NOT ready (fail closed). We never half-apply a migration.
- *  - The runner NEVER drops a table and NEVER deletes production data. Migration
- *    files themselves are written with IF NOT EXISTS / ON CONFLICT guards so they
- *    are safe to run against both fresh and pre-existing databases.
- *  - Re-running is a no-op: already-applied versions are skipped.
+ * Applied migrations are tracked by filename + SHA-256 checksum. Once a
+ * migration has been applied, changing its contents is treated as a startup
+ * error instead of silently running a different schema history.
  */
 
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 
-/**
- * Ensure the bookkeeping table exists. Safe to call on every boot.
- */
+function migrationChecksum(sql) {
+  return crypto.createHash('sha256').update(sql, 'utf8').digest('hex');
+}
+
 async function ensureMigrationsTable(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version VARCHAR(191) PRIMARY KEY,
+      checksum CHAR(64),
       applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Upgrade installations created by the previous runner.
+  await client.query(`
+    ALTER TABLE schema_migrations
+      ADD COLUMN IF NOT EXISTS checksum CHAR(64)
+  `);
 }
 
-/**
- * Return the sorted list of migration files present on disk.
- */
 function readMigrationFiles() {
-  if (!fs.existsSync(MIGRATIONS_DIR)) return [];
-  return fs
+  if (!fs.existsSync(MIGRATIONS_DIR)) {
+    throw new Error(`Database migrations directory is missing: ${MIGRATIONS_DIR}`);
+  }
+
+  const files = fs
     .readdirSync(MIGRATIONS_DIR)
     .filter((f) => f.endsWith('.sql'))
     .sort();
+
+  if (files.length === 0 && process.env.NODE_ENV === 'production') {
+    throw new Error('No database migrations found; refusing production startup');
+  }
+
+  return files;
 }
 
-/**
- * Apply all pending migrations using the supplied connected client.
- * @returns {Promise<{applied: string[], skipped: number}>}
- */
 async function runMigrations(client) {
   await ensureMigrationsTable(client);
 
   const files = readMigrationFiles();
-  const appliedRes = await client.query('SELECT version FROM schema_migrations');
-  const appliedSet = new Set(appliedRes.rows.map((r) => r.version));
+  const appliedRes = await client.query('SELECT version, checksum FROM schema_migrations');
+  const appliedMap = new Map(appliedRes.rows.map((r) => [r.version, r.checksum]));
 
   const applied = [];
-  for (const file of files) {
-    if (appliedSet.has(file)) continue;
+  let skipped = 0;
 
+  for (const file of files) {
     const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+    const checksum = migrationChecksum(sql);
+
+    if (appliedMap.has(file)) {
+      const storedChecksum = appliedMap.get(file);
+
+      // Existing databases from the old runner have no checksum. Backfill it
+      // once, without re-running the already-applied migration.
+      if (!storedChecksum) {
+        await client.query(
+          'UPDATE schema_migrations SET checksum = $2 WHERE version = $1 AND checksum IS NULL',
+          [file, checksum]
+        );
+      } else if (storedChecksum !== checksum) {
+        throw new Error(
+          `Migration checksum mismatch for ${file}. Applied=${storedChecksum}, current=${checksum}. Restore the original migration file or create a new migration.`
+        );
+      }
+
+      skipped += 1;
+      continue;
+    }
+
     try {
       await client.query('BEGIN');
       await client.query(sql);
       await client.query(
-        'INSERT INTO schema_migrations (version, applied_at) VALUES ($1, NOW()) ON CONFLICT (version) DO NOTHING',
-        [file]
+        `INSERT INTO schema_migrations (version, checksum, applied_at)
+         VALUES ($1, $2, NOW())`,
+        [file, checksum]
       );
       await client.query('COMMIT');
       applied.push(file);
-      logger.info('Applied database migration', { migration: file });
+      logger.info('Applied database migration', { migration: file, checksum });
     } catch (err) {
       await client.query('ROLLBACK');
       logger.error('Database migration failed; rolled back', {
@@ -79,7 +105,7 @@ async function runMigrations(client) {
     }
   }
 
-  return { applied, skipped: files.length - applied.length };
+  return { applied, skipped };
 }
 
-module.exports = { runMigrations, readMigrationFiles, MIGRATIONS_DIR };
+module.exports = { runMigrations, readMigrationFiles, MIGRATIONS_DIR, migrationChecksum };
