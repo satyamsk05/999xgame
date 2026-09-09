@@ -36,3 +36,5 @@ jobs:
           git add lib/main.dart
           git commit -m 'chore: repair Flutter main syntax'
           git push origin HEAD:main
+
+# One-shot repair for the syntax regression introduced during logout wiring.
