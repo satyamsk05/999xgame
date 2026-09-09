@@ -5,7 +5,9 @@ set -Eeuo pipefail
 # It intentionally installs only the low-cost/free-tier-friendly pieces:
 # Docker Engine + Compose. PostgreSQL and Redis run as local containers.
 
-REPO_DIR="${REPO_DIR:-$HOME/999xgame}"
+# SSM/non-interactive shells may not define HOME, so derive a stable default.
+DEFAULT_HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+REPO_DIR="${REPO_DIR:-${DEFAULT_HOME:-/home/ubuntu}/999xgame}"
 STACK_DIR="$REPO_DIR/infrastructure/aws-free"
 ENV_FILE="$STACK_DIR/.env.aws"
 
@@ -60,4 +62,4 @@ else
 fi
 
 echo
- echo "Next: put Nginx in front of the backend and configure HTTPS for your domain."
+echo "Next: put Nginx in front of the backend and configure HTTPS for your domain."
