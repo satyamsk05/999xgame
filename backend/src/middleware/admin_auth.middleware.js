@@ -23,6 +23,22 @@ function safeEqual(a, b) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
+function isStateChangingMethod(method) {
+  return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(method || '').toUpperCase());
+}
+
+function validateCookieCsrf(req, cookieToken) {
+  if (!isStateChangingMethod(req.method)) return true;
+
+  // Cookie authentication is vulnerable to cross-site request forgery because
+  // browsers attach cookies automatically. Require an explicit custom header
+  // containing the same bearer token for all state-changing cookie-auth calls.
+  // A cross-origin attacker cannot read the HttpOnly session cookie and therefore
+  // cannot construct this header.
+  const csrfToken = req.headers['x-admin-csrf-token'];
+  return safeEqual(csrfToken, cookieToken);
+}
+
 async function authenticateToken(req, token, viaCookie) {
   const decoded = verifyAdminToken(token);
   if (!decoded || decoded.type !== 'ADMIN' || !(decoded.sub || decoded.adminId)) return false;
@@ -34,6 +50,13 @@ async function authenticateToken(req, token, viaCookie) {
     }
   } else if (await get(`admin:revoked:${decoded.jti}`)) {
     const e = new Error('Admin session has been revoked'); e.statusCode = 401; e.code = 'TOKEN_REVOKED'; throw e;
+  }
+
+  if (viaCookie && !validateCookieCsrf(req, token)) {
+    const e = new Error('CSRF validation failed for cookie-authenticated admin request');
+    e.statusCode = 403;
+    e.code = 'CSRF_VALIDATION_FAILED';
+    throw e;
   }
 
   req.admin = {
@@ -69,7 +92,7 @@ async function adminMiddleware(req, res, next) {
     return res.status(401).json({ status: 'error', code: 'ADMIN_UNAUTHORIZED', message: 'Unauthorized: Valid admin login session required.' });
   } catch (err) {
     logger.warn('Admin authentication rejected', { path: req.originalUrl, code: err.code, error: err.message });
-    return res.status(err.statusCode || 401).json({ status: 'error', code: err.code || 'ADMIN_UNAUTHORIZED', message: err.statusCode === 503 ? 'Authentication service temporarily unavailable.' : 'Unauthorized: Valid admin login session required.' });
+    return res.status(err.statusCode || 401).json({ status: 'error', code: err.code || 'ADMIN_UNAUTHORIZED', message: err.statusCode === 503 ? 'Authentication service temporarily unavailable.' : (err.statusCode === 403 ? 'Forbidden: CSRF validation failed.' : 'Unauthorized: Valid admin login session required.') });
   }
 }
 
