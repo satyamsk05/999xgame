@@ -7,6 +7,7 @@ const logger = require('../../utils/logger');
 const GAME_ID = 'crush';
 const BETTING_WINDOW_MS = 10000;
 const TICK_MS = 200;
+const LEADERSHIP_CHECK_MS = 1000;
 const INTER_ROUND_PAUSE_MS = 4000;
 const LEADER_POLL_MS = 2000;
 
@@ -66,8 +67,14 @@ async function runGameCycle(io) {
   if (!(await leaderSleep(BETTING_WINDOW_MS))) return false;
   if (io) emitRealtime('GAME_BETTING_CLOSED', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString() });
   await crushEngine.startFlying();
-  while (isRunning && crushEngine.isLeaderSafe?.() !== false && !crushEngine.isCrashed()) {
-    if (!(await leaderLock.assertLeadership())) return false;
+
+  let lastLeadershipCheck = Date.now();
+  while (isRunning && !crushEngine.isCrashed()) {
+    if (Date.now() - lastLeadershipCheck >= LEADERSHIP_CHECK_MS) {
+      if (!(await leaderLock.assertLeadership())) return false;
+      lastLeadershipCheck = Date.now();
+    }
+
     const mult = crushEngine.getCurrentMultiplier();
     round.currentMultiplier = mult;
     try {
