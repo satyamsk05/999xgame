@@ -4,17 +4,11 @@ const authMiddleware = require('../middleware/authMiddleware');
 const depositRepo = require('./deposit.repository');
 const telegramService = require('../services/telegram.service');
 
-/**
- * POST /api/deposits — Create PENDING Deposit Order
- */
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
     const { amount, paymentMethod } = req.body;
     if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Valid numeric deposit amount is required',
-      });
+      return res.status(400).json({ status: 'error', message: 'Valid numeric deposit amount is required' });
     }
 
     const order = await depositRepo.createDepositOrder({
@@ -24,9 +18,9 @@ router.post('/', authMiddleware, async (req, res, next) => {
     });
 
     telegramService.notifyDepositCreated({
-      depositId: order.deposit_id || order.id,
+      depositId: order.depositId || order.id,
       userId: req.user.id,
-      amountRupees: parseFloat(amount),
+      amountRupees: order.amountRupees,
     }).catch(() => {});
 
     res.status(201).json({
@@ -34,23 +28,13 @@ router.post('/', authMiddleware, async (req, res, next) => {
       message: 'Deposit order created successfully. Status: PENDING',
       data: order,
     });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 });
 
-/**
- * GET /api/deposits/:depositId — Fetch Deposit Order Status
- */
 router.get('/:depositId', authMiddleware, async (req, res, next) => {
   try {
     const deposit = await depositRepo.getDepositById(req.params.depositId, req.user.id);
-    if (!deposit) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Deposit order not found',
-      });
-    }
+    if (!deposit) return res.status(404).json({ status: 'error', message: 'Deposit order not found' });
 
     res.status(200).json({
       status: 'success',
@@ -67,22 +51,14 @@ router.get('/:depositId', authMiddleware, async (req, res, next) => {
         createdAt: deposit.created_at,
       },
     });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 });
 
-/**
- * POST /api/deposits/:depositId/utr — Submit 12-digit UTR for PENDING deposit order
- */
 router.post('/:depositId/utr', authMiddleware, async (req, res, next) => {
   try {
     const { utr } = req.body;
     if (!utr || typeof utr !== 'string' || !/^\d{12}$/.test(utr.trim())) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Invalid UTR format. UTR must be exactly 12 numeric digits.',
-      });
+      return res.status(400).json({ status: 'error', message: 'Invalid UTR format. UTR must be exactly 12 numeric digits.' });
     }
 
     const updatedOrder = await depositRepo.submitDepositUtr({
@@ -91,10 +67,11 @@ router.post('/:depositId/utr', authMiddleware, async (req, res, next) => {
       utr,
     });
 
+    // Repository returns camelCase. Do not read snake_case fields here or Telegram shows ₹0.
     telegramService.notifyDepositUtrSubmitted({
-      depositId: updatedOrder.deposit_id || req.params.depositId,
-      userId: req.user.id,
-      amountRupees: parseInt(updatedOrder.amount || 0, 10) / 100,
+      depositId: updatedOrder.depositId || req.params.depositId,
+      userId: updatedOrder.userId || req.user.id,
+      amountRupees: Number(updatedOrder.amountRupees || 0),
       utr: utr.trim(),
     }).catch(() => {});
 
@@ -104,12 +81,7 @@ router.post('/:depositId/utr', authMiddleware, async (req, res, next) => {
       data: updatedOrder,
     });
   } catch (err) {
-    if (err.statusCode) {
-      return res.status(err.statusCode).json({
-        status: 'error',
-        message: err.message,
-      });
-    }
+    if (err.statusCode) return res.status(err.statusCode).json({ status: 'error', message: err.message });
     next(err);
   }
 });
