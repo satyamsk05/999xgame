@@ -32,6 +32,7 @@ class DragonTigerEngine {
   async recoverFromDb() {
     const rounds = await dtRepo.getInFlightRoundsFromDb();
     let settled = 0, drawn = 0, refunded = 0;
+    const failures = [];
     for (const r of rounds) {
       try {
         if (['RESULT', 'SETTLING'].includes(r.status) && r.winningBetType) {
@@ -45,9 +46,18 @@ class DragonTigerEngine {
             await dtRepo.refundRoundInDb(r.roundId, 'SERVER_RESTART_NO_SEED'); refunded += 1;
           }
         }
-      } catch (err) { logger.error('Dragon Tiger recovery failed for round', { roundId: r.roundId, status: r.status, error: err.message }); }
+      } catch (err) {
+        failures.push({ roundId: r.roundId, status: r.status, error: err.message || String(err) });
+        logger.error('Dragon Tiger recovery failed for round', { roundId: r.roundId, status: r.status, error: err.message });
+      }
     }
-    if (rounds.length) logger.warn('Dragon Tiger recovery processed orphaned rounds', { total: rounds.length, settled, drawn, refunded });
+    if (rounds.length) logger.warn('Dragon Tiger recovery processed orphaned rounds', { total: rounds.length, settled, drawn, refunded, failures: failures.length });
+    if (failures.length) {
+      const error = new Error(`Dragon Tiger recovery incomplete: ${failures.length} round(s) could not be recovered`);
+      error.code = 'GAME_RECOVERY_INCOMPLETE';
+      error.failures = failures;
+      throw error;
+    }
     return { total: rounds.length, settled, drawn, refunded };
   }
 
@@ -74,11 +84,8 @@ class DragonTigerEngine {
   async placeBet({ userId, betType, stakePaise, idempotencyKey }) {
     if (!this.currentRound || this.currentRound.status !== RoundStatus.BETTING_OPEN) { const e = new Error('Betting is closed for Dragon Tiger'); e.statusCode = 409; throw e; }
     if (!Object.values(BetTypes).includes(betType)) { const e = new Error(`Invalid bet type: ${betType}`); e.statusCode = 400; throw e; }
-    // A client-supplied idempotency key makes retries safe. Without one, every
-    // call represents a distinct bet; never derive it from bet attributes because
-    // identical legitimate bets are allowed in the same round.
     const key = idempotencyKey || `dt_req_${crypto.randomUUID()}`;
-    return await dtRepo.placeBetInDb({ userId, roundId: this.currentRound.roundId, betType, stakePaise, idempotencyKey: key });
+    return dtRepo.placeBetInDb({ userId, roundId: this.currentRound.roundId, betType, stakePaise, idempotencyKey: key });
   }
 
   async drawCardsAndReveal() {
