@@ -1,0 +1,1 @@
+Full repository review requested. Trace client, API, database, realtime, admin, integrations and deployment. Prioritize auth, authorization, game/wallet integrity, concurrency, database consistency, realtime, Flutter failures, security, AWS/Docker, CI/CD and tests. Give severity, location, root cause, impact and concrete remediation for actionable findings.
