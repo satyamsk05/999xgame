@@ -8,13 +8,23 @@ const realtime = require('../services/realtime.service');
 
 router.use(adminMiddleware);
 
+function parsePagination(query) {
+  const rawLimit = Number.parseInt(query.limit, 10);
+  const rawOffset = Number.parseInt(query.offset, 10);
+  return {
+    limit: Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 50,
+    offset: Number.isFinite(rawOffset) ? Math.min(Math.max(rawOffset, 0), 1000000) : 0,
+  };
+}
+
 router.get('/pending', async (req, res, next) => {
   try {
-    const limit = parseInt(req.query.limit || '50', 10);
-    const offset = parseInt(req.query.offset || '0', 10);
+    const { limit, offset } = parsePagination(req.query);
     const deposits = await depositRepo.getPendingDepositsForAdmin({ limit, offset });
     res.status(200).json({ status: 'success', data: deposits });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.post('/:depositId/confirm', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN', 'GAME_ADMIN'), async (req, res, next) => {
