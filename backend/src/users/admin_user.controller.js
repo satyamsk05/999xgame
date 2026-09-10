@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { adminMiddleware, requireRole } = require('../middleware/admin_auth.middleware');
 const { query, getClient } = require('../database/db');
@@ -101,33 +102,99 @@ router.get('/:userId', async (req, res, next) => {
 
 router.post('/:userId/adjust-balance', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN'), async (req, res, next) => {
   const { userId } = req.params;
-  const { amount, direction, reason } = req.body;
+  const { amount, direction, reason } = req.body || {};
   const adminId = req.admin?.id || 'admin_sys';
-  const clientProvidedIdempotencyKey = req.body.idempotencyKey || req.headers['x-idempotency-key'];
-  const idempotencyKey = clientProvidedIdempotencyKey || `admin_adj_${adminId}_${userId}_${Math.floor(Date.now() / 60000)}`;
-  if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return res.status(400).json({ status: 'error', message: 'amount must be a positive number (in rupees)' });
+  const rawIdempotencyKey = req.body?.idempotencyKey || req.headers['x-idempotency-key'];
+  const idempotencyKey = rawIdempotencyKey ? String(rawIdempotencyKey).trim() : `admin_adj_${crypto.randomUUID()}`;
+  const amountText = String(amount ?? '').trim();
+  const amountNumber = Number(amountText);
+  if (!/^\d+(?:\.\d{1,2})?$/.test(amountText) || !Number.isFinite(amountNumber) || amountNumber <= 0) {
+    return res.status(400).json({ status: 'error', message: 'amount must be a positive rupee value with at most 2 decimal places' });
+  }
+  const amountPaise = Math.round(amountNumber * 100);
+  if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) {
+    return res.status(400).json({ status: 'error', message: 'amount is outside the supported range' });
+  }
   if (!['CREDIT', 'DEBIT'].includes(direction)) return res.status(400).json({ status: 'error', message: 'direction must be CREDIT or DEBIT' });
   if (!reason || reason.trim().length < 5) return res.status(400).json({ status: 'error', message: 'reason is required (min 5 chars) for audit trail' });
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 100) return res.status(400).json({ status: 'error', message: 'idempotencyKey must be between 8 and 100 characters' });
+
+  const client = await getClient();
+  let transactionStarted = false;
   try {
-    const existingLedger = await query('SELECT * FROM wallet_ledger WHERE idempotency_key = $1', [idempotencyKey]);
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    const existingLedger = await client.query('SELECT * FROM wallet_ledger WHERE idempotency_key = $1 FOR UPDATE', [idempotencyKey]);
     if (existingLedger.rows.length > 0) {
       const existing = existingLedger.rows[0];
-      return res.status(200).json({ status: 'success', message: 'Adjustment request already processed (idempotent response)', data: { idempotencyKey, referenceId: existing.reference_id, userId: existing.user_id, amountRupees: parseInt(existing.amount, 10) / 100, direction: existing.direction, alreadyProcessed: true } });
+      await client.query('COMMIT');
+      transactionStarted = false;
+      return res.status(200).json({
+        status: 'success',
+        message: 'Adjustment request already processed (idempotent response)',
+        data: {
+          idempotencyKey,
+          referenceId: existing.reference_id,
+          userId: existing.user_id,
+          amountRupees: parseInt(existing.amount, 10) / 100,
+          direction: existing.direction,
+          alreadyProcessed: true,
+        },
+      });
     }
-  } catch (_) {}
-  const client = await getClient();
-  try {
-    const amountPaise = Math.round(Number(amount) * 100);
-    const referenceId = `adj_${Date.now()}`;
+
+    const referenceId = `adj_${crypto.randomUUID()}`;
     const walletResult = direction === 'CREDIT'
       ? await financialService.creditWallet(client, amountPaise, { userId, type: 'ADMIN_CREDIT', referenceType: 'ADMIN_ADJUSTMENT', referenceId, idempotencyKey, metadata: { adminId, reason: reason.trim(), direction } })
       : await financialService.debitWallet(client, amountPaise, { userId, type: 'ADMIN_DEBIT', referenceType: 'ADMIN_ADJUSTMENT', referenceId, idempotencyKey, metadata: { adminId, reason: reason.trim(), direction } });
-    const avail = parseInt(walletResult.wallet?.available_balance || 0, 10), resv = parseInt(walletResult.wallet?.reserved_balance || 0, 10);
-    res.status(200).json({ status: 'success', message: `Wallet ${direction === 'CREDIT' ? 'credited' : 'debited'} ₹${amount} successfully.`, data: { referenceId, userId, direction, amountRupees: Number(amount), newBalance: { availableBalance: avail / 100, reservedBalance: resv / 100, totalBalance: (avail + resv) / 100 } } });
+
+    const wallet = walletResult.wallet;
+    if (!wallet) {
+      const duplicateLedger = walletResult.ledger;
+      if (walletResult.duplicate && duplicateLedger) {
+        const currentWallet = await client.query('SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE', [userId]);
+        await client.query('COMMIT');
+        transactionStarted = false;
+        return res.status(200).json({ status: 'success', message: 'Adjustment request already processed (idempotent response)', data: { idempotencyKey, referenceId: duplicateLedger.reference_id, userId: duplicateLedger.user_id, amountRupees: parseInt(duplicateLedger.amount, 10) / 100, direction: duplicateLedger.direction, alreadyProcessed: true, newBalance: currentWallet.rows[0] ? { availableBalance: parseInt(currentWallet.rows[0].available_balance || 0, 10) / 100, reservedBalance: parseInt(currentWallet.rows[0].reserved_balance || 0, 10) / 100, totalBalance: (parseInt(currentWallet.rows[0].available_balance || 0, 10) + parseInt(currentWallet.rows[0].reserved_balance || 0, 10)) / 100 } : undefined } });
+      }
+      throw new Error('Wallet adjustment completed without returning wallet state');
+    }
+
+    const avail = parseInt(wallet.available_balance || 0, 10);
+    const resv = parseInt(wallet.reserved_balance || 0, 10);
+    await client.query(
+      `INSERT INTO audit_logs (id, user_id, action, ip_address, details, created_at)
+       VALUES ($1, $2, 'ADMIN_WALLET_ADJUSTMENT', $3, $4::jsonb, NOW())`,
+      [`al_${crypto.randomUUID()}`, userId, req.ip || null, JSON.stringify({ adminId, amountPaise, direction, reason: reason.trim(), referenceId, idempotencyKey })]
+    );
+    await client.query('COMMIT');
+    transactionStarted = false;
+
+    return res.status(200).json({
+      status: 'success',
+      message: `Wallet ${direction === 'CREDIT' ? 'credited' : 'debited'} ₹${amountNumber.toFixed(2)} successfully.`,
+      data: { referenceId, userId, direction, amountRupees: amountNumber, newBalance: { availableBalance: avail / 100, reservedBalance: resv / 100, totalBalance: (avail + resv) / 100 } },
+    });
   } catch (err) {
+    if (transactionStarted) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      transactionStarted = false;
+    }
+    if (err && err.code === '23505' && err.constraint === 'wallet_ledger_idempotency_key_key') {
+      try {
+        const existing = await client.query('SELECT * FROM wallet_ledger WHERE idempotency_key = $1 LIMIT 1', [idempotencyKey]);
+        if (existing.rows.length) {
+          const row = existing.rows[0];
+          return res.status(200).json({ status: 'success', message: 'Adjustment request already processed (idempotent response)', data: { idempotencyKey, referenceId: row.reference_id, userId: row.user_id, amountRupees: parseInt(row.amount, 10) / 100, direction: row.direction, alreadyProcessed: true } });
+        }
+      } catch (_) {}
+    }
     if (err.statusCode) return res.status(err.statusCode).json({ status: 'error', message: err.message });
     next(err);
-  } finally { if (client) client.release(); }
+  } finally {
+    client.release();
+  }
 });
 
 router.post('/:userId/block', requireRole('SUPER_ADMIN', 'SUPPORT_ADMIN'), async (req, res, next) => {
@@ -146,7 +213,7 @@ router.post('/:userId/unblock', requireRole('SUPER_ADMIN', 'SUPPORT_ADMIN'), asy
     const { userId } = req.params, adminId = req.admin?.id || 'admin_sys';
     const result = await query(`UPDATE users SET is_blocked = FALSE, blocked_at = NULL, blocked_reason = NULL WHERE id = $1 RETURNING id, username, phone, is_blocked`, [userId]);
     if (!result.rows.length) return res.status(404).json({ status: 'error', message: 'User not found' });
-    await query(`INSERT INTO audit_logs (id, user_id, action, details, created_at) VALUES ($1, $2, 'USER_UNBLOCKED', $3::jsonb, NOW())`, [`al_${Date.now()}`, adminId, JSON.stringify({ targetUserId: userId })]);
+    await query(`INSERT INTO audit_logs (id, user_id, action, details, created_at) VALUES ($1, $2, 'USER_UNBLOCKED', $3::jsonb)`, [`al_${Date.now()}`, adminId, JSON.stringify({ targetUserId: userId })]);
     res.json({ status: 'success', data: result.rows[0] });
   } catch (err) { next(err); }
 });
