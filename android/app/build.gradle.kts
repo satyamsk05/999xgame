@@ -6,8 +6,8 @@ plugins {
 
 android {
     namespace = "com.ingames.ingames"
-    compileSdk = 36
-    buildToolsVersion = "36.0.0"
+    compileSdk = 35
+    buildToolsVersion = "35.0.0"
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -17,28 +17,17 @@ android {
 
     defaultConfig {
         applicationId = "com.ingames.ingames"
-        minSdk = flutter.minSdkVersion
-        targetSdk = 34
+        minSdk = 21
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
-    signingConfigs {
-        create("release") {
-            val debugSigning = signingConfigs.getByName("debug")
-            storeFile = debugSigning.storeFile
-            storePassword = debugSigning.storePassword
-            keyAlias = debugSigning.keyAlias
-            keyPassword = debugSigning.keyPassword
-            enableV1Signing = true
-            enableV2Signing = true
-            enableV3Signing = true
-        }
-    }
-
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
