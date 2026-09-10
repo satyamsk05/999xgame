@@ -65,7 +65,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Keep logout state reset outside finally
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Repair known logout control-flow lint
         if: github.actor != 'github-actions[bot]'
         run: |
           python3 - <<'PY'
@@ -117,24 +125,16 @@ jobs:
   }
 
 '''
-          s = s[:start] + corrected + s[end:]
-          p.write_text(s)
+          if s[start:end] == corrected:
+              print('Logout method already lint-safe.')
+              raise SystemExit(0)
+          p.write_text(s[:start] + corrected + s[end:])
 
           subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
           subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
           subprocess.run(['git', 'add', 'lib/main.dart'], check=True)
-          result = subprocess.run(['git', 'diff', '--cached', '--quiet'])
-          if result.returncode != 0:
-              subprocess.run(['git', 'commit', '-m', 'fix(auth): keep logout state reset outside finally'], check=True)
-              subprocess.run(['git', 'push', 'origin', 'HEAD:main'], check=True)
-          else:
-              print('Logout method already lint-safe.')
+          subprocess.run(['git', 'commit', '-m', 'fix(auth): keep logout state reset outside finally'], check=True)
+          subprocess.run(['git', 'push', 'origin', 'HEAD:main'], check=True)
           PY
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.47.2'
-          channel: stable
-          cache: true
-      - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
