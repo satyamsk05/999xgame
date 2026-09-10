@@ -216,19 +216,19 @@ body, html {
 
 /* Top 3 Bettors Vertical Stack */
 .players-col {
-  width: 68px;
+  width: 76px;
 }
 
 .players-card-container {
   background: #190533;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 18px;
-  padding: 8px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 8px 6px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  gap: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
 .player-stack-item {
@@ -241,8 +241,8 @@ body, html {
 
 .avatar-crown-wrap {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 46px;
+  height: 46px;
 }
 
 .stack-avatar {
@@ -250,7 +250,7 @@ body, html {
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid #8b5cf6;
+  border: 2.5px solid #8b5cf6;
 }
 
 .avatar-top { border-color: #f59e0b; }
@@ -259,15 +259,15 @@ body, html {
 
 .crown-badge {
   position: absolute;
-  top: -7px;
-  right: -7px;
-  font-size: 12px;
+  top: -8px;
+  right: -8px;
+  font-size: 15px;
   line-height: 1;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
 }
 
 .stack-amt {
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 700;
   color: #ffffff;
   margin-top: 3px;
@@ -417,8 +417,12 @@ body, html {
   width: 100%;
   height: 96px;
   border-radius: 14px;
-  background: #1565c0;
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  background-color: #1565c0;
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.08) 0%, transparent 65%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 2px, transparent 2px, transparent 6px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.09) 0, rgba(0, 0, 0, 0.09) 2px, transparent 2px, transparent 6px);
+  border: 2px solid rgba(255, 255, 255, 0.18);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -452,8 +456,12 @@ body, html {
   flex: 1;
   height: 114px;
   border-radius: 14px;
-  background: #008736;
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  background-color: #008736;
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.08) 0%, transparent 65%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 2px, transparent 2px, transparent 6px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.09) 0, rgba(0, 0, 0, 0.09) 2px, transparent 2px, transparent 6px);
+  border: 2px solid rgba(255, 255, 255, 0.18);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -480,8 +488,12 @@ body, html {
   flex: 1;
   height: 114px;
   border-radius: 14px;
-  background: #b71c1c;
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  background-color: #b71c1c;
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.08) 0%, transparent 65%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 2px, transparent 2px, transparent 6px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.09) 0, rgba(0, 0, 0, 0.09) 2px, transparent 2px, transparent 6px);
+  border: 2px solid rgba(255, 255, 255, 0.18);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -501,6 +513,25 @@ body, html {
   outline: none !important;
   box-shadow: none !important;
   -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Winning Table Blink (Gold Illumination, No Bounce) */
+@keyframes tableWinBlink {
+  0%, 100% {
+    filter: brightness(1);
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow: none;
+  }
+  50% {
+    filter: brightness(1.4);
+    border-color: #ffd700;
+    box-shadow: 0 0 24px rgba(255, 215, 0, 0.85), inset 0 0 16px rgba(255, 215, 0, 0.5);
+  }
+}
+
+.win-golden-blink {
+  animation: tableWinBlink 0.35s ease-in-out 6 !important;
+  transform: none !important;
 }
 
 /* User Bet Badge in Top-Right of each Table */

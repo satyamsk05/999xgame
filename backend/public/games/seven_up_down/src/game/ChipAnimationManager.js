@@ -147,38 +147,33 @@ export class ChipAnimationManager {
     const flyingChip = document.createElement('div');
     flyingChip.className = 'flying-chip-particle';
     flyingChip.innerHTML = `<img src="${getChipSvg(chipVal)}" alt="${chipVal}" />`;
-    flyingChip.style.left = `${startX - 18}px`;
-    flyingChip.style.top = `${startY - 18}px`;
+    flyingChip.style.left = '0px';
+    flyingChip.style.top = '0px';
+    flyingChip.style.transform = `translate3d(${startX - 18}px, ${startY - 18}px, 0)`;
+    flyingChip.style.willChange = 'transform';
     this.overlay.appendChild(flyingChip);
 
     try {
       soundManager.playClick();
     } catch (_) {}
 
-    // Parabolic trajectory animation
-    const duration = 400; // ms
+    const duration = 350; // ms
     const startTime = performance.now();
-
-    // Arc peak
-    const arcHeight = Math.min(Math.abs(startX - endX) * 0.3 + 50, 90);
+    const arcHeight = Math.min(Math.abs(startX - endX) * 0.3 + 40, 80);
 
     const step = (currentTime) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      
-      // Easing function
       const ease = 1 - Math.pow(1 - progress, 2);
 
       const currentX = startX + (endX - startX) * progress;
       const arc = 4 * arcHeight * progress * (1 - progress);
       const currentY = startY + (endY - startY) * ease - arc;
 
-      const scale = 1 + 0.3 * Math.sin(progress * Math.PI);
+      const scale = 1 + 0.25 * Math.sin(progress * Math.PI);
       const rotation = progress * 360;
 
-      flyingChip.style.left = `${currentX - 18}px`;
-      flyingChip.style.top = `${currentY - 18}px`;
-      flyingChip.style.transform = `scale(${scale}) rotate(${rotation}deg)`;
+      flyingChip.style.transform = `translate3d(${currentX - 18}px, ${currentY - 18}px, 0) scale(${scale}) rotate(${rotation}deg)`;
 
       if (progress < 1) {
         requestAnimationFrame(step);
@@ -206,16 +201,24 @@ export class ChipAnimationManager {
     const relX = Math.max(10, Math.min(pageX - tableRect.left - 14, tableRect.width - 36));
     const relY = Math.max(10, Math.min(pageY - tableRect.top - 14, tableRect.height - 36));
 
+    // Cap max 10 chips per table for high performance
+    if (this.tableChips[targetTable].length >= 10) {
+      const oldest = this.tableChips[targetTable].shift();
+      if (oldest && oldest.el && oldest.el.parentNode) {
+        oldest.el.remove();
+      }
+    }
+
     const chipToken = document.createElement('div');
     chipToken.className = `table-chip-token ${isUser ? 'user-chip-token' : 'ai-chip-token'}`;
     chipToken.innerHTML = `<img src="${getChipSvg(chipVal)}" alt="${chipVal}" />`;
     chipToken.style.left = `${relX}px`;
     chipToken.style.top = `${relY}px`;
+    chipToken.style.willChange = 'transform, opacity';
 
     chipsLayer.appendChild(chipToken);
     this.tableChips[targetTable].push({ el: chipToken, isUser, chipVal });
 
-    // Play land impact animation
     chipToken.classList.add('chip-land-pop');
   }
 
