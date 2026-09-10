@@ -18,7 +18,7 @@ android {
     defaultConfig {
         applicationId = "com.ingames.ingames"
         // flutter_secure_storage 11 requires Android API 23+.
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -26,12 +26,8 @@ android {
 
     buildTypes {
         release {
-            // CI artifacts must be signed or Android will reject them as invalid packages.
-            // The CI-only fallback uses the runner's debug key for installable test builds.
-            // Production distribution must provide a dedicated release keystore.
-            if (System.getenv("CI") == "true") {
-                signingConfig = signingConfigs.getByName("debug")
-            }
+            // Signing with debug key ensures release APK is signed and can be installed on phones directly.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
