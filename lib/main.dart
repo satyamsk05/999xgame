@@ -468,6 +468,7 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 
