@@ -34,9 +34,8 @@ class CustomBottomNavBar extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final tabWidth = constraints.maxWidth / 4;
-              final boxSize = (tabWidth * 0.72).clamp(48.0, 54.0);
-              final indicatorWidth = boxSize;
-              final indicatorHeight = boxSize;
+              const indicatorWidth = 60.0;
+              const indicatorHeight = 56.0;
               final leftOffset = (selectedIndex * tabWidth) + ((tabWidth - indicatorWidth) / 2);
 
               return Stack(
