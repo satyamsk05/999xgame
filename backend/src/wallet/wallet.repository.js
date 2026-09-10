@@ -38,8 +38,17 @@ async function getTransactionsByUserId(userId, category = 'All') {
     const normalizedCategory = String(category || 'All').trim().toLowerCase();
     
     // 1. Ledger transactions for Games, Bonuses, and Direct adjustments (excluding raw internal deposit/withdraw items)
-    let ledgerSql = `SELECT id, type, amount, direction, created_at, reference_id, 
-                            NULL::varchar AS tx_status, NULL::varchar AS tx_utr, NULL::varchar AS custom_category
+    // Aggregates multiple chip clicks / bets in a single round into a single transaction row per round.
+    let ledgerSql = `SELECT MIN(id::text) AS id, 
+                            type, 
+                            SUM(amount) AS amount, 
+                            direction, 
+                            MAX(created_at) AS created_at, 
+                            COALESCE(metadata->>'roundId', reference_id) AS reference_id,
+                            MAX(COALESCE(metadata->>'gameId', '')) AS game_id,
+                            NULL::varchar AS tx_status, 
+                            NULL::varchar AS tx_utr, 
+                            NULL::varchar AS custom_category
                      FROM wallet_ledger 
                      WHERE user_id = $1 
                        AND type <> 'DEPOSIT' 
@@ -52,6 +61,13 @@ async function getTransactionsByUserId(userId, category = 'All') {
       ledgerSql += ` AND type = ANY(ARRAY['BONUS_CREDIT', 'REWARD_CREDIT', 'REWARD_DEBIT']::varchar[])`;
     }
 
+    ledgerSql += ` GROUP BY type, direction, 
+                            CASE 
+                              WHEN type IN ('BET_DEBIT', 'WIN_CREDIT') AND metadata->>'roundId' IS NOT NULL THEN metadata->>'roundId' 
+                              ELSE id::text 
+                            END, 
+                            COALESCE(metadata->>'roundId', reference_id)`;
+
     const queries = [];
 
     if (normalizedCategory === 'all' || normalizedCategory === 'game' || normalizedCategory === 'reward') {
@@ -60,8 +76,8 @@ async function getTransactionsByUserId(userId, category = 'All') {
 
     // 2. Authoritative Single Record per Deposit
     if (normalizedCategory === 'all' || normalizedCategory === 'deposit') {
-      const depositSql = `SELECT id, 'DEPOSIT' AS type, amount, 'CREDIT' AS direction, created_at, deposit_id AS reference_id,
-                                 status AS tx_status, utr AS tx_utr, 'Deposit'::varchar AS custom_category 
+      const depositSql = `SELECT id::text, 'DEPOSIT' AS type, amount, 'CREDIT' AS direction, created_at, deposit_id AS reference_id,
+                                 '' AS game_id, status AS tx_status, utr AS tx_utr, 'Deposit'::varchar AS custom_category 
                           FROM deposits 
                           WHERE user_id = $1`;
       queries.push(`(${depositSql})`);
@@ -69,8 +85,8 @@ async function getTransactionsByUserId(userId, category = 'All') {
 
     // 3. Authoritative Single Record per Withdrawal (Status: PENDING -> SUCCESS -> REJECTED)
     if (normalizedCategory === 'all' || normalizedCategory === 'withdraw' || normalizedCategory === 'withdrawal') {
-      const withdrawSql = `SELECT id, 'WITHDRAWAL' AS type, amount, 'DEBIT' AS direction, created_at, withdrawal_id AS reference_id,
-                                  status AS tx_status, payout_address_or_upi AS tx_utr, 'Withdrawal'::varchar AS custom_category 
+      const withdrawSql = `SELECT id::text, 'WITHDRAWAL' AS type, amount, 'DEBIT' AS direction, created_at, withdrawal_id AS reference_id,
+                                  '' AS game_id, status AS tx_status, payout_address_or_upi AS tx_utr, 'Withdrawal'::varchar AS custom_category 
                            FROM withdrawals 
                            WHERE user_id = $1`;
       queries.push(`(${withdrawSql})`);
@@ -81,7 +97,7 @@ async function getTransactionsByUserId(userId, category = 'All') {
 
     return res.rows.map((row) => ({
       id: row.id,
-      title: formatLedgerTitle(row.type, row.reference_id, row.tx_status),
+      title: formatLedgerTitle(row.type, row.reference_id, row.tx_status, row.game_id),
       amount: parseInt(row.amount, 10) / 100,
       isCredit: row.direction === 'CREDIT',
       timestamp: row.created_at,
@@ -115,19 +131,24 @@ function mapTxStatus(status) {
   }
 }
 
-function formatLedgerTitle(type, referenceId, status) {
+function formatLedgerTitle(type, referenceId, status, gameId) {
   if (type === 'WITHDRAWAL') {
     const s = String(status || '').toUpperCase();
     if (s === 'SUCCESS' || s === 'CONFIRMED') return 'Withdrawal (Completed)';
     if (s === 'REJECTED') return 'Withdrawal (Rejected)';
     return 'Withdrawal (Pending)';
   }
+
+  let gameName = '7 Up Down';
+  if (gameId === 'dragon_tiger' || (referenceId && referenceId.startsWith('dt_'))) gameName = 'Dragon Tiger';
+  if (gameId === 'crush' || (referenceId && referenceId.startsWith('crush_'))) gameName = 'Classic Dice';
+
   switch (type) {
     case 'DEPOSIT': return 'Cash Deposit';
     case 'CREDIT': return 'Account Credited';
     case 'DEBIT': return 'Account Debited';
-    case 'BET_DEBIT': return 'Entry Fee / Bet Placed';
-    case 'WIN_CREDIT': return 'Won : 7 Up Down';
+    case 'BET_DEBIT': return `Bet Placed : ${gameName}`;
+    case 'WIN_CREDIT': return `Won : ${gameName}`;
     case 'BONUS_CREDIT': return 'Welcome / Promo Bonus';
     default: return 'Transaction';
   }

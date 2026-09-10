@@ -116,7 +116,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       widget.onWithdrawCompleted(amount, netAmount, isDepositBack);
 
       if (mounted) {
-        _showWithdrawalSuccessModal(
+        _showWithdrawalPendingModal(
           amount: amount,
           netAmount: netAmount,
           isDepositBack: isDepositBack,
@@ -445,7 +445,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     );
   }
 
-  void _showWithdrawalSuccessModal({
+  void _showWithdrawalPendingModal({
     required double amount,
     required double netAmount,
     required bool isDepositBack,
@@ -482,23 +482,59 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
               ),
               const SizedBox(height: 24),
 
+              // Status Icon (Amber for Pending UPI/Bank, Green for Instant Deposit-Back)
               Container(
                 width: 68,
                 height: 68,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF00E676),
+                decoration: BoxDecoration(
+                  color: isDepositBack ? const Color(0xFF00E676) : const Color(0xFFFFA000).withValues(alpha: 0.2),
                   shape: BoxShape.circle,
+                  border: isDepositBack ? null : Border.all(color: const Color(0xFFFFA000), width: 2),
                 ),
-                child: const Icon(
-                  Icons.check_rounded,
-                  color: Colors.white,
-                  size: 46,
+                child: Icon(
+                  isDepositBack ? Icons.check_rounded : Icons.hourglass_top_rounded,
+                  color: isDepositBack ? Colors.white : const Color(0xFFFFA000),
+                  size: 40,
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
+
+              // Status Tag
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (isDepositBack ? const Color(0xFF00E676) : const Color(0xFFFFA000)).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDepositBack ? const Color(0xFF00E676) : const Color(0xFFFFA000),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isDepositBack ? Icons.check_circle_rounded : Icons.schedule_rounded,
+                      size: 12,
+                      color: isDepositBack ? const Color(0xFF00E676) : const Color(0xFFFFA000),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      isDepositBack ? 'INSTANTLY COMPLETED' : 'STATUS : PENDING REVIEW',
+                      style: GoogleFonts.poppins(
+                        color: isDepositBack ? const Color(0xFF00E676) : const Color(0xFFFFA000),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
 
               Text(
-                'Withdrawal Requested',
+                isDepositBack ? 'Deposit Completed' : 'Withdrawal Request Placed',
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 20,
@@ -519,13 +555,13 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
               Text(
                 isDepositBack
-                    ? 'Added directly to your InGames Deposit balance'
+                    ? 'Added directly to your InGames Deposit balance.'
                     : paymentMode == 'BANK'
-                        ? 'Settlement request received for Bank Account.\nFunds will be credited within 24 hours.'
-                        : 'Settlement request received for UPI ID.\nFunds will be credited within 24 hours.',
+                        ? 'Withdrawal is currently PENDING.\nFunds will be settled to your Bank Account after review.'
+                        : 'Withdrawal is currently PENDING.\nFunds will be settled to your UPI ID after review.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
-                  color: Colors.white60,
+                  color: Colors.white70,
                   fontSize: 13,
                   fontWeight: FontWeight.w400,
                   height: 1.4,

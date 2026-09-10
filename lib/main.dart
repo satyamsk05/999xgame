@@ -197,6 +197,8 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                 isCredit: t['isCredit'] == true,
                 timestamp: DateTime.tryParse(t['timestamp']?.toString() ?? '') ?? DateTime.now(),
                 category: t['category']?.toString() ?? 'General',
+                status: t['status']?.toString(),
+                utr: t['utr']?.toString(),
               ),
             );
           }

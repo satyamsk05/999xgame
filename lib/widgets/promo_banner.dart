@@ -63,7 +63,23 @@ class _PromoBannerCard extends StatefulWidget {
 }
 
 class _PromoBannerCardState extends State<_PromoBannerCard> {
-  bool _imageLoaded = false;
+  static final Set<String> _loadedUrls = <String>{};
+  late bool _imageLoaded;
+
+  @override
+  void initState() {
+    super.initState();
+    final url = _resolveImageUrl();
+    _imageLoaded = _loadedUrls.contains(url);
+  }
+
+  String _resolveImageUrl() {
+    return (widget.bannerObj['imageUrl'] != null && widget.bannerObj['imageUrl'].toString().isNotEmpty)
+        ? (widget.bannerObj['imageUrl'].toString().startsWith('/')
+            ? '${ApiService.serverDomain}${widget.bannerObj['imageUrl']}'
+            : widget.bannerObj['imageUrl'].toString())
+        : '${ApiService.serverDomain}/banners/banner.png';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,12 +87,7 @@ class _PromoBannerCardState extends State<_PromoBannerCard> {
     final title = widget.bannerObj['title']?.toString() ?? 'DEPOSIT BONUS\n180% BONUS';
     final subtitle = widget.bannerObj['subtitle']?.toString() ?? 'DEPOSIT -> GET BONUS';
     final buttonText = widget.bannerObj['buttonText']?.toString() ?? 'DEPOSIT NOW';
-
-    final imageUrl = (widget.bannerObj['imageUrl'] != null && widget.bannerObj['imageUrl'].toString().isNotEmpty)
-        ? (widget.bannerObj['imageUrl'].toString().startsWith('/')
-            ? '${ApiService.serverDomain}${widget.bannerObj['imageUrl']}'
-            : widget.bannerObj['imageUrl'].toString())
-        : '${ApiService.serverDomain}/banners/banner.png';
+    final imageUrl = _resolveImageUrl();
 
     return GestureDetector(
       onTap: widget.onTap,
@@ -107,170 +118,167 @@ class _PromoBannerCardState extends State<_PromoBannerCard> {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14.0),
-          child: Stack(
+          child: Row(
             children: [
-              // Content Row (Text + Image) - hidden via Opacity until Image is completely loaded
-              AnimatedOpacity(
-                duration: const Duration(milliseconds: 250),
-                opacity: _imageLoaded ? 1.0 : 0.0,
-                child: Row(
-                  children: [
-                    // Left Column: DEPOSIT Tag, Text Content & Action Button
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    // DEPOSIT Tag
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 3,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF4F106D),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
-                                          color: const Color(0xFFCAA772).withValues(alpha: 0.5),
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        tag,
-                                        style: GoogleFonts.poppins(
-                                          color: const Color(0xFFCAA772),
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      title,
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontSize: 14.5,
-                                        fontWeight: FontWeight.w900,
-                                        height: 1.15,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      subtitle,
-                                      style: GoogleFonts.poppins(
-                                        color: const Color(0xFFCAA772),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 0.2,
-                                      ),
-                                    ),
-                                  ],
+              // Left Column: DEPOSIT Tag, Text Content & Action Button
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // DEPOSIT Tag
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 3,
                                 ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 6),
-
-                            // Action Button
-                            Container(
-                              width: 135,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Color(0xFF00D294),
-                                    Color(0xFF00A574),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(10),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF00A574).withValues(alpha: 0.4),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF4F106D),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: const Color(0xFFCAA772).withValues(alpha: 0.5),
+                                    width: 1,
                                   ),
-                                ],
-                              ),
-                              child: Center(
+                                ),
                                 child: Text(
-                                  buttonText,
+                                  tag,
                                   style: GoogleFonts.poppins(
-                                    color: Colors.white,
-                                    fontSize: 11,
+                                    color: const Color(0xFFCAA772),
+                                    fontSize: 10,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 0.5,
                                   ),
                                 ),
                               ),
+                              const SizedBox(height: 4),
+                              Text(
+                                title,
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1.15,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                subtitle,
+                                style: GoogleFonts.poppins(
+                                  color: const Color(0xFFCAA772),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 6),
+
+                      // Action Button
+                      Container(
+                        width: 135,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color(0xFF00D294),
+                              Color(0xFF00A574),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF00A574).withValues(alpha: 0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
                             ),
                           ],
                         ),
-                      ),
-                    ),
-
-                    // Right Side Banner Graphic Image
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, bottom: 4, right: 6),
-                      child: Image.network(
-                        imageUrl,
-                        height: 160,
-                        fit: BoxFit.contain,
-                        alignment: Alignment.centerRight,
-                        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                          if (wasSynchronouslyLoaded || frame != null) {
-                            if (!_imageLoaded) {
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (mounted) setState(() => _imageLoaded = true);
-                              });
-                            }
-                            return child;
-                          }
-                          return const SizedBox();
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          if (!_imageLoaded) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) setState(() => _imageLoaded = true);
-                            });
-                          }
-                          return Image.asset(
-                            'Assets/banner.png',
-                            height: 160,
-                            fit: BoxFit.contain,
-                            alignment: Alignment.centerRight,
-                            errorBuilder: (context, error, stackTrace) => const Icon(
-                              Icons.card_giftcard_rounded,
-                              size: 72,
-                              color: Color(0xFFCAA772),
+                        child: Center(
+                          child: Text(
+                            buttonText,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
                             ),
-                          );
-                        },
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
 
-              // Full Card Shimmer Loading state until backend image is fully ready
-              if (!_imageLoaded)
-                const ShimmerBox(
-                  width: double.infinity,
-                  height: double.infinity,
-                  borderRadius: 14.0,
+              // Right Side Banner Graphic Image
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4, right: 6),
+                child: Image.network(
+                  imageUrl,
+                  height: 160,
+                  fit: BoxFit.contain,
+                  alignment: Alignment.centerRight,
+                  frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                    if (wasSynchronouslyLoaded || frame != null) {
+                      _loadedUrls.add(imageUrl);
+                      return child;
+                    }
+                    if (_imageLoaded) {
+                      return child;
+                    }
+                    return Image.asset(
+                      'Assets/banner.png',
+                      height: 160,
+                      fit: BoxFit.contain,
+                      alignment: Alignment.centerRight,
+                      errorBuilder: (context, error, stackTrace) => const SizedBox(
+                        width: 110,
+                        child: Center(
+                          child: Icon(
+                            Icons.card_giftcard_rounded,
+                            size: 56,
+                            color: Color(0xFFCAA772),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Image.asset(
+                      'Assets/banner.png',
+                      height: 160,
+                      fit: BoxFit.contain,
+                      alignment: Alignment.centerRight,
+                      errorBuilder: (context, error, stackTrace) => const SizedBox(
+                        width: 110,
+                        child: Center(
+                          child: Icon(
+                            Icons.card_giftcard_rounded,
+                            size: 56,
+                            color: Color(0xFFCAA772),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
+              ),
             ],
           ),
         ),
