@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as socket_io;
 import '../core/storage/token_manager.dart';
@@ -12,7 +11,6 @@ class RealtimeSyncService {
   socket_io.Socket? _socket;
   bool _running = false;
   bool _refreshInFlight = false;
-  Timer? _manualReconnectTimer;
 
   Future<void> Function()? onAuthoritativeRefresh;
 
@@ -28,8 +26,6 @@ class RealtimeSyncService {
 
   Future<void> stop() async {
     _running = false;
-    _manualReconnectTimer?.cancel();
-    _manualReconnectTimer = null;
     _socket?.dispose();
     _socket = null;
     isConnected.value = false;
@@ -69,10 +65,10 @@ class RealtimeSyncService {
         if (identical(_socket, socket)) isConnected.value = false;
       });
 
+      // Socket.IO already owns reconnect/backoff for connection errors. Do not
+      // create a second timer that can race it and create duplicate sockets.
       socket.onConnectError((_) {
-        if (!identical(_socket, socket)) return;
-        isConnected.value = false;
-        _scheduleManualReconnect();
+        if (identical(_socket, socket)) isConnected.value = false;
       });
 
       socket.onError((_) {
@@ -98,7 +94,10 @@ class RealtimeSyncService {
       }
     } catch (_) {
       isConnected.value = false;
-      _scheduleManualReconnect();
+      // This only covers socket construction/runtime failures. Normal network
+      // reconnects are handled by Socket.IO itself.
+      await Future<void>.delayed(const Duration(seconds: 5));
+      if (_running && !isConnected.value) await _connect();
     }
   }
 
@@ -115,14 +114,6 @@ class RealtimeSyncService {
         eventName.endsWith(':result')) {
       _refreshAuthoritativeState();
     }
-  }
-
-  void _scheduleManualReconnect() {
-    if (!_running || _manualReconnectTimer != null) return;
-    _manualReconnectTimer = Timer(const Duration(seconds: 5), () async {
-      _manualReconnectTimer = null;
-      if (_running && !isConnected.value) await _connect();
-    });
   }
 
   Future<void> _refreshAuthoritativeState() async {
