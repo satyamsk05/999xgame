@@ -98,30 +98,18 @@ export class BettingPanel {
       this.updateTotalTableBetDisplay();
 
       if (badgeDown) {
-        if (bets.down > 0) {
-          badgeDown.innerText = `₹${bets.down}`;
-          badgeDown.style.display = 'block';
-        } else {
-          badgeDown.style.display = 'none';
-        }
+        badgeDown.innerText = bets.down > 0 ? `₹${bets.down}` : '';
+        badgeDown.style.display = 'flex';
       }
 
       if (badgeSeven) {
-        if (bets.seven > 0) {
-          badgeSeven.innerText = `₹${bets.seven}`;
-          badgeSeven.style.display = 'block';
-        } else {
-          badgeSeven.style.display = 'none';
-        }
+        badgeSeven.innerText = bets.seven > 0 ? `₹${bets.seven}` : '';
+        badgeSeven.style.display = 'flex';
       }
 
       if (badgeUp) {
-        if (bets.up > 0) {
-          badgeUp.innerText = `₹${bets.up}`;
-          badgeUp.style.display = 'block';
-        } else {
-          badgeUp.style.display = 'none';
-        }
+        badgeUp.innerText = bets.up > 0 ? `₹${bets.up}` : '';
+        badgeUp.style.display = 'flex';
       }
 
       // Update specific number badges
