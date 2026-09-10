@@ -3,6 +3,7 @@
 *.log
 *.pyc
 *.swp
+check_apk.ps1
 .DS_Store
 .atom/
 .build/
@@ -43,6 +44,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+android/build/
 
 # Node dependencies
 **/node_modules/

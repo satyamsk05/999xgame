@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
   <!-- Socket.IO Client Library -->
   <script src="/socket.io/socket.io.js"></script>
   <script>
@@ -17,34 +18,34 @@
       document.head.appendChild(script);
     }
   </script>
+
   <!-- CSS Stylesheet -->
-  <script type="module" crossorigin src="./assets/index-Chv-5l-6.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-yMBb7xVJ.css">
+  <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
 
   <div class="app-container">
 
-    <!-- Top Header Bar (Settings Button, Game Title, LIVE status) -->
+    <!-- Top Header Bar (Settings Button & Network Ping) -->
     <div class="top-header-bar">
-      <button class="settings-btn" id="btnSettings" type="button">
-        <div class="settings-icon-circle">
+      <button class="settings-btn-wrap" id="btnSettings" type="button">
+        <div class="settings-btn-circle">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
           </svg>
         </div>
-        <span class="settings-label">Settings</span>
+        <span class="settings-btn-label">Settings</span>
       </button>
 
       <div class="header-ping-pill" id="headerPingPill">
         <svg class="wifi-icon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 3C7.95 3 4.21 4.34 1.2 6.6L3 9c2.47-1.87 5.56-3 9-3s6.53 1.13 9 3l1.8-2.4C19.79 4.34 16.05 3 12 3zm0 6c-2.73 0-5.26.9-7.3 2.4L6.5 13.8C8.07 12.67 9.96 12 12 12s3.93.67 5.5 1.8l1.8-2.4C17.26 9.9 14.73 9 12 9zm0 6c-1.4 0-2.7.46-3.76 1.23L12 21l3.76-4.77C14.7 15.46 13.4 15 12 15z"/>
         </svg>
-        <span id="pingValText">28ms</span>
+        <span id="pingValText">194ms</span>
       </div>
     </div>
 
-    <!-- Last 100 Rounds Ribbon -->
+    <!-- Last 100 Rounds Card -->
     <div class="history-card">
       <div class="history-header">
         <span>Last 100 Rounds</span>
@@ -61,33 +62,29 @@
 
     <!-- Center Stage & Active Players -->
     <div class="stage-row">
+      <!-- Top 3 Bettors Vertical Stack -->
       <div class="players-col" id="playersCol">
         <!-- Injected by PlayersPanel UI Component -->
       </div>
 
-      <!-- Glass Dome Roller -->
+      <!-- Glowing Green Disc Center Dome -->
       <div class="glass-dome-wrap">
         <div class="dome-pedestal">
-          <div class="glass-cover"></div>
           <div class="dice-cube" id="dice1">4</div>
           <div class="dice-cube" id="dice2">3</div>
         </div>
       </div>
 
-      <!-- Timer Ring -->
+      <!-- Circular Timer Ring -->
       <div class="timer-ring-wrap">
-        <svg class="timer-svg" viewBox="0 0 68 68">
-          <circle class="timer-circle-bg" cx="34" cy="34" r="30"></circle>
-          <circle class="timer-circle-progress" id="timerProgress" cx="34" cy="34" r="30"></circle>
-        </svg>
         <div class="timer-text-val" id="timerText">12</div>
       </div>
     </div>
 
-    <!-- Middle Control Bar -->
+    <!-- Middle Control / Table Bet Bar -->
     <div class="mid-control-bar">
       <div class="pill-info">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
         </svg>
         <span>32</span>
@@ -98,72 +95,63 @@
       </div>
     </div>
 
-    <!-- 3 Main Bet Cards (2-6 DOWN, 7, 8-12 UP) -->
-    <div class="main-bets-grid" id="mainBetsGrid">
-      <!-- 2 - 6 DOWN -->
-      <div class="bet-card card-down" id="btnBetDown">
-        <div class="bet-badge" id="badgeDown">₹0</div>
-        <div class="card-title-lg">2 - 6</div>
-        <div class="card-odds">1 : 1</div>
-        <div class="card-subtext">DOWN</div>
+    <!-- Main 3D Betting Board (Blue Container with 3 Large Tiles) -->
+    <div class="main-betting-board" id="mainBetsGrid">
+      <!-- 7 LUCKY (Top Large Blue Tile) -->
+      <div class="bet-tile-top" id="btnBetSeven">
+        <div class="tile-user-badge" id="badgeSeven">₹0</div>
+        <div class="tile-odds-text">1 : 4</div>
       </div>
 
-      <!-- 7 -->
-      <div class="bet-card card-seven" id="btnBetSeven">
-        <div class="bet-badge" id="badgeSeven">₹0</div>
-        <div class="card-title-lg">7</div>
-        <div class="card-odds">1 : 4</div>
-        <div class="card-subtext">LUCKY</div>
-      </div>
+      <!-- Bottom 2 Tiles Row (Green DOWN 1:1, Red UP 1:1) -->
+      <div class="bet-tiles-row">
+        <!-- 2 - 6 DOWN (Bottom Left Green Tile) -->
+        <div class="bet-tile-green" id="btnBetDown">
+          <div class="tile-user-badge" id="badgeDown">₹0</div>
+          <div class="tile-odds-text">1 : 1</div>
+        </div>
 
-      <!-- 8 - 12 UP -->
-      <div class="bet-card card-up" id="btnBetUp">
-        <div class="bet-badge" id="badgeUp">₹0</div>
-        <div class="card-title-lg">8 - 12</div>
-        <div class="card-odds">1 : 1</div>
-        <div class="card-subtext">UP</div>
+        <!-- 8 - 12 UP (Bottom Right Red Tile) -->
+        <div class="bet-tile-red" id="btnBetUp">
+          <div class="tile-user-badge" id="badgeUp">₹0</div>
+          <div class="tile-odds-text">1 : 1</div>
+        </div>
       </div>
     </div>
 
-    <!-- RADIAL ARC CHIP SELECTOR POPUP -->
+    <!-- Radial Chip Selector Popup -->
     <div class="radial-chips-popup" id="chipRadialPopup">
-      <div class="pop-chip" data-val="10"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDUxMiA1MTIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJtYWluMTAiIGN4PSIzNSUiIGN5PSIyOCUiIHI9Ijc1JSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzYyZTU4YSIvPjxzdG9wIG9mZnNldD0iMzglIiBzdG9wLWNvbG9yPSIjMjBiOTU3Ii8+PHN0b3Agb2Zmc2V0PSI3MiUiIHN0b3AtY29sb3I9IiMwNzg4M2IiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwNDVkMmIiLz48L3JhZGlhbEdyYWRpZW50PjxyYWRpYWxHcmFkaWVudCBpZD0iY2VudGVyMTAiIGN4PSI0MiUiIGN5PSIyOCUiIHI9Ijc4JSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzcxZWQ5NSIvPjxzdG9wIG9mZnNldD0iNTAlIiBzdG9wLWNvbG9yPSIjMTliNjUyIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMDY3MzMyIi8+PC9yYWRpYWxHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImdvbGQxMCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZmZjBhMCIvPjxzdG9wIG9mZnNldD0iMjAlIiBzdG9wLWNvbG9yPSIjZmZkNzViIi8+PHN0b3Agb2Zmc2V0PSI0OCUiIHN0b3AtY29sb3I9IiNkODk1MjAiLz48c3RvcCBvZmZzZXQ9IjcyJSIgc3RvcC1jb2xvcj0iI2I1NmQwYyIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y1Yzg0YyIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI2MyIgcj0iMjM5IiBmaWxsPSIjMDM0NTFmIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMzgiIGZpbGw9InVybCgjbWFpbjEwKSIgc3Ryb2tlPSIjMDY0ZDI4IiBzdHJva2Utd2lkdGg9IjciLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjIyOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOGNmMGFhIiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii42NSIvPjxnIGZpbGw9IiNmZmZlZjgiIHN0cm9rZT0iI2NmY2FjMCIgc3Ryb2tlLXdpZHRoPSIzIj48cGF0aCBkPSJNMjI0IDIzUTI1NiAxOSAyODggMjNMMjgyIDcyUTI1NiA2OSAyMzAgNzJaIi8+PHBhdGggZD0iTTM4MiA2N1E0MDcgODUgNDI1IDEwOUwzODYgMTM3UTM3MiAxMTcgMzU0IDEwNFoiLz48cGF0aCBkPSJNNDg5IDIyNFE0OTMgMjU2IDQ4OSAyODhMNDQwIDI4MlE0NDMgMjU2IDQ0MCAyMzBaIi8+PHBhdGggZD0iTTQyNSA0MDNRNDA3IDQyNyAzODIgNDQ1TDM1NCA0MDhRMzcyIDM5NSAzODYgMzc1WiIvPjxwYXRoIGQ9Ik0yODggNDg5UTI1NiA0OTMgMjI0IDQ4OUwyMzAgNDQwUTI1NiA0NDMgMjgyIDQ0MFoiLz48cGF0aCBkPSJNMTMwIDQ0NVExMDUgNDI3IDg3IDQwM0wxMjYgMzc1UTE0MCAzOTUgMTU4IDQwOFoiLz48cGF0aCBkPSJNMjMgMjg4UTE5IDI1NiAyMyAyMjRMNzIgMjMwUTY5IDI1NiA3MiAyODJaIi8+PHBhdGggZD0iTTg3IDEwOVExMDUgODUgMTMwIDY3TDE1OCAxMDRRMTQwIDExNyAxMjYgMTM3WiIvPjwvZz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE4MSIgZmlsbD0iIzA0NWQyYiIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTcxIiBmaWxsPSJ1cmwoI2NlbnRlcjEwKSIgc3Ryb2tlPSIjMDg3NTNhIiBzdHJva2Utd2lkdGg9IjQiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTBmNWI4IiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii4zIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxNDIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzc3NDcwNyIgc3Ryb2tlLXdpZHRoPSIxMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTQxIiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjZ29sZDEwKSIgc3Ryb2tlLXdpZHRoPSI3Ii8+PHRleHQgeD0iMjU2IiB5PSIzMDMiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxIZWx2ZXRpY2Esc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMjUiIGZvbnQtd2VpZ2h0PSI4MDAiIGxldHRlci1zcGFjaW5nPSItNiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjMDM0NTFmIiBzdHJva2Utd2lkdGg9IjMiIHBhaW50LW9yZGVyPSJzdHJva2UiPjEwPC90ZXh0Pjwvc3ZnPg==" alt="10 Chip" /></div>
-      <div class="pop-chip" data-val="50"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDUxMiA1MTIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJtYWluNTAiIGN4PSIzNSUiIGN5PSIyOCUiIHI9Ijc1JSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzY5YjlmZiIvPjxzdG9wIG9mZnNldD0iMzglIiBzdG9wLWNvbG9yPSIjMjc4OWRjIi8+PHN0b3Agb2Zmc2V0PSI3MiUiIHN0b3AtY29sb3I9IiMxMjYyYWQiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwYTNmNzgiLz48L3JhZGlhbEdyYWRpZW50PjxyYWRpYWxHcmFkaWVudCBpZD0iY2VudGVyNTAiIGN4PSI0MiUiIGN5PSIyOCUiIHI9Ijc4JSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzdiYzVmZiIvPjxzdG9wIG9mZnNldD0iNTAlIiBzdG9wLWNvbG9yPSIjMjY4NWQxIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMGQ1NTk4Ii8+PC9yYWRpYWxHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImdvbGQ1MCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZmZjBhMCIvPjxzdG9wIG9mZnNldD0iMjAlIiBzdG9wLWNvbG9yPSIjZmZkNzViIi8+PHN0b3Agb2Zmc2V0PSI0OCUiIHN0b3AtY29sb3I9IiNkODk1MjAiLz48c3RvcCBvZmZzZXQ9IjcyJSIgc3RvcC1jb2xvcj0iI2I1NmQwYyIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y1Yzg0YyIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI2MyIgcj0iMjM5IiBmaWxsPSIjMDczNjY0Ii8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMzgiIGZpbGw9InVybCgjbWFpbjUwKSIgc3Ryb2tlPSIjMGE0Mjc4IiBzdHJva2Utd2lkdGg9IjciLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjIyOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOWZkNGZmIiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii42NSIvPjxnIGZpbGw9IiNmZmZlZjgiIHN0cm9rZT0iI2NmY2FjMCIgc3Ryb2tlLXdpZHRoPSIzIj48cGF0aCBkPSJNMjI0IDIzUTI1NiAxOSAyODggMjNMMjgyIDcyUTI1NiA2OSAyMzAgNzJaIi8+PHBhdGggZD0iTTM4MiA2N1E0MDcgODUgNDI1IDEwOUwzODYgMTM3UTM3MiAxMTcgMzU0IDEwNFoiLz48cGF0aCBkPSJNNDg5IDIyNFE0OTMgMjU2IDQ4OSAyODhMNDQwIDI4MlE0NDMgMjU2IDQ0MCAyMzBaIi8+PHBhdGggZD0iTTQyNSA0MDNRNDA3IDQyNyAzODIgNDQ1TDM1NCA0MDhRMzcyIDM5NSAzODYgMzc1WiIvPjxwYXRoIGQ9Ik0yODggNDg5UTI1NiA0OTMgMjI0IDQ4OUwyMzAgNDQwUTI1NiA0NDMgMjgyIDQ0MFoiLz48cGF0aCBkPSJNMTMwIDQ0NVExMDUgNDI3IDg3IDQwM0wxMjYgMzc1UTE0MCAzOTUgMTU4IDQwOFoiLz48cGF0aCBkPSJNMjMgMjg4UTE5IDI1NiAyMyAyMjRMNzIgMjMwUTY5IDI1NiA3MiAyODJaIi8+PHBhdGggZD0iTTg3IDEwOVExMDUgODUgMTMwIDY3TDE1OCAxMDRRMTQwIDExNyAxMjYgMTM3WiIvPjwvZz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE4MSIgZmlsbD0iIzBiNDc3ZSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTcxIiBmaWxsPSJ1cmwoI2NlbnRlcjUwKSIgc3Ryb2tlPSIjMTI2MGEwIiBzdHJva2Utd2lkdGg9IjQiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYjJkZGZmIiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii4zIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxNDIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzc3NDcwNyIgc3Ryb2tlLXdpZHRoPSIxMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTQxIiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjZ29sZDUwKSIgc3Ryb2tlLXdpZHRoPSI3Ii8+PHRleHQgeD0iMjU2IiB5PSIzMDMiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxIZWx2ZXRpY2Esc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMjUiIGZvbnQtd2VpZ2h0PSI4MDAiIGxldHRlci1zcGFjaW5nPSItNiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjMDczNjY0IiBzdHJva2Utd2lkdGg9IjMiIHBhaW50LW9yZGVyPSJzdHJva2UiPjUwPC90ZXh0Pjwvc3ZnPg==" alt="50 Chip" /></div>
-      <div class="pop-chip" data-val="100"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDUxMiA1MTIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJtYWluMTAwIiBjeD0iMzUlIiBjeT0iMjglIiByPSI3NSUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNjOTc4ZmYiLz48c3RvcCBvZmZzZXQ9IjM4JSIgc3RvcC1jb2xvcj0iIzk4NDdkNCIvPjxzdG9wIG9mZnNldD0iNzIlIiBzdG9wLWNvbG9yPSIjNjcyNTlkIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjNDAxNTZkIi8+PC9yYWRpYWxHcmFkaWVudD48cmFkaWFsR3JhZGllbnQgaWQ9ImNlbnRlcjEwMCIgY3g9IjQyJSIgY3k9IjI4JSIgcj0iNzglIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZDY4Y2ZmIi8+PHN0b3Agb2Zmc2V0PSI1MCUiIHN0b3AtY29sb3I9IiM5MTNmZDAiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM1YTIwOGUiLz48L3JhZGlhbEdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iZ29sZDEwMCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZmZjBhMCIvPjxzdG9wIG9mZnNldD0iMjAlIiBzdG9wLWNvbG9yPSIjZmZkNzViIi8+PHN0b3Agb2Zmc2V0PSI0OCUiIHN0b3AtY29sb3I9IiNkODk1MjAiLz48c3RvcCBvZmZzZXQ9IjcyJSIgc3RvcC1jb2xvcj0iI2I1NmQwYyIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y1Yzg0YyIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI2MyIgcj0iMjM5IiBmaWxsPSIjMzUxMDUyIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMzgiIGZpbGw9InVybCgjbWFpbjEwMCkiIHN0cm9rZT0iIzQ1MTY2ZiIgc3Ryb2tlLXdpZHRoPSI3Ii8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMjkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2RkYWFmZiIgc3Ryb2tlLXdpZHRoPSIyIiBvcGFjaXR5PSIuNjUiLz48ZyBmaWxsPSIjZmZmZWY4IiBzdHJva2U9IiNjZmNhYzAiIHN0cm9rZS13aWR0aD0iMyI+PHBhdGggZD0iTTIyNCAyM1EyNTYgMTkgMjg4IDIzTDI4MiA3MlEyNTYgNjkgMjMwIDcyWiIvPjxwYXRoIGQ9Ik0zODIgNjdRNDA3IDg1IDQyNSAxMDlMMzg2IDEzN1EzNzIgMTE3IDM1NCAxMDRaIi8+PHBhdGggZD0iTTQ4OSAyMjRRNDkzIDI1NiA0ODkgMjg4TDQ0MCAyODJRNDQzIDI1NiA0NDAgMjMwWiIvPjxwYXRoIGQ9Ik00MjUgNDAzUTQwNyA0MjcgMzgyIDQ0NUwzNTQgNDA4UTM3MiAzOTUgMzg2IDM3NVoiLz48cGF0aCBkPSJNMjg4IDQ4OVEyNTYgNDkzIDIyNCA0ODlMMjMwIDQ0MFEyNTYgNDQzIDI4MiA0NDBaIi8+PHBhdGggZD0iTTEzMCA0NDVRMTA1IDQyNyA4NyA0MDNMMTI2IDM3NVExNDAgMzk1IDE1OCA0MDhaIi8+PHBhdGggZD0iTTIzIDI4OFExOSAyNTYgMjMgMjI0TDcyIDIzMFE2OSAyNTYgNzIgMjgyWiIvPjxwYXRoIGQ9Ik04NyAxMDlRMTA1IDg1IDEzMCA2N0wxNTggMTA0UTE0MCAxMTcgMTI2IDEzN1oiLz48L2c+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxODEiIGZpbGw9IiM0YjE5NzUiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE3MSIgZmlsbD0idXJsKCNjZW50ZXIxMDApIiBzdHJva2U9IiM2YjI3OWIiIHN0cm9rZS13aWR0aD0iNCIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTYyIiBmaWxsPSJub25lIiBzdHJva2U9IiNlMmJhZmYiIHN0cm9rZS13aWR0aD0iMiIgb3BhY2l0eT0iLjMiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE0MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNzc0NzA3IiBzdHJva2Utd2lkdGg9IjExIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxNDEiIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCNnb2xkMTAwKSIgc3Ryb2tlLXdpZHRoPSI3Ii8+PHRleHQgeD0iMjU2IiB5PSIzMDMiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxIZWx2ZXRpY2Esc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMTIiIGZvbnQtd2VpZ2h0PSI4MDAiIGxldHRlci1zcGFjaW5nPSItNSIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjMzUxMDUyIiBzdHJva2Utd2lkdGg9IjMiIHBhaW50LW9yZGVyPSJzdHJva2UiPjEwMDwvdGV4dD48L3N2Zz4=" alt="100 Chip" /></div>
-      <div class="pop-chip" data-val="500"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDUxMiA1MTIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJtYWluNTAwIiBjeD0iMzUlIiBjeT0iMjglIiByPSI3NSUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZjZmNjgiLz48c3RvcCBvZmZzZXQ9IjM4JSIgc3RvcC1jb2xvcj0iI2UxM2MzNSIvPjxzdG9wIG9mZnNldD0iNzIlIiBzdG9wLWNvbG9yPSIjYTcxZTFjIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjNmQxMDExIi8+PC9yYWRpYWxHcmFkaWVudD48cmFkaWFsR3JhZGllbnQgaWQ9ImNlbnRlcjUwMCIgY3g9IjQyJSIgY3k9IjI4JSIgcj0iNzglIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmY4MTc4Ii8+PHN0b3Agb2Zmc2V0PSI1MCUiIHN0b3AtY29sb3I9IiNkNzM3MzEiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM5MTE3MTkiLz48L3JhZGlhbEdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iZ29sZDUwMCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZmZjBhMCIvPjxzdG9wIG9mZnNldD0iMjAlIiBzdG9wLWNvbG9yPSIjZmZkNzViIi8+PHN0b3Agb2Zmc2V0PSI0OCUiIHN0b3AtY29sb3I9IiNkODk1MjAiLz48c3RvcCBvZmZzZXQ9IjcyJSIgc3RvcC1jb2xvcj0iI2I1NmQwYyIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y1Yzg0YyIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI2MyIgcj0iMjM5IiBmaWxsPSIjNTkxMDExIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMzgiIGZpbGw9InVybCgjbWFpbjUwMCkiIHN0cm9rZT0iIzcyMTQxNSIgc3Ryb2tlLXdpZHRoPSI3Ii8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMjkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmYWFhNCIgc3Ryb2tlLXdpZHRoPSIyIiBvcGFjaXR5PSIuNjUiLz48ZyBmaWxsPSIjZmZmZWY4IiBzdHJva2U9IiNjZmNhYzAiIHN0cm9rZS13aWR0aD0iMyI+PHBhdGggZD0iTTIyNCAyM1EyNTYgMTkgMjg4IDIzTDI4MiA3MlEyNTYgNjkgMjMwIDcyWiIvPjxwYXRoIGQ9Ik0zODIgNjdRNDA3IDg1IDQyNSAxMDlMMzg2IDEzN1EzNzIgMTE3IDM1NCAxMDRaIi8+PHBhdGggZD0iTTQ4OSAyMjRRNDkzIDI1NiA0ODkgMjg4TDQ0MCAyODJRNDQzIDI1NiA0NDAgMjMwWiIvPjxwYXRoIGQ9Ik00MjUgNDAzUTQwNyA0MjcgMzgyIDQ0NUwzNTQgNDA4UTM3MiAzOTUgMzg2IDM3NVoiLz48cGF0aCBkPSJNMjg4IDQ4OVEyNTYgNDkzIDIyNCA0ODlMMjMwIDQ0MFEyNTYgNDQzIDI4MiA0NDBaIi8+PHBhdGggZD0iTTEzMCA0NDVRMTA1IDQyNyA4NyA0MDNMMTI2IDM3NVExNDAgMzk1IDE1OCA0MDhaIi8+PHBhdGggZD0iTTIzIDI4OFExOSAyNTYgMjMgMjI0TDcyIDIzMFE2OSAyNTYgNzIgMjgyWiIvPjxwYXRoIGQ9Ik04NyAxMDlRMTA1IDg1IDEzMCA2N0wxNTggMTA0UTE0MCAxMTcgMTI2IDEzN1oiLz48L2c+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxODEiIGZpbGw9IiM3NTE0MTYiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE3MSIgZmlsbD0idXJsKCNjZW50ZXI1MDApIiBzdHJva2U9IiNhNTIyMjAiIHN0cm9rZS13aWR0aD0iNCIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTYyIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmI5YjMiIHN0cm9rZS13aWR0aD0iMiIgb3BhY2l0eT0iLjMiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE0MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNzc0NzA3IiBzdHJva2Utd2lkdGg9IjExIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxNDEiIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCNnb2xkNTAwKSIgc3Ryb2tlLXdpZHRoPSI3Ii8+PHRleHQgeD0iMjU2IiB5PSIzMDMiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxIZWx2ZXRpY2Esc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMTIiIGZvbnQtd2VpZ2h0PSI4MDAiIGxldHRlci1zcGFjaW5nPSItNSIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjNTkxMDExIiBzdHJva2Utd2lkdGg9IjMiIHBhaW50LW9yZGVyPSJzdHJva2UiPjUwMDwvdGV4dD48L3N2Zz4=" alt="500 Chip" /></div>
-      <div class="pop-chip" data-val="1000"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDUxMiA1MTIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJtYWluMWsiIGN4PSIzNSUiIGN5PSIyOCUiIHI9Ijc1JSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZmZDQ1YSIvPjxzdG9wIG9mZnNldD0iMzglIiBzdG9wLWNvbG9yPSIjZjNhOTFlIi8+PHN0b3Agb2Zmc2V0PSI3MiUiIHN0b3AtY29sb3I9IiNkNDdiMDgiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM5YjRlMDAiLz48L3JhZGlhbEdyYWRpZW50PjxyYWRpYWxHcmFkaWVudCBpZD0iY2VudGVyMWsiIGN4PSI0MiUiIGN5PSIyOCUiIHI9Ijc4JSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZmZTA3MSIvPjxzdG9wIG9mZnNldD0iNTAlIiBzdG9wLWNvbG9yPSIjZjBhNTFjIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjYzY2YTA1Ii8+PC9yYWRpYWxHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImdvbGQxayIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZmZjBhMCIvPjxzdG9wIG9mZnNldD0iMjAlIiBzdG9wLWNvbG9yPSIjZmZkNzViIi8+PHN0b3Agb2Zmc2V0PSI0OCUiIHN0b3AtY29sb3I9IiNkODk1MjAiLz48c3RvcCBvZmZzZXQ9IjcyJSIgc3RvcC1jb2xvcj0iI2I1NmQwYyIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y1Yzg0YyIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI2MyIgcj0iMjM5IiBmaWxsPSIjODc0NjAwIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMzgiIGZpbGw9InVybCgjbWFpbjFrKSIgc3Ryb2tlPSIjOWI0ZTAwIiBzdHJva2Utd2lkdGg9IjciLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjIyOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZlMThhIiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii42NSIvPjxnIGZpbGw9IiNmZmZlZjgiIHN0cm9rZT0iI2NmY2FjMCIgc3Ryb2tlLXdpZHRoPSIzIj48cGF0aCBkPSJNMjI0IDIzUTI1NiAxOSAyODggMjNMMjgyIDcyUTI1NiA2OSAyMzAgNzJaIi8+PHBhdGggZD0iTTM4MiA2N1E0MDcgODUgNDI1IDEwOUwzODYgMTM3UTM3MiAxMTcgMzU0IDEwNFoiLz48cGF0aCBkPSJNNDg5IDIyNFE0OTMgMjU2IDQ4OSAyODhMNDQwIDI4MlE0NDMgMjU2IDQ0MCAyMzBaIi8+PHBhdGggZD0iTTQyNSA0MDNRNDA3IDQyNyAzODIgNDQ1TDM1NCA0MDhRMzcyIDM5NSAzODYgMzc1WiIvPjxwYXRoIGQ9Ik0yODggNDg5UTI1NiA0OTMgMjI0IDQ4OUwyMzAgNDQwUTI1NiA0NDMgMjgyIDQ0MFoiLz48cGF0aCBkPSJNMTMwIDQ0NVExMDUgNDI3IDg3IDQwM0wxMjYgMzc1UTE0MCAzOTUgMTU4IDQwOFoiLz48cGF0aCBkPSJNMjMgMjg4UTE5IDI1NiAyMyAyMjRMNzIgMjMwUTY5IDI1NiA3MiAyODJaIi8+PHBhdGggZD0iTTg3IDEwOVExMDUgODUgMTMwIDY3TDE1OCAxMDRRMTQwIDExNyAxMjYgMTM3WiIvPjwvZz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE4MSIgZmlsbD0iIzliNGUwMCIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTcxIiBmaWxsPSJ1cmwoI2NlbnRlcjFrKSIgc3Ryb2tlPSIjYzY2YTA1IiBzdHJva2Utd2lkdGg9IjQiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmMGEwIiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii4zIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxNDIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzc3NDcwNyIgc3Ryb2tlLXdpZHRoPSIxMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTQxIiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjZ29sZDFrKSIgc3Ryb2tlLXdpZHRoPSI3Ii8+PHRleHQgeD0iMjU2IiB5PSIzMDMiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxIZWx2ZXRpY2Esc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMDUiIGZvbnQtd2VpZ2h0PSI4MDAiIGxldHRlci1zcGFjaW5nPSItNSIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjNWMyZjAwIiBzdHJva2Utd2lkdGg9IjMiIHBhaW50LW9yZGVyPSJzdHJva2UiPjFLPC90ZXh0Pjwvc3ZnPg==" alt="1K Chip" /></div>
-      <div class="pop-chip" data-val="5000"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDUxMiA1MTIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJibGFja0NoaXA1ayIgY3g9IjM1JSIgY3k9IjI4JSIgcj0iNzUlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNTk2MTZhIi8+PHN0b3Agb2Zmc2V0PSIzOCUiIHN0b3AtY29sb3I9IiMzNDNiNDMiLz48c3RvcCBvZmZzZXQ9IjcyJSIgc3RvcC1jb2xvcj0iIzFjMjIyOCIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzBkMTExNSIvPjwvcmFkaWFsR3JhZGllbnQ+PHJhZGlhbEdyYWRpZW50IGlkPSJjZW50ZXJCbGFjazVrIiBjeD0iNDIlIiBjeT0iMjglIiByPSI3OCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiM1NTVlNjgiLz48c3RvcCBvZmZzZXQ9IjUwJSIgc3RvcC1jb2xvcj0iIzMwMzczZSIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzE3MWMyMSIvPjwvcmFkaWFsR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJnb2xkNWsiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZmYwYTAiLz48c3RvcCBvZmZzZXQ9IjIwJSIgc3RvcC1jb2xvcj0iI2ZmZDc1YiIvPjxzdG9wIG9mZnNldD0iNDglIiBzdG9wLWNvbG9yPSIjZDg5NTIwIi8+PHN0b3Agb2Zmc2V0PSI3MiUiIHN0b3AtY29sb3I9IiNiNTZkMGMiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiNmNWM4NGMiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNjMiIHI9IjIzOSIgZmlsbD0iIzA5MGQxMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMjM4IiBmaWxsPSJ1cmwoI2JsYWNrQ2hpcDVrKSIgc3Ryb2tlPSIjMTAxNTFhIiBzdHJva2Utd2lkdGg9IjciLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjIyOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODU4ZTk3IiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii42NSIvPjxnIGZpbGw9IiNmZmZlZjgiIHN0cm9rZT0iI2NmY2FjMCIgc3Ryb2tlLXdpZHRoPSIzIj48cGF0aCBkPSJNMjI0IDIzUTI1NiAxOSAyODggMjNMMjgyIDcyUTI1NiA2OSAyMzAgNzJaIi8+PHBhdGggZD0iTTM4MiA2N1E0MDcgODUgNDI1IDEwOUwzODYgMTM3UTM3MiAxMTcgMzU0IDEwNFoiLz48cGF0aCBkPSJNNDg5IDIyNFE0OTMgMjU2IDQ4OSAyODhMNDQwIDI4MlE0NDMgMjU2IDQ0MCAyMzBaIi8+PHBhdGggZD0iTTQyNSA0MDNRNDA3IDQyNyAzODIgNDQ1TDM1NCA0MDhRMzcyIDM5NSAzODYgMzc1WiIvPjxwYXRoIGQ9Ik0yODggNDg5UTI1NiA0OTMgMjI0IDQ4OUwyMzAgNDQwUTI1NiA0NDMgMjgyIDQ0MFoiLz48cGF0aCBkPSJNMTMwIDQ0NVExMDUgNDI3IDg3IDQwM0wxMjYgMzc1UTE0MCAzOTUgMTU4IDQwOFoiLz48cGF0aCBkPSJNMjMgMjg4UTE5IDI1NiAyMyAyMjRMNzIgMjMwUTY5IDI1NiA3MiAyODJaIi8+PHBhdGggZD0iTTg3IDEwOVExMDUgODUgMTMwIDY3TDE1OCAxMDRRMTQwIDExNyAxMjYgMTM3WiIvPjwvZz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE4MSIgZmlsbD0iIzExMTYxYiIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTcxIiBmaWxsPSJ1cmwoI2NlbnRlckJsYWNrNWspIiBzdHJva2U9IiMyMDI3MmUiIHN0cm9rZS13aWR0aD0iNCIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTYyIiBmaWxsPSJub25lIiBzdHJva2U9IiM3MzdjODQiIHN0cm9rZS13aWR0aD0iMiIgb3BhY2l0eT0iLjI1Ii8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxNDIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzc3NDcwNyIgc3Ryb2tlLXdpZHRoPSIxMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTQxIiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjZ29sZDVrKSIgc3Ryb2tlLXdpZHRoPSI3Ii8+PHRleHQgeD0iMjU2IiB5PSIzMDMiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxIZWx2ZXRpY2Esc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMjUiIGZvbnQtd2VpZ2h0PSI4MDAiIGxldHRlci1zcGFjaW5nPSItNiIgZmlsbD0idXJsKCNnb2xkNWspIiBzdHJva2U9IiM5MjViMGIiIHN0cm9rZS13aWR0aD0iMyIgcGFpbnQtb3JkZXI9InN0cm9rZSI+NUs8L3RleHQ+PC9zdmc+" alt="5K Chip" /></div>
+      <div class="pop-chip" data-val="10"><img src="./assets/chips/10.svg" alt="10 Chip" /></div>
+      <div class="pop-chip" data-val="50"><img src="./assets/chips/50.svg" alt="50 Chip" /></div>
+      <div class="pop-chip" data-val="100"><img src="./assets/chips/100.svg" alt="100 Chip" /></div>
+      <div class="pop-chip" data-val="500"><img src="./assets/chips/500.svg" alt="500 Chip" /></div>
+      <div class="pop-chip" data-val="1000"><img src="./assets/chips/1K.svg" alt="1K Chip" /></div>
+      <div class="pop-chip" data-val="5000"><img src="./assets/chips/5K.svg" alt="5K Chip" /></div>
     </div>
 
-    <!-- 100% MATCH 7 UP DOWN BOTTOM CONTROL BAR -->
-    <div class="bottom-bar">
+    <!-- Bottom Player & Betting Bar (Fixed) -->
+    <div class="bottom-player-bar">
       <!-- Left User Info & Balance -->
-      <div class="user-profile-left">
-        <img src="/avatars/avatar_1.png" class="user-avatar-circle" onerror="this.src='/avatars/avatar_1.png'" />
-        <div class="user-text-col">
-          <span class="user-id-txt" id="userNameText">Player</span>
-          <div class="balance-header-row" style="margin-top: 2px;">
-            <span>Balance</span>
-            <span class="balance-green" id="userBalanceText">₹0.00</span>
-          </div>
+      <div class="player-info-box">
+        <img src="/avatars/avatar_1.png" class="player-avatar-circle" onerror="this.src='/avatars/avatar_1.png'" alt="Avatar" />
+        <div class="player-details-col">
+          <span class="player-name-txt" id="userNameText">REENA</span>
+          <span class="player-balance-txt" id="userBalanceText">₹120.00</span>
         </div>
       </div>
 
       <!-- Center Green Arch & Prominent 3D Chip -->
-      <div class="chip-center-wrap">
-        <div class="chip-arch-tab" id="mainChipBtn">
-          <div class="main-3d-chip" id="mainChipFace">
-            <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDUxMiA1MTIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJtYWluMTAiIGN4PSIzNSUiIGN5PSIyOCUiIHI9Ijc1JSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzYyZTU4YSIvPjxzdG9wIG9mZnNldD0iMzglIiBzdG9wLWNvbG9yPSIjMjBiOTU3Ii8+PHN0b3Agb2Zmc2V0PSI3MiUiIHN0b3AtY29sb3I9IiMwNzg4M2IiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwNDVkMmIiLz48L3JhZGlhbEdyYWRpZW50PjxyYWRpYWxHcmFkaWVudCBpZD0iY2VudGVyMTAiIGN4PSI0MiUiIGN5PSIyOCUiIHI9Ijc4JSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzcxZWQ5NSIvPjxzdG9wIG9mZnNldD0iNTAlIiBzdG9wLWNvbG9yPSIjMTliNjUyIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMDY3MzMyIi8+PC9yYWRpYWxHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImdvbGQxMCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZmZjBhMCIvPjxzdG9wIG9mZnNldD0iMjAlIiBzdG9wLWNvbG9yPSIjZmZkNzViIi8+PHN0b3Agb2Zmc2V0PSI0OCUiIHN0b3AtY29sb3I9IiNkODk1MjAiLz48c3RvcCBvZmZzZXQ9IjcyJSIgc3RvcC1jb2xvcj0iI2I1NmQwYyIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y1Yzg0YyIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI2MyIgcj0iMjM5IiBmaWxsPSIjMDM0NTFmIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMzgiIGZpbGw9InVybCgjbWFpbjEwKSIgc3Ryb2tlPSIjMDY0ZDI4IiBzdHJva2Utd2lkdGg9IjciLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjIyOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOGNmMGFhIiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii42NSIvPjxnIGZpbGw9IiNmZmZlZjgiIHN0cm9rZT0iI2NmY2FjMCIgc3Ryb2tlLXdpZHRoPSIzIj48cGF0aCBkPSJNMjI0IDIzUTI1NiAxOSAyODggMjNMMjgyIDcyUTI1NiA2OSAyMzAgNzJaIi8+PHBhdGggZD0iTTM4MiA2N1E0MDcgODUgNDI1IDEwOUwzODYgMTM3UTM3MiAxMTcgMzU0IDEwNFoiLz48cGF0aCBkPSJNNDg5IDIyNFE0OTMgMjU2IDQ4OSAyODhMNDQwIDI4MlE0NDMgMjU2IDQ0MCAyMzBaIi8+PHBhdGggZD0iTTQyNSA0MDNRNDA3IDQyNyAzODIgNDQ1TDM1NCA0MDhRMzcyIDM5NSAzODYgMzc1WiIvPjxwYXRoIGQ9Ik0yODggNDg5UTI1NiA0OTMgMjI0IDQ4OUwyMzAgNDQwUTI1NiA0NDMgMjgyIDQ0MFoiLz48cGF0aCBkPSJNMTMwIDQ0NVExMDUgNDI3IDg3IDQwM0wxMjYgMzc1UTE0MCAzOTUgMTU4IDQwOFoiLz48cGF0aCBkPSJNMjMgMjg4UTE5IDI1NiAyMyAyMjRMNzIgMjMwUTY5IDI1NiA3MiAyODJaIi8+PHBhdGggZD0iTTg3IDEwOVExMDUgODUgMTMwIDY3TDE1OCAxMDRRMTQwIDExNyAxMjYgMTM3WiIvPjwvZz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE4MSIgZmlsbD0iIzA0NWQyYiIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTcxIiBmaWxsPSJ1cmwoI2NlbnRlcjEwKSIgc3Ryb2tlPSIjMDg3NTNhIiBzdHJva2Utd2lkdGg9IjQiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjE2MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTBmNWI4IiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii4zIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxNDIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzc3NDcwNyIgc3Ryb2tlLXdpZHRoPSIxMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTQxIiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjZ29sZDEwKSIgc3Ryb2tlLXdpZHRoPSI3Ii8+PHRleHQgeD0iMjU2IiB5PSIzMDMiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxIZWx2ZXRpY2Esc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMjUiIGZvbnQtd2VpZ2h0PSI4MDAiIGxldHRlci1zcGFjaW5nPSItNiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjMDM0NTFmIiBzdHJva2Utd2lkdGg9IjMiIHBhaW50LW9yZGVyPSJzdHJva2UiPjEwPC90ZXh0Pjwvc3ZnPg==" id="mainChipImg" alt="10 Chip" />
-          </div>
+      <div class="chip-center-anchor" id="mainChipBtn">
+        <div class="chip-green-arch"></div>
+        <div class="main-chip-face" id="mainChipFace">
+          <img src="./assets/chips/10.svg" id="mainChipImg" alt="10 Chip" style="width:100%;height:100%;object-fit:contain;" />
         </div>
       </div>
 
-      <!-- Right Action Section & Your Bet -->
-      <div class="right-action-section">
-        <div class="your-bet-row">
-          <span>Your Bet</span>
-          <span class="your-bet-green" id="yourBetText">₹0</span>
-        </div>
+      <!-- Right "Your Bet" Info -->
+      <div class="your-bet-box">
+        <span>Your Bet</span>
+        <span class="your-bet-val" id="yourBetText">₹0</span>
       </div>
     </div>
 
@@ -172,19 +160,17 @@
       🎉 YOU WON ₹0!
     </div>
 
-    <!-- Game Settings Modal Sheet Overlay -->
+    <!-- Game Settings Modal Overlay -->
     <div class="settings-modal-overlay" id="settingsModal">
       <div class="settings-modal-card">
         <div class="modal-handle"></div>
 
         <div class="modal-header-row">
           <div class="modal-title-wrap">
-            <div class="modal-settings-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="#A78BFA">
-                <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
-              </svg>
-            </div>
-            <span class="modal-title-text">Game Settings</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="#A78BFA">
+              <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+            </svg>
+            <span>Game Settings</span>
           </div>
           <button class="modal-close-icon-btn" id="btnCloseSettings" type="button">✕</button>
         </div>
@@ -192,12 +178,12 @@
         <!-- Sound Toggle Box -->
         <div class="setting-item-box">
           <div class="setting-item-left">
-            <div class="setting-icon-box" id="soundIconBox">
+            <div id="soundIconBox">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="#00E676">
                 <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
               </svg>
             </div>
-            <div class="setting-item-text">
+            <div>
               <div class="setting-item-name">Sound Effects</div>
               <div class="setting-item-sub" id="soundStatusText">Sound is Enabled</div>
             </div>
@@ -208,8 +194,7 @@
           </label>
         </div>
 
-
-        <!-- EXIT MATCH Danger Button -->
+        <!-- EXIT MATCH Button -->
         <button class="btn-exit-match-danger" id="btnExitMatch" type="button">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
@@ -218,8 +203,10 @@
         </button>
       </div>
     </div>
+
   </div>
 
   <!-- Entry Script (ES6 Module) -->
+  <script type="module" src="./src/main.js"></script>
 </body>
 </html>
