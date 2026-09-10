@@ -1,7 +1,8 @@
 const { sevenUpDownEngine, RoundStatus } = require('./engine');
 const { GameLeaderLock } = require('../scheduler.lock');
 const { isDatabaseReady } = require('../../database/db');
-const { emit: emitRealtime } = require('../../services/realtime.service');
+const { emit: emitRealtime, emitToUser } = require('../../services/realtime.service');
+const walletRepo = require('../../wallet/wallet.repository');
 const logger = require('../../utils/logger');
 
 const GAME_ID = 'seven_up_down';
@@ -50,6 +51,35 @@ async function runGameCycle(io = null) {
   if (io) {
     emitRealtime('GAME_ROUND_SETTLED', { version: 1, gameId: GAME_ID, roundId: round.roundId, serverTime: new Date().toISOString(), payload: publicSettlement });
     emitRealtime('7ud:round_settled', publicSettlement);
+
+    if (result.settlements && result.settlements.length > 0) {
+      for (const settlement of result.settlements) {
+        try {
+          const wallet = await walletRepo.getWalletByUserId(settlement.userId);
+          const totalBal = wallet ? (wallet.totalBalance !== undefined ? wallet.totalBalance : (wallet.available_balance || 0) / 100) : 0;
+          const userPayload = {
+            roundId: round.roundId,
+            betId: settlement.betId,
+            betType: settlement.betType,
+            isWinner: settlement.isWinner,
+            winAmount: settlement.winAmountPaise / 100,
+            winAmountPaise: settlement.winAmountPaise,
+            wallet: wallet,
+            totalBalance: totalBal
+          };
+          emitToUser(settlement.userId, 'BET_SETTLED', userPayload);
+          emitToUser(settlement.userId, 'GAME_ROUND_SETTLED', userPayload);
+          emitToUser(settlement.userId, 'WALLET_UPDATED', {
+            userId: settlement.userId,
+            balance: totalBal,
+            totalBalance: totalBal,
+            wallet: wallet
+          });
+        } catch (err) {
+          logger.error('Failed to emit settlement to user', { userId: settlement.userId, error: err.message });
+        }
+      }
+    }
   }
   return leaderSleep(INTER_ROUND_PAUSE_MS);
 }

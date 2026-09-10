@@ -32,20 +32,35 @@ class GameEngine {
   }
 
   handlePlaceBet(betType, stakeAmount) {
-    if (!this.currentRoundId) return;
+    if (!this.currentRoundId) {
+      console.warn('Cannot place bet: no active roundId');
+      return;
+    }
     apiClient.placeBet({
       roundId: this.currentRoundId,
       betType: betType,
       stakeAmount: stakeAmount
     }).then(res => {
       if (res && res.data && res.data.wallet) {
-        const totalBal = res.data.wallet.totalBalance !== undefined ? res.data.wallet.totalBalance : res.data.wallet.balance;
-        if (totalBal !== undefined) {
+        const wallet = res.data.wallet;
+        const totalBal = wallet.totalBalance !== undefined 
+          ? Number(wallet.totalBalance) 
+          : (wallet.available_balance !== undefined ? Number(wallet.available_balance) / 100 : Number(wallet.balance || 0));
+        
+        if (typeof totalBal === 'number' && !isNaN(totalBal)) {
           gameState.serverBalance = totalBal;
+          gameState.userBalance = Math.max(0, totalBal);
+          eventBus.emit('BALANCE_UPDATED', gameState.userBalance);
+          apiClient.notifyParentWallet(gameState.userBalance);
         }
+      } else if (res && res.status === 'error') {
+        console.warn('Bet rejected by backend:', res.message);
+        alert(res.message || 'Bet failed to place');
+        this.fetchUserProfile();
       }
     }).catch(err => {
       console.warn('Place bet error:', err);
+      this.fetchUserProfile();
     });
   }
 

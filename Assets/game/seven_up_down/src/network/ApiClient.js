@@ -29,7 +29,14 @@ class ApiClient {
 
   getBaseUrl() {
     if (typeof window !== 'undefined' && window.IN_GAMES_SERVER_URL) {
-      return window.IN_GAMES_SERVER_URL.replace(/\/$/, '');
+      let url = String(window.IN_GAMES_SERVER_URL).replace(/\/$/, '');
+      if (url.endsWith('/api')) {
+        url = url.substring(0, url.length - 4);
+      }
+      return url;
+    }
+    if (typeof window !== 'undefined' && window.location && window.location.origin) {
+      return window.location.origin;
     }
     return '';
   }

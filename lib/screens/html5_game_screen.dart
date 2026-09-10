@@ -136,7 +136,7 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
           if (!mounted || generation != _initializationGeneration) return;
           setState(() => _isLoading = false);
           if (!_isTrustedGameOrigin(url, trustedUri)) return;
-          try { _webViewController?.runJavaScript("window.IN_GAMES_SERVER_URL = '${ApiService.baseUrl}';"); } catch (_) {}
+          try { _webViewController?.runJavaScript("window.IN_GAMES_SERVER_URL = '${ApiService.serverDomain}';"); } catch (_) {}
         },
         onWebResourceError: (WebResourceError error) {
           if (!mounted || generation != _initializationGeneration) return;

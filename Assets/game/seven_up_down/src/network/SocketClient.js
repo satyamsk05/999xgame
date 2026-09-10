@@ -23,7 +23,13 @@ class SocketClient {
           token = window.IN_GAMES_AUTH_TOKEN || null;
         }
 
-        const serverUrl = (window.IN_GAMES_SERVER_URL || '').replace(/\/$/, '');
+        let serverUrl = (window.IN_GAMES_SERVER_URL || '').replace(/\/$/, '');
+        if (serverUrl.endsWith('/api')) {
+          serverUrl = serverUrl.substring(0, serverUrl.length - 4);
+        }
+        if (!serverUrl && window.location && window.location.origin) {
+          serverUrl = window.location.origin;
+        }
 
         this.socket = window.io(serverUrl || undefined, {
           auth: token ? { token } : {},
@@ -64,7 +70,11 @@ class SocketClient {
 
   async resyncState() {
     try {
-      const res = await fetch('/api/games/seven_up_down/current-state');
+      let baseUrl = (window.IN_GAMES_SERVER_URL || '').replace(/\/$/, '');
+      if (baseUrl.endsWith('/api')) baseUrl = baseUrl.substring(0, baseUrl.length - 4);
+      if (!baseUrl && window.location && window.location.origin) baseUrl = window.location.origin;
+
+      const res = await fetch(baseUrl + '/api/games/7updown/current-round');
       if (res.ok) {
         const body = await res.json();
         if (body.status === 'success' && body.data) {
