@@ -66,15 +66,14 @@ export class ChipAnimationManager {
       }
     };
 
-    // Initial rapid bets
-    setTimeout(triggerAiBet, 400);
-    setTimeout(triggerAiBet, 1100);
+    // Slower, subtle AI bets so the table is not flooded
+    setTimeout(triggerAiBet, 1200);
 
     this.aiBetInterval = setInterval(() => {
-      if (Math.random() > 0.3) {
+      if (Math.random() > 0.6) {
         triggerAiBet();
       }
-    }, 1200);
+    }, 2800);
   }
 
   stopAiBettingSimulation() {
@@ -201,11 +200,16 @@ export class ChipAnimationManager {
     const relX = Math.max(10, Math.min(pageX - tableRect.left - 14, tableRect.width - 36));
     const relY = Math.max(10, Math.min(pageY - tableRect.top - 14, tableRect.height - 36));
 
-    // Cap max 10 chips per table for high performance
-    if (this.tableChips[targetTable].length >= 10) {
-      const oldest = this.tableChips[targetTable].shift();
-      if (oldest && oldest.el && oldest.el.parentNode) {
-        oldest.el.remove();
+    // Allow generous chips on table without removing user chips
+    const maxChips = 40;
+    if (this.tableChips[targetTable].length >= maxChips) {
+      // Find and remove oldest AI chip first, never remove user's chip
+      const aiChipIndex = this.tableChips[targetTable].findIndex(c => !c.isUser);
+      if (aiChipIndex !== -1) {
+        const [oldest] = this.tableChips[targetTable].splice(aiChipIndex, 1);
+        if (oldest && oldest.el && oldest.el.parentNode) {
+          oldest.el.remove();
+        }
       }
     }
 

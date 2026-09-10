@@ -19,6 +19,13 @@
     }
   </script>
 
+  <!-- Global Dialog Suppressors -->
+  <script>
+    window.alert = function(msg) { console.warn('[Game Alert Suppressed]:', msg); };
+    window.confirm = function() { return true; };
+    window.prompt = function() { return null; };
+  </script>
+
   <!-- CSS Stylesheet -->
   <link rel="stylesheet" href="./css/style.css">
   <style>

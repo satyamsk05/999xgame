@@ -512,71 +512,81 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
   }
 
   Widget _buildHomeTab() {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          PromoBanner(onTap: () { setState(() { _currentNavIndex = 2; }); }),
-          const SizedBox(height: 18),
-          ValueListenableBuilder<bool>(
-            valueListenable: DashboardSyncManager.isSyncing,
-            builder: (context, syncing, child) {
-              return ValueListenableBuilder<Map<String, dynamic>>(
-                valueListenable: DashboardSyncManager.dashboardData,
-                builder: (context, data, child) {
-                  final gamesListRaw = data['games'] as List<dynamic>? ?? [];
-                  if ((syncing && data.isEmpty) || gamesListRaw.isEmpty) {
-                    return SizedBox(
-                      height: 260,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: 3,
-                        itemBuilder: (ctx, i) => const GameCard(
-                          data: GameCardData(title: '', imagePath: ''), onTap: _noop, isLoading: true,
+    return RefreshIndicator(
+      color: const Color(0xFFFFD700),
+      backgroundColor: const Color(0xFF260435),
+      onRefresh: () async {
+        await Future.wait([
+          _fetchUserData(),
+          DashboardSyncManager.syncWithServer(),
+        ]);
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            PromoBanner(onTap: () { setState(() { _currentNavIndex = 2; }); }),
+            const SizedBox(height: 18),
+            ValueListenableBuilder<bool>(
+              valueListenable: DashboardSyncManager.isSyncing,
+              builder: (context, syncing, child) {
+                return ValueListenableBuilder<Map<String, dynamic>>(
+                  valueListenable: DashboardSyncManager.dashboardData,
+                  builder: (context, data, child) {
+                    final gamesListRaw = data['games'] as List<dynamic>? ?? [];
+                    if ((syncing && data.isEmpty) || gamesListRaw.isEmpty) {
+                      return SizedBox(
+                        height: 260,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: 3,
+                          itemBuilder: (ctx, i) => const GameCard(
+                            data: GameCardData(title: '', imagePath: ''), onTap: _noop, isLoading: true,
+                          ),
                         ),
+                      );
+                    }
+                    return SizedBox(
+                      height: 270,
+                      child: ListView.builder(
+                        clipBehavior: Clip.none,
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 5),
+                        itemCount: gamesListRaw.length,
+                        itemBuilder: (ctx, index) {
+                          final gameObj = gamesListRaw[index] as Map<String, dynamic>? ?? {};
+                          final id = gameObj['id']?.toString() ?? '';
+                          final title = gameObj['title']?.toString() ?? 'Game';
+                          final imagePath = gameObj['imagePath']?.toString() ?? 'Assets/images/7updown.png';
+                          final gameUrl = gameObj['gameUrl']?.toString() ?? '/games/seven_up_down/index.html';
+                          final isAvailable = gameObj['isAvailable'] == true || gameObj['status'] == 'LIVE';
+                          Color accentColor = const Color(0xFF00E676);
+                          if (gameObj['accentColor'] != null) {
+                            final hex = gameObj['accentColor'].toString().replaceAll('#', '');
+                            if (hex.length == 6) { accentColor = Color(int.parse('FF$hex', radix: 16)); }
+                          }
+                          return GameCard(
+                            data: GameCardData(id: id, title: title, imagePath: imagePath, accentColor: accentColor, gameUrl: gameUrl),
+                            onTap: () {
+                              if (isAvailable || id == 'seven_up_down' || id == '7updown' || id == 'dragon_tiger' || id == 'crush' || id == 'classic_dice') {
+                                _launchHtml5Game(title, 10.0, 20.0, gameUrl);
+                              } else {
+                                _showComingSoon(title);
+                              }
+                            },
+                          );
+                        },
                       ),
                     );
-                  }
-                  return SizedBox(
-                    height: 270,
-                    child: ListView.builder(
-                      clipBehavior: Clip.none,
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 5),
-                      itemCount: gamesListRaw.length,
-                      itemBuilder: (ctx, index) {
-                        final gameObj = gamesListRaw[index] as Map<String, dynamic>? ?? {};
-                        final id = gameObj['id']?.toString() ?? '';
-                        final title = gameObj['title']?.toString() ?? 'Game';
-                        final imagePath = gameObj['imagePath']?.toString() ?? 'Assets/images/7updown.png';
-                        final gameUrl = gameObj['gameUrl']?.toString() ?? '/games/seven_up_down/index.html';
-                        final isAvailable = gameObj['isAvailable'] == true || gameObj['status'] == 'LIVE';
-                        Color accentColor = const Color(0xFF00E676);
-                        if (gameObj['accentColor'] != null) {
-                          final hex = gameObj['accentColor'].toString().replaceAll('#', '');
-                          if (hex.length == 6) { accentColor = Color(int.parse('FF$hex', radix: 16)); }
-                        }
-                        return GameCard(
-                          data: GameCardData(id: id, title: title, imagePath: imagePath, accentColor: accentColor, gameUrl: gameUrl),
-                          onTap: () {
-                            if (isAvailable || id == 'seven_up_down' || id == '7updown' || id == 'dragon_tiger' || id == 'crush' || id == 'classic_dice') {
-                              _launchHtml5Game(title, 10.0, 20.0, gameUrl);
-                            } else {
-                              _showComingSoon(title);
-                            }
-                          },
-                        );
-                      },
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-          const SizedBox(height: 20),
-        ],
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }

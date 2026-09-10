@@ -135,6 +135,13 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
         onPageFinished: (url) {
           if (!mounted || generation != _initializationGeneration) return;
           setState(() => _isLoading = false);
+          try {
+            _webViewController?.runJavaScript(
+              "window.alert = function(msg) { console.warn('Alert suppressed:', msg); }; "
+              "window.confirm = function() { return true; }; "
+              "window.prompt = function() { return null; };",
+            );
+          } catch (_) {}
           if (!_isTrustedGameOrigin(url, trustedUri)) return;
           try { _webViewController?.runJavaScript("window.IN_GAMES_SERVER_URL = '${ApiService.serverDomain}';"); } catch (_) {}
         },
