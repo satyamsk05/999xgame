@@ -49,15 +49,19 @@ async function lockWallet(client, userId) {
   return wallet;
 }
 
-async function checkIdempotency(client, idempotencyKey, userId, referenceType = null, referenceId = null) {
+/**
+ * Idempotency is scoped to the account, not to a particular reference.
+ * The database has a global unique constraint on idempotency_key, so a retry
+ * with the same key must return the original ledger entry even if the caller
+ * reconstructed a different reference payload after a timeout.
+ */
+async function checkIdempotency(client, idempotencyKey, userId) {
   if (!idempotencyKey) return null;
   const res = await client.query(
     `SELECT * FROM wallet_ledger
      WHERE idempotency_key = $1 AND user_id = $2
-       AND ($3::varchar IS NULL OR reference_type = $3)
-       AND ($4::varchar IS NULL OR reference_id = $4)
      LIMIT 1`,
-    [idempotencyKey, userId, referenceType, referenceId]
+    [idempotencyKey, userId]
   );
   return res.rows[0] || null;
 }
@@ -81,7 +85,7 @@ async function creditWallet(clientOrUserId, amountPaise, options = {}) {
     const uId = userId || options.userId;
     if (!uId) throw new Error('userId is required for creditWallet');
     await assertIdempotencyConflict(client, idempotencyKey, uId);
-    const existing = await checkIdempotency(client, idempotencyKey, uId, referenceType, referenceId);
+    const existing = await checkIdempotency(client, idempotencyKey, uId);
     if (existing) return { duplicate: true, ledger: existing };
 
     const wallet = await lockWallet(client, uId);
@@ -122,7 +126,7 @@ async function debitWallet(clientOrUserId, amountPaise, options = {}) {
     const uId = userId || options.userId;
     if (!uId) throw new Error('userId is required for debitWallet');
     await assertIdempotencyConflict(client, idempotencyKey, uId);
-    const existing = await checkIdempotency(client, idempotencyKey, uId, referenceType, referenceId);
+    const existing = await checkIdempotency(client, idempotencyKey, uId);
     if (existing) return { duplicate: true, ledger: existing };
 
     const wallet = await lockWallet(client, uId);
@@ -181,7 +185,7 @@ async function reserveFunds(clientOrUserId, amountPaise, options = {}) {
     const uId = userId || options.userId;
     if (!uId) throw new Error('userId is required for reserveFunds');
     await assertIdempotencyConflict(client, idempotencyKey, uId);
-    const existing = await checkIdempotency(client, idempotencyKey, uId, referenceType, referenceId);
+    const existing = await checkIdempotency(client, idempotencyKey, uId);
     if (existing) return { duplicate: true, ledger: existing };
     const wallet = await lockWallet(client, uId);
     const beforeAvailable = parseInt(wallet.available_balance || 0, 10);
@@ -208,7 +212,7 @@ async function releaseReservedFunds(clientOrUserId, amountPaise, options = {}) {
     const uId = userId || options.userId;
     if (!uId) throw new Error('userId is required for releaseReservedFunds');
     await assertIdempotencyConflict(client, idempotencyKey, uId);
-    const existing = await checkIdempotency(client, idempotencyKey, uId, referenceType, referenceId);
+    const existing = await checkIdempotency(client, idempotencyKey, uId);
     if (existing) return { duplicate: true, ledger: existing };
     const wallet = await lockWallet(client, uId);
     const beforeAvailable = parseInt(wallet.available_balance || 0, 10);
@@ -235,7 +239,7 @@ async function finalizeReservedFunds(clientOrUserId, amountPaise, options = {}) 
     const uId = userId || options.userId;
     if (!uId) throw new Error('userId is required for finalizeReservedFunds');
     await assertIdempotencyConflict(client, idempotencyKey, uId);
-    const existing = await checkIdempotency(client, idempotencyKey, uId, referenceType, referenceId);
+    const existing = await checkIdempotency(client, idempotencyKey, uId);
     if (existing) return { duplicate: true, ledger: existing };
     const wallet = await lockWallet(client, uId);
     const beforeReserved = parseInt(wallet.reserved_balance || 0, 10);
