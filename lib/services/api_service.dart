@@ -7,13 +7,13 @@ class ApiService {
   static const String _configuredServerDomain = String.fromEnvironment('SERVER_DOMAIN');
 
   static String get serverDomain {
+    if (_configuredServerDomain.isNotEmpty) {
+      return _configuredServerDomain;
+    }
     if (kDebugMode) {
-      return _configuredServerDomain.isNotEmpty ? _configuredServerDomain : 'http://localhost:5050';
+      return 'http://localhost:5050';
     }
-    if (_configuredServerDomain.isEmpty) {
-      throw StateError('SERVER_DOMAIN must be supplied for release builds.');
-    }
-    return _configuredServerDomain;
+    return 'http://65.1.92.155';
   }
 
   static String get baseUrl => '$serverDomain/api';
