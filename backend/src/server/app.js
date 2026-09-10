@@ -26,11 +26,15 @@ const adminReportsController = require('../admin/admin_reports.controller');
 const app = express();
 if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 
-// Initialize the shared Redis client before any Redis-backed middleware can serve requests.
 if (process.env.DISABLE_REDIS !== 'true') initRedis();
 
 app.use(cors({ origin: config.corsOrigin, credentials: true }));
-app.use(express.json({ limit: config.bodyLimit }));
+app.use(express.json({
+  limit: config.bodyLimit,
+  verify: (req, _res, buf) => {
+    if (buf?.length) req.rawBody = Buffer.from(buf);
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 app.use(requestIdMiddleware);
 app.use(responseContract);
@@ -56,22 +60,8 @@ app.get('/ready', async (req, res) => {
   try {
     await query('SELECT 1');
     const redisReady = process.env.DISABLE_REDIS === 'true' || isRedisReady();
-    if (!redisReady) {
-      return res.status(503).json({
-        status: 'unready',
-        db: 'connected',
-        redis: 'disconnected',
-        code: 'REDIS_UNAVAILABLE',
-        timestamp: new Date().toISOString(),
-      });
-    }
-    return res.status(200).json({
-      status: 'ready',
-      db: 'connected',
-      redis: 'connected',
-      service: 'ingames-backend',
-      timestamp: new Date().toISOString(),
-    });
+    if (!redisReady) return res.status(503).json({ status: 'unready', db: 'connected', redis: 'disconnected', code: 'REDIS_UNAVAILABLE', timestamp: new Date().toISOString() });
+    return res.status(200).json({ status: 'ready', db: 'connected', redis: 'connected', service: 'ingames-backend', timestamp: new Date().toISOString() });
   } catch (_) {
     return res.status(503).json({ status: 'unready', db: 'disconnected', redis: isRedisReady() ? 'connected' : 'disconnected', code: 'DATABASE_UNAVAILABLE', timestamp: new Date().toISOString() });
   }
