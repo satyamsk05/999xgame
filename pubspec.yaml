@@ -29,15 +29,12 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - Assets/IMG_20260904_223402.png
-    - Assets/IMG_20260904_223443.png
-    - Assets/refercoin.png
-    - Assets/whatsapp-svgrepo-com.svg
     - Assets/
     - Assets/images/
     - Assets/Avatar/
     - Assets/nav_icon/
+    - Assets/btn_icon/
+    - Assets/chips/
     - Assets/game/seven_up_down/
     - Assets/game/seven_up_down/assets/
     - Assets/game/seven_up_down/assets/chips/
-    - Assets/chips/
