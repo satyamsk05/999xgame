@@ -25,8 +25,7 @@ class GameState {
   setBalance(newBalance) {
     const rawBalance = Math.max(0, Number(newBalance) || 0);
     this.serverBalance = rawBalance;
-    // Always deduct active unsubmitted bets on table from raw server balance
-    this.userBalance = Math.max(0, this.serverBalance - (this.totalBet || 0));
+    this.userBalance = rawBalance;
     eventBus.emit('BALANCE_UPDATED', this.userBalance);
     apiClient.notifyParentWallet(this.userBalance);
   }

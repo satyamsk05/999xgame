@@ -27,8 +27,9 @@ class GameSocket {
 
     const handleWalletUpdated = (data) => {
       const payload = data.payload || data;
-      if (payload && payload.totalBalance !== undefined) {
-        gameState.setBalance(payload.totalBalance);
+      const bal = payload.totalBalance !== undefined ? payload.totalBalance : (payload.balance !== undefined ? payload.balance : (payload.wallet && payload.wallet.totalBalance !== undefined ? payload.wallet.totalBalance : null));
+      if (bal !== null && bal !== undefined) {
+        gameState.setBalance(bal);
       }
       eventBus.emit('WALLET_UPDATED', payload);
       eventBus.emit('GAME_WALLET_UPDATED', payload);
@@ -36,6 +37,13 @@ class GameSocket {
 
     const handleBetSettled = (data) => {
       const payload = data.payload || data;
+      const bal = payload.totalBalance !== undefined ? payload.totalBalance : (payload.balance !== undefined ? payload.balance : (payload.wallet && payload.wallet.totalBalance !== undefined ? payload.wallet.totalBalance : null));
+      if (bal !== null && bal !== undefined) {
+        gameState.setBalance(bal);
+      }
+      if (payload && payload.isWinner && payload.winAmount > 0) {
+        eventBus.emit('WIN_OCCURRED', { winAmount: payload.winAmount });
+      }
       eventBus.emit('BET_SETTLED', payload);
       eventBus.emit('GAME_ROUND_SETTLED', payload);
     };

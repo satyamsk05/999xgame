@@ -417,22 +417,27 @@ body, html {
   width: 100%;
   height: 96px;
   border-radius: 14px;
-  background: linear-gradient(180deg, #1976d2 0%, #1565c0 60%, #0d47a1 100%);
-  border-bottom: 6px solid #0a2f6c;
+  background: #1565c0;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2);
-  transition: transform 0.1s, filter 0.1s;
+  box-shadow: none;
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent !important;
+  touch-action: manipulation;
 }
 
-.bet-tile-top:active {
-  transform: translateY(2px);
-  border-bottom-width: 4px;
+.bet-tile-top:active, .bet-tile-top:hover, .bet-tile-top:focus {
+  transform: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 /* Bottom 2 Tables Row */
@@ -447,22 +452,27 @@ body, html {
   flex: 1;
   height: 114px;
   border-radius: 14px;
-  background: linear-gradient(180deg, #00c853 0%, #00b248 60%, #008736 100%);
-  border-bottom: 6px solid #005422;
+  background: #008736;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2);
-  transition: transform 0.1s, filter 0.1s;
+  box-shadow: none;
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent !important;
+  touch-action: manipulation;
 }
 
-.bet-tile-green:active {
-  transform: translateY(2px);
-  border-bottom-width: 4px;
+.bet-tile-green:active, .bet-tile-green:hover, .bet-tile-green:focus {
+  transform: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 /* Bottom Right Table - RED (UP / 8-12) */
@@ -470,22 +480,27 @@ body, html {
   flex: 1;
   height: 114px;
   border-radius: 14px;
-  background: linear-gradient(180deg, #e53935 0%, #d32f2f 60%, #b71c1c 100%);
-  border-bottom: 6px solid #751010;
+  background: #b71c1c;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2);
-  transition: transform 0.1s, filter 0.1s;
+  box-shadow: none;
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent !important;
+  touch-action: manipulation;
 }
 
-.bet-tile-red:active {
-  transform: translateY(2px);
-  border-bottom-width: 4px;
+.bet-tile-red:active, .bet-tile-red:hover, .bet-tile-red:focus {
+  transform: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 /* User Bet Badge in Top-Right of each Table */

@@ -14,13 +14,28 @@ class ResultManager {
 
     gameState.addHistoryResult(total);
 
-    if (serverWinAmount !== null && serverWinAmount > 0) {
-      soundManager.playWin();
-      eventBus.emit('WIN_OCCURRED', { winAmount: serverWinAmount });
+    // Check if client had placed winning bets and calculate client-side win
+    let calculatedWin = 0;
+    if (total >= 2 && total <= 6) {
+      if (gameState.bets.down > 0) calculatedWin += gameState.bets.down * 2;
+    } else if (total === 7) {
+      if (gameState.bets.seven > 0) calculatedWin += gameState.bets.seven * 5;
+    } else if (total >= 8 && total <= 12) {
+      if (gameState.bets.up > 0) calculatedWin += gameState.bets.up * 2;
     }
 
-    // Refresh authoritative user profile balance from backend server
-    setTimeout(() => {
+    const effectiveWin = (serverWinAmount !== null && serverWinAmount > 0) ? serverWinAmount : calculatedWin;
+    if (effectiveWin > 0) {
+      soundManager.playWin();
+      eventBus.emit('WIN_OCCURRED', { winAmount: effectiveWin });
+      // Instantly credit winnings to userBalance on screen
+      gameState.userBalance += effectiveWin;
+      eventBus.emit('BALANCE_UPDATED', gameState.userBalance);
+      apiClient.notifyParentWallet(gameState.userBalance);
+    }
+
+    // Refresh authoritative user profile balance from backend server in intervals
+    const refreshProfileBalance = () => {
       apiClient.getUserProfile().then(res => {
         if (res && res.data) {
           const profile = res.data.profile || res.data;
@@ -30,7 +45,10 @@ class ResultManager {
           }
         }
       }).catch(() => {});
-    }, 1000);
+    };
+
+    setTimeout(refreshProfileBalance, 400);
+    setTimeout(refreshProfileBalance, 1200);
   }
 }
 
