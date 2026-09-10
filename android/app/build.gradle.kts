@@ -6,8 +6,7 @@ plugins {
 
 android {
     namespace = "com.ingames.ingames"
-    // flutter_secure_storage 11 requires Android API 37 for compilation.
-    compileSdk = 37
+    compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -17,17 +16,27 @@ android {
 
     defaultConfig {
         applicationId = "com.ingames.ingames"
-        // flutter_secure_storage 11 requires Android API 23+.
-        minSdk = flutter.minSdkVersion
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            val debugSigning = signingConfigs.getByName("debug")
+            storeFile = debugSigning.storeFile
+            storePassword = debugSigning.storePassword
+            keyAlias = debugSigning.keyAlias
+            keyPassword = debugSigning.keyPassword
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
     buildTypes {
         release {
-            // Signing with debug key ensures release APK is signed and can be installed on phones directly.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }
