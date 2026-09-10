@@ -243,37 +243,40 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF12022B),
+      backgroundColor: const Color(0xFF130221),
       body: Stack(
         children: [
           Positioned.fill(child: content),
           if (_isLoading)
             Container(
-              color: const Color(0xFF12022B),
+              color: const Color(0xFF130221),
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      width: 64,
+                      height: 64,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: const Color(0xFF6C20E0).withValues(alpha: 0.3),
-                        border: Border.all(color: const Color(0xFF00E676), width: 2),
+                        color: const Color(0xFF4C1D95).withValues(alpha: 0.25),
+                        border: Border.all(color: const Color(0xFF00E676), width: 2.5),
                       ),
+                      padding: const EdgeInsets.all(16),
                       child: const CircularProgressIndicator(
+                        strokeWidth: 3.0,
                         valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00E676)),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     Text(
                       'Loading ${widget.gameTitle}...',
-                      style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                      style: GoogleFonts.poppins(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Connecting to live game engine...',
-                      style: GoogleFonts.poppins(color: Colors.white54, fontSize: 13),
+                      style: GoogleFonts.poppins(color: const Color(0xFF9E92B3), fontSize: 13),
                     ),
                   ],
                 ),

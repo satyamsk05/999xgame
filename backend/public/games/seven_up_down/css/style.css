@@ -18,8 +18,8 @@ body, html {
   min-height: 100dvh;
   overflow-x: hidden;
   overflow-y: auto;
-  background-color: #12022b;
-  background-image: radial-gradient(circle at 50% 20%, #22054f 0%, #150233 60%, #0c001f 100%);
+  background-color: #130221;
+  background-image: radial-gradient(circle at 50% 15%, #25023d 0%, #130221 65%, #0b0014 100%);
   font-family: 'Poppins', sans-serif;
   color: #fff;
 }

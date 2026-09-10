@@ -134,19 +134,25 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
     super.dispose();
   }
 
+  int _consecutivePingFailures = 0;
+
   void _startNetworkMonitoring() {
     _networkPingTimer?.cancel();
-    _networkPingTimer = Timer.periodic(const Duration(seconds: 8), (timer) async {
+    _networkPingTimer = Timer.periodic(const Duration(seconds: 12), (timer) async {
       if (!mounted || !_isLoggedIn) return;
-      final ready = await ApiService.isBackendReady(timeout: const Duration(seconds: 4));
+      final ready = await ApiService.isBackendReady(timeout: const Duration(seconds: 5));
       if (!mounted) return;
       if (ready) {
+        _consecutivePingFailures = 0;
         if (_isOffline) {
           setState(() => _isOffline = false);
           _fetchUserData();
         }
-      } else if (!_isOffline) {
-        setState(() => _isOffline = true);
+      } else {
+        _consecutivePingFailures++;
+        if (_consecutivePingFailures >= 4 && !_isOffline) {
+          setState(() => _isOffline = true);
+        }
       }
     });
   }
@@ -383,15 +389,13 @@ class _InGamesHomeScreenState extends State<InGamesHomeScreen> {
                 ),
               ),
             Expanded(
-              child: _isOffline
-                  ? NetworkErrorWidget(onRetry: () { setState(() { _isOffline = false; }); _fetchUserData(); })
-                  : _isHtml5GameActive
-                      ? Html5GameScreen(
-                          gameTitle: _selectedGameTitle, entryFee: _selectedEntryFee, prizePool: _selectedPrizePool, gameUrl: _selectedGameUrl,
-                          onBackPressed: () { setState(() { _isHtml5GameActive = false; }); _fetchUserData(); },
-                          onBalanceUpdated: (newBalance) { _fetchUserData(); },
-                        )
-                      : _isHelpCentrePageActive
+              child: _isHtml5GameActive
+                  ? Html5GameScreen(
+                      gameTitle: _selectedGameTitle, entryFee: _selectedEntryFee, prizePool: _selectedPrizePool, gameUrl: _selectedGameUrl,
+                      onBackPressed: () { setState(() { _isHtml5GameActive = false; }); _fetchUserData(); },
+                      onBalanceUpdated: (newBalance) { _fetchUserData(); },
+                    )
+                  : _isHelpCentrePageActive
                           ? HelpCentreScreen(onBackPressed: () { setState(() { _isHelpCentrePageActive = false; }); })
                           : _isReportedIssuesPageActive
                               ? ReportedIssuesScreen(onBackPressed: () { setState(() { _isReportedIssuesPageActive = false; }); })

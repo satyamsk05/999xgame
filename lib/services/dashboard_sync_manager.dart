@@ -80,8 +80,14 @@ class DashboardSyncManager {
               ? Map<String, dynamic>.from(response['data'] as Map)
               : (response != null ? Map<String, dynamic>.from(response) : <String, dynamic>{});
 
-      if (bannersList != null) rawData['banners'] = bannersList;
-      if (gamesList != null) rawData['games'] = gamesList;
+      if (bannersList != null && bannersList.isNotEmpty) {
+        rawData['banners'] = bannersList;
+      }
+      if (gamesList != null && gamesList.isNotEmpty) {
+        rawData['games'] = gamesList;
+      } else if (!rawData.containsKey('games') || (rawData['games'] as List?)?.isEmpty == true) {
+        rawData['games'] = _defaultGames;
+      }
 
       _stripFinancialData(rawData);
 
@@ -94,10 +100,52 @@ class DashboardSyncManager {
       }
     } catch (e) {
       debugPrint('DashboardSyncManager error: $e');
+      if (dashboardData.value.isEmpty) {
+        dashboardData.value = {'games': _defaultGames};
+      }
     } finally {
       isSyncing.value = false;
     }
   }
+
+  static const List<Map<String, dynamic>> _defaultGames = [
+    {
+      'id': 'seven_up_down',
+      'title': '7 Up Down (Dice)',
+      'status': 'LIVE',
+      'isAvailable': true,
+      'entryFee': 10.0,
+      'prizePool': 18.0,
+      'route': '/games/seven_up_down/index.html',
+      'gameUrl': '/games/seven_up_down/index.html',
+      'imagePath': 'Assets/images/7updown.png',
+      'accentColor': '#00E676',
+    },
+    {
+      'id': 'dragon_tiger',
+      'title': 'Dragon Vs Tiger',
+      'status': 'COMING_SOON',
+      'isAvailable': false,
+      'entryFee': 10.0,
+      'prizePool': 18.0,
+      'route': '/games/dragon_tiger/index.html',
+      'gameUrl': '/games/dragon_tiger/index.html',
+      'imagePath': 'Assets/images/dtgame.png',
+      'accentColor': '#FF1744',
+    },
+    {
+      'id': 'crush',
+      'title': 'Classic Dice',
+      'status': 'COMING_SOON',
+      'isAvailable': false,
+      'entryFee': 10.0,
+      'prizePool': 18.0,
+      'route': '/games/crush/index.html',
+      'gameUrl': '/games/crush/index.html',
+      'imagePath': 'Assets/images/classic_dice.png',
+      'accentColor': '#2979FF',
+    },
+  ];
 
   static void _stripFinancialData(Map<String, dynamic> data) {
     final profile = data['profile'];
