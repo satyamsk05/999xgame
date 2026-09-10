@@ -33,52 +33,59 @@ jobs:
           SERVER_DOMAIN: ${{ secrets.SERVER_DOMAIN }}
         run: |
           if [ -z "$SERVER_DOMAIN" ]; then
-            echo "SERVER_DOMAIN secret is not configured; using the repository's built-in API configuration."
-          else
-            case "$SERVER_DOMAIN" in
-              https://*) ;;
-              *) echo "SERVER_DOMAIN must use HTTPS for release builds."; exit 1 ;;
-            esac
-            echo "SERVER_DOMAIN=$SERVER_DOMAIN" >> "$GITHUB_ENV"
+            echo "SERVER_DOMAIN secret is required for production release builds." >&2
+            exit 1
           fi
+          case "$SERVER_DOMAIN" in
+            https://*) ;;
+            *) echo "SERVER_DOMAIN must use HTTPS for release builds." >&2; exit 1 ;;
+          esac
+          echo "SERVER_DOMAIN=$SERVER_DOMAIN" >> "$GITHUB_ENV"
 
       - name: Build release APK
-        run: |
-          if [ -n "${SERVER_DOMAIN:-}" ]; then
-            flutter build apk --release --dart-define=SERVER_DOMAIN="$SERVER_DOMAIN"
-          else
-            flutter build apk --release
-          fi
+        run: flutter build apk --release --dart-define=SERVER_DOMAIN="$SERVER_DOMAIN"
 
-      - name: Sign CI APK
+      - name: Validate production signing configuration
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for name in ANDROID_KEYSTORE_B64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "$name secret is required for production APK signing." >&2
+              exit 1
+            fi
+          done
+
+      - name: Sign production APK
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
           if [ -z "$APKSIGNER" ]; then
             echo "apksigner was not found in the Android SDK." >&2
             exit 1
           fi
-          mkdir -p "$HOME/.android"
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            keytool -genkeypair -v \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
+
+          KEYSTORE_PATH="$RUNNER_TEMP/ingames-release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+
           mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/app-release-unsigned.apk
           "$APKSIGNER" sign \
-            --ks "$HOME/.android/debug.keystore" \
-            --ks-pass pass:android \
-            --ks-key-alias androiddebugkey \
-            --key-pass pass:android \
+            --ks "$KEYSTORE_PATH" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --key-pass env:ANDROID_KEY_PASSWORD \
             --out build/app/outputs/flutter-apk/app-release.apk \
             build/app/outputs/flutter-apk/app-release-unsigned.apk
           "$APKSIGNER" verify --verbose build/app/outputs/flutter-apk/app-release.apk
-          rm -f build/app/outputs/flutter-apk/app-release-unsigned.apk
+          rm -f build/app/outputs/flutter-apk/app-release-unsigned.apk "$KEYSTORE_PATH"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -88,5 +95,5 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-# CI artifacts use an ephemeral debug certificate only to make test APKs installable.
-# Production distribution must use a persistent dedicated release keystore.
+# Production signing requires a persistent dedicated release keystore stored in GitHub Secrets.
+# Never commit the keystore, passwords, or signing credentials to the repository.
