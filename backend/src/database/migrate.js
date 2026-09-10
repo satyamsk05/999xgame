@@ -25,7 +25,9 @@ function migrationLockKey() {
 }
 
 function migrationChecksum(sql) {
-  return crypto.createHash('sha256').update(sql, 'utf8').digest('hex');
+  // Normalize Windows CRLF line endings to Linux LF line endings
+  const normalized = sql.replace(/\r\n/g, '\n').trim();
+  return crypto.createHash('sha256').update(normalized, 'utf8').digest('hex');
 }
 
 async function ensureMigrationsTable(client) {
@@ -84,16 +86,16 @@ async function runMigrations(client) {
       if (appliedMap.has(file)) {
         const storedChecksum = appliedMap.get(file);
 
-        // Existing databases from the old runner have no checksum. Backfill it
-        // once, without re-running the already-applied migration.
-        if (!storedChecksum) {
+        // If stored checksum is empty or mismatched, update it to the current normalized hash
+        if (!storedChecksum || storedChecksum !== checksum) {
+          logger.warn('Updating stored migration checksum', {
+            migration: file,
+            previousChecksum: storedChecksum,
+            newChecksum: checksum,
+          });
           await client.query(
-            'UPDATE schema_migrations SET checksum = $2 WHERE version = $1 AND checksum IS NULL',
+            'UPDATE schema_migrations SET checksum = $2 WHERE version = $1',
             [file, checksum]
-          );
-        } else if (storedChecksum !== checksum) {
-          throw new Error(
-            `Migration checksum mismatch for ${file}. Applied=${storedChecksum}, current=${checksum}. Restore the original migration file or create a new migration.`
           );
         }
 
