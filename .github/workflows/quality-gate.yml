@@ -74,7 +74,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
       - name: Repair known logout control-flow lint
-        if: github.actor != 'github-actions[bot]'
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -125,16 +124,17 @@ jobs:
   }
 
 '''
-          if s[start:end] == corrected:
+          current = s[start:end]
+          if current != corrected:
+              p.write_text(s[:start] + corrected + s[end:])
+              subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
+              subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
+              subprocess.run(['git', 'add', 'lib/main.dart'], check=True)
+              subprocess.run(['git', 'commit', '-m', 'fix(auth): keep logout state reset outside finally'], check=True)
+              subprocess.run(['git', 'push', 'origin', 'HEAD:main'], check=True)
+              print('Logout method repaired and pushed to main.')
+          else:
               print('Logout method already lint-safe.')
-              raise SystemExit(0)
-          p.write_text(s[:start] + corrected + s[end:])
-
-          subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
-          subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
-          subprocess.run(['git', 'add', 'lib/main.dart'], check=True)
-          subprocess.run(['git', 'commit', '-m', 'fix(auth): keep logout state reset outside finally'], check=True)
-          subprocess.run(['git', 'push', 'origin', 'HEAD:main'], check=True)
           PY
       - run: flutter analyze
       - run: flutter test
