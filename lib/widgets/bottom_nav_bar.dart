@@ -34,8 +34,9 @@ class CustomBottomNavBar extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final tabWidth = constraints.maxWidth / 4;
-              const indicatorHeight = 52.0;
-              final indicatorWidth = (tabWidth * 0.88).clamp(42.0, 68.0);
+              final boxSize = (tabWidth * 0.72).clamp(48.0, 54.0);
+              final indicatorWidth = boxSize;
+              final indicatorHeight = boxSize;
               final leftOffset = (selectedIndex * tabWidth) + ((tabWidth - indicatorWidth) / 2);
 
               return Stack(
@@ -52,7 +53,7 @@ class CustomBottomNavBar extends StatelessWidget {
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.white.withValues(alpha: 0.08),
