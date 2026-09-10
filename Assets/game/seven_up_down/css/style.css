@@ -1,5 +1,5 @@
 /* =========================================================
-   7 UP DOWN - EXACT REFERENCE DESIGN MATCH (PERFECT MOBILE ALIGNMENT)
+   7 UP DOWN - ULTRA CASINO BETTING TABLES & ANIMATIONS
    ========================================================= */
 
 * {
@@ -14,10 +14,12 @@
 body, html {
   width: 100%;
   height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
   overflow-y: auto;
   background-color: #12022b;
-  background-image: radial-gradient(circle at 50% 25%, #1d0442 0%, #12022b 75%, #0d0022 100%);
+  background-image: radial-gradient(circle at 50% 20%, #22054f 0%, #150233 60%, #0c001f 100%);
   font-family: 'Poppins', sans-serif;
   color: #fff;
 }
@@ -36,10 +38,12 @@ body, html {
   max-width: 440px;
   margin: 0 auto;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   padding: max(48px, env(safe-area-inset-top, 48px)) 14px 84px 14px;
   position: relative;
+  background: transparent;
 }
 
 /* =========================================================
@@ -119,7 +123,7 @@ body, html {
 .history-card {
   width: 100%;
   background: #1a0636;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   padding: 10px 12px;
   margin-bottom: 12px;
@@ -182,15 +186,9 @@ body, html {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
 }
 
-.badge-red {
-  background: #ff3b30;
-}
-.badge-blue {
-  background: #0091ff;
-}
-.badge-green {
-  background: #00e676;
-}
+.badge-red { background: #ff3b30; }
+.badge-blue { background: #0091ff; }
+.badge-green { background: #00e676; }
 
 /* =========================================================
    CENTER STAGE & ACTIVE PLAYERS
@@ -227,6 +225,7 @@ body, html {
   flex-direction: column;
   align-items: center;
   width: 100%;
+  position: relative;
 }
 
 .avatar-crown-wrap {
@@ -387,7 +386,7 @@ body, html {
 }
 
 /* =========================================================
-   MAIN BETTING BOARD (BLUE CONTAINER & 3 LARGE TILES)
+   MAIN CASINO BETTING TABLES (BLUE CONTAINER & 3 FELT TABLES)
    ========================================================= */
 .main-betting-board {
   width: 100%;
@@ -402,7 +401,7 @@ body, html {
   box-shadow: 0 6px 20px rgba(41, 121, 255, 0.25);
 }
 
-/* Top Tile - 7 LUCKY */
+/* Top Table - 7 LUCKY */
 .bet-tile-top {
   width: 100%;
   height: 96px;
@@ -415,7 +414,7 @@ body, html {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2);
   transition: transform 0.1s, filter 0.1s;
   overflow: hidden;
 }
@@ -425,14 +424,14 @@ body, html {
   border-bottom-width: 4px;
 }
 
-/* Bottom 2 Tiles Row */
+/* Bottom 2 Tables Row */
 .bet-tiles-row {
   display: flex;
   gap: 8px;
   width: 100%;
 }
 
-/* Bottom Left Tile - GREEN (DOWN / 2-6) */
+/* Bottom Left Table - GREEN (DOWN / 2-6) */
 .bet-tile-green {
   flex: 1;
   height: 114px;
@@ -445,7 +444,7 @@ body, html {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2);
   transition: transform 0.1s, filter 0.1s;
   overflow: hidden;
 }
@@ -455,7 +454,7 @@ body, html {
   border-bottom-width: 4px;
 }
 
-/* Bottom Right Tile - RED (UP / 8-12) */
+/* Bottom Right Table - RED (UP / 8-12) */
 .bet-tile-red {
   flex: 1;
   height: 114px;
@@ -468,7 +467,7 @@ body, html {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2);
   transition: transform 0.1s, filter 0.1s;
   overflow: hidden;
 }
@@ -478,7 +477,7 @@ body, html {
   border-bottom-width: 4px;
 }
 
-/* User Bet Badge in Top-Right of each Tile */
+/* User Bet Badge in Top-Right of each Table */
 .tile-user-badge {
   position: absolute;
   top: 8px;
@@ -496,6 +495,7 @@ body, html {
   justify-content: center;
   letter-spacing: 0.2px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  z-index: 5;
 }
 
 .tile-odds-text {
@@ -505,6 +505,104 @@ body, html {
   letter-spacing: 2.5px;
   line-height: 1.1;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* =========================================================
+   CHIP LAYERS & ANIMATIONS
+   ========================================================= */
+.table-chips-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.table-chip-token {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.6));
+  animation: chipLandPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.table-chip-token img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.chip-sweep-fade {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: scale(0.3) translateY(-40px);
+  opacity: 0;
+}
+
+@keyframes chipLandPop {
+  0% { transform: scale(1.6); opacity: 0.5; }
+  60% { transform: scale(0.9); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.chip-animation-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+}
+
+.flying-chip-particle {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.7));
+  z-index: 1000;
+}
+
+.flying-chip-particle img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.payout-particle {
+  filter: drop-shadow(0 0 10px #ffd700);
+}
+
+/* Floating Win +Amount Text */
+.floating-win-amount {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  color: #00e676;
+  font-size: 18px;
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(0, 230, 118, 0.8), 0 2px 4px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  z-index: 1001;
+  animation: floatUpWin 1.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes floatUpWin {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -15px) scale(1.2);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -40px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -55px) scale(0.8);
+  }
 }
 
 /* Winning blink animation */
@@ -513,39 +611,37 @@ body, html {
 }
 
 @keyframes winGoldenPulse {
-  0% {
-    filter: brightness(1) drop-shadow(0 0 10px #ffd700);
-  }
-  100% {
-    filter: brightness(1.5) drop-shadow(0 0 25px #ffd700);
-  }
+  0% { filter: brightness(1) drop-shadow(0 0 10px #ffd700); }
+  100% { filter: brightness(1.5) drop-shadow(0 0 25px #ffd700); }
 }
 
 /* =========================================================
-   BOTTOM PLAYER & BETTING BAR (FIXED)
+   BOTTOM PLAYER & BETTING BAR (CAPSULE PILL EXACT MATCH)
    ========================================================= */
 .bottom-player-bar {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 66px;
-  background: #0d0022;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  bottom: 8px;
+  left: 12px;
+  right: 12px;
+  height: 60px;
+  background: #110228;
+  border: 1.5px solid rgba(139, 92, 246, 0.35);
+  border-radius: 30px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px 6px 16px;
+  padding: 0 16px;
   z-index: 100;
-  max-width: 440px;
+  max-width: 416px;
   margin: 0 auto;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7), inset 0 1px 2px rgba(255, 255, 255, 0.15);
 }
 
 /* Left User Info */
 .player-info-box {
   background: #1e2954;
-  border-radius: 10px;
-  padding: 4px 10px 4px 6px;
+  border-radius: 20px;
+  padding: 3px 12px 3px 4px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -553,10 +649,11 @@ body, html {
 }
 
 .player-avatar-circle {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: 2px solid #3b82f6;
+  border: 2px solid #00a8ff;
+  box-shadow: 0 0 8px rgba(0, 168, 255, 0.6);
   object-fit: cover;
 }
 
@@ -566,7 +663,7 @@ body, html {
 }
 
 .player-name-txt {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 800;
   color: #ffffff;
   text-transform: uppercase;
@@ -587,7 +684,7 @@ body, html {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 6px;
+  bottom: 0px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -596,12 +693,12 @@ body, html {
 }
 
 .chip-green-arch {
-  width: 66px;
-  height: 40px;
-  border-top-left-radius: 40px;
-  border-top-right-radius: 40px;
+  width: 58px;
+  height: 32px;
+  border-top-left-radius: 32px;
+  border-top-right-radius: 32px;
   background: #008736;
-  border: 2.5px solid #00e676;
+  border: 2px solid #00e676;
   border-bottom: none;
   position: absolute;
   bottom: 0;
@@ -611,8 +708,8 @@ body, html {
 }
 
 .main-chip-face {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   position: relative;
   z-index: 2;

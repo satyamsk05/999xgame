@@ -243,13 +243,13 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF20084B),
+      backgroundColor: const Color(0xFF12022B),
       body: Stack(
         children: [
           Positioned.fill(child: content),
           if (_isLoading)
             Container(
-              color: const Color(0xFF20084B),
+              color: const Color(0xFF12022B),
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -279,23 +279,6 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
                 ),
               ),
             ),
-          // Floating Exit / Back Button Overlay
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 10,
-            left: 12,
-            child: Material(
-              color: Colors.black.withValues(alpha: 0.55),
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: _exitGame,
-                child: const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );

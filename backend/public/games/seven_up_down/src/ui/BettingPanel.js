@@ -1,6 +1,7 @@
 import { betManager } from '../game/BetManager.js';
 import { eventBus } from '../core/EventBus.js';
 import { gameState } from '../game/GameState.js';
+import { chipAnimationManager } from '../game/ChipAnimationManager.js';
 
 export class BettingPanel {
   constructor(mainBetsGridEl, numBetsWrapEl) {
@@ -49,9 +50,30 @@ export class BettingPanel {
       const btnSeven = this.mainBetsGridEl.querySelector('#btnBetSeven');
       const btnUp = this.mainBetsGridEl.querySelector('#btnBetUp');
 
-      if (btnDown) btnDown.addEventListener('click', () => betManager.placeMainBet('down'));
-      if (btnSeven) btnSeven.addEventListener('click', () => betManager.placeMainBet('seven'));
-      if (btnUp) btnUp.addEventListener('click', () => betManager.placeMainBet('up'));
+      if (btnDown) {
+        btnDown.addEventListener('click', (e) => {
+          if (!gameState.isRolling && gameState.userBalance >= (gameState.selectedChip || 10)) {
+            chipAnimationManager.flyUserChip(e, 'down');
+          }
+          betManager.placeMainBet('down');
+        });
+      }
+      if (btnSeven) {
+        btnSeven.addEventListener('click', (e) => {
+          if (!gameState.isRolling && gameState.userBalance >= (gameState.selectedChip || 10)) {
+            chipAnimationManager.flyUserChip(e, 'seven');
+          }
+          betManager.placeMainBet('seven');
+        });
+      }
+      if (btnUp) {
+        btnUp.addEventListener('click', (e) => {
+          if (!gameState.isRolling && gameState.userBalance >= (gameState.selectedChip || 10)) {
+            chipAnimationManager.flyUserChip(e, 'up');
+          }
+          betManager.placeMainBet('up');
+        });
+      }
     }
 
     if (this.numBetsWrapEl) {
