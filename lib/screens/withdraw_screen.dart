@@ -22,7 +22,14 @@ class WithdrawScreen extends StatefulWidget {
 class _WithdrawScreenState extends State<WithdrawScreen> {
   int _currentStep = 0; // 0 = Enter Amount, 1 = Select Method
   final TextEditingController _amountController = TextEditingController();
-  final TextEditingController _upiIdController = TextEditingController(text: '8296395205@apl');
+
+  String _upiId = '';
+  String _upiName = '';
+  String _bankAccount = '';
+  String _bankIfsc = '';
+  String _bankHolder = '';
+  String _bankName = '';
+  bool _isWithdrawing = false;
 
   @override
   void initState() {
@@ -30,12 +37,28 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     _amountController.addListener(() {
       if (mounted) setState(() {});
     });
+    _loadPayoutMethods();
+  }
+
+  Future<void> _loadPayoutMethods() async {
+    try {
+      final res = await WalletApi.getPayoutMethods();
+      if (mounted) {
+        setState(() {
+          _upiId = res['upiId']?.toString() ?? '';
+          _upiName = res['upiName']?.toString() ?? '';
+          _bankAccount = res['bankAccountNumber']?.toString() ?? '';
+          _bankIfsc = res['bankIfsc']?.toString() ?? '';
+          _bankHolder = res['bankAccountHolder']?.toString() ?? '';
+          _bankName = res['bankName']?.toString() ?? '';
+        });
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
     _amountController.dispose();
-    _upiIdController.dispose();
     super.dispose();
   }
 
@@ -53,14 +76,43 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     });
   }
 
-  void _processWithdrawal({required bool isDepositBack}) async {
+  void _processWithdrawal({required String paymentMode, required bool isDepositBack}) async {
+    if (_isWithdrawing) return;
+
+    if (!isDepositBack) {
+      if (paymentMode == 'UPI' && _upiId.isEmpty) {
+        _showEditPayoutModal(focusUpi: true);
+        return;
+      }
+      if (paymentMode == 'BANK' && (_bankAccount.isEmpty || _bankIfsc.isEmpty)) {
+        _showEditPayoutModal(focusUpi: false);
+        return;
+      }
+    }
+
     final amount = _enteredAmount > 0 ? _enteredAmount : 25.0;
     final cashback = isDepositBack ? (amount * 0.01).clamp(0.0, 500.0) : 0.0;
     final fee = isDepositBack ? 0.0 : (amount * 0.05).clamp(1.0, 50.0);
     final netAmount = isDepositBack ? (amount + cashback) : (amount - fee);
 
+    setState(() => _isWithdrawing = true);
+
     try {
-      await WalletApi.withdrawCash(amount: amount, upiId: _upiIdController.text);
+      final res = await WalletApi.withdrawCash(
+        amount: amount,
+        paymentMode: paymentMode,
+        upiId: paymentMode == 'UPI' ? _upiId : null,
+        upiName: paymentMode == 'UPI' ? _upiName : null,
+        bankAccountNumber: paymentMode == 'BANK' ? _bankAccount : null,
+        bankIfsc: paymentMode == 'BANK' ? _bankIfsc : null,
+        bankAccountHolder: paymentMode == 'BANK' ? _bankHolder : null,
+        bankName: paymentMode == 'BANK' ? _bankName : null,
+      );
+
+      final wData = res['data'] is Map<String, dynamic> ? res['data'] : res;
+      final withdrawalId = wData['withdrawalId']?.toString() ?? wData['id']?.toString() ?? '#WDR_${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+
+      setState(() => _isWithdrawing = false);
       widget.onWithdrawCompleted(amount, netAmount, isDepositBack);
 
       if (mounted) {
@@ -68,30 +120,338 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
           amount: amount,
           netAmount: netAmount,
           isDepositBack: isDepositBack,
+          paymentMode: paymentMode,
+          txId: withdrawalId,
         );
       }
     } catch (e) {
+      setState(() => _isWithdrawing = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              e is ApiException ? e.message : 'Withdrawal failed. Check winnings balance and UPI ID.',
+              e is ApiException ? e.message : 'Withdrawal failed: ${e.toString()}',
               style: GoogleFonts.poppins(),
             ),
             backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
     }
   }
 
+  void _showEditPayoutModal({required bool focusUpi}) {
+    final upiCtrl = TextEditingController(text: _upiId);
+    final upiNameCtrl = TextEditingController(text: _upiName);
+    final bankAccCtrl = TextEditingController(text: _bankAccount);
+    final bankIfscCtrl = TextEditingController(text: _bankIfsc);
+    final bankHolderCtrl = TextEditingController(text: _bankHolder);
+    final bankNameCtrl = TextEditingController(text: _bankName);
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E042D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20.0,
+                right: 20.0,
+                top: 16.0,
+                bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 24.0,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF00E676),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.black, size: 18),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Link Bank & UPI Account',
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                          onPressed: () => Navigator.pop(modalCtx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // UPI SECTION
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2C073D),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: focusUpi ? const Color(0xFF00E676) : Colors.white12,
+                          width: focusUpi ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF00E676),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text('UPI ID', style: GoogleFonts.poppins(color: Colors.black, fontSize: 11, fontWeight: FontWeight.w800)),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('Instant Payouts', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: upiCtrl,
+                            autofocus: focusUpi,
+                            style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600),
+                            decoration: InputDecoration(
+                              labelText: 'UPI VPA Address',
+                              labelStyle: GoogleFonts.poppins(color: Colors.white60, fontSize: 13),
+                              hintText: 'e.g. mobile@apl / name@okaxis',
+                              hintStyle: GoogleFonts.poppins(color: Colors.white24),
+                              filled: true,
+                              fillColor: const Color(0xFF1E042D),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF5A1678))),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: upiNameCtrl,
+                            style: GoogleFonts.poppins(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'UPI Account Holder Name (optional)',
+                              labelStyle: GoogleFonts.poppins(color: Colors.white60, fontSize: 13),
+                              hintText: 'Full Name on UPI',
+                              hintStyle: GoogleFonts.poppins(color: Colors.white24),
+                              filled: true,
+                              fillColor: const Color(0xFF1E042D),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF5A1678))),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // BANK ACCOUNT SECTION
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2C073D),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: !focusUpi ? const Color(0xFF2196F3) : Colors.white12,
+                          width: !focusUpi ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2196F3),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text('BANK ACCOUNT', style: GoogleFonts.poppins(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('IMPS / NEFT Transfer', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: bankAccCtrl,
+                            autofocus: !focusUpi,
+                            keyboardType: TextInputType.number,
+                            style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600),
+                            decoration: InputDecoration(
+                              labelText: 'Bank Account Number',
+                              labelStyle: GoogleFonts.poppins(color: Colors.white60, fontSize: 13),
+                              hintText: '9 to 18 digit account number',
+                              hintStyle: GoogleFonts.poppins(color: Colors.white24),
+                              filled: true,
+                              fillColor: const Color(0xFF1E042D),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF5A1678))),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: bankIfscCtrl,
+                            textCapitalization: TextCapitalization.characters,
+                            style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600),
+                            decoration: InputDecoration(
+                              labelText: 'IFSC Code',
+                              labelStyle: GoogleFonts.poppins(color: Colors.white60, fontSize: 13),
+                              hintText: 'e.g. SBIN0001234',
+                              hintStyle: GoogleFonts.poppins(color: Colors.white24),
+                              filled: true,
+                              fillColor: const Color(0xFF1E042D),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF5A1678))),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: bankHolderCtrl,
+                            style: GoogleFonts.poppins(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Account Holder Name',
+                              labelStyle: GoogleFonts.poppins(color: Colors.white60, fontSize: 13),
+                              hintText: 'Name as per Passbook',
+                              hintStyle: GoogleFonts.poppins(color: Colors.white24),
+                              filled: true,
+                              fillColor: const Color(0xFF1E042D),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF5A1678))),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: bankNameCtrl,
+                            style: GoogleFonts.poppins(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Bank Name (optional)',
+                              labelStyle: GoogleFonts.poppins(color: Colors.white60, fontSize: 13),
+                              hintText: 'e.g. State Bank of India, HDFC',
+                              hintStyle: GoogleFonts.poppins(color: Colors.white24),
+                              filled: true,
+                              fillColor: const Color(0xFF1E042D),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF5A1678))),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // SAVE BUTTON
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: isSaving
+                            ? null
+                            : () async {
+                                setModalState(() => isSaving = true);
+                                final messenger = ScaffoldMessenger.of(context);
+                                try {
+                                  await WalletApi.savePayoutMethods(
+                                    upiId: upiCtrl.text.trim(),
+                                    upiName: upiNameCtrl.text.trim(),
+                                    bankAccountNumber: bankAccCtrl.text.trim(),
+                                    bankIfsc: bankIfscCtrl.text.trim().toUpperCase(),
+                                    bankAccountHolder: bankHolderCtrl.text.trim(),
+                                    bankName: bankNameCtrl.text.trim(),
+                                  );
+
+                                  if (mounted) {
+                                    setState(() {
+                                      _upiId = upiCtrl.text.trim();
+                                      _upiName = upiNameCtrl.text.trim();
+                                      _bankAccount = bankAccCtrl.text.trim();
+                                      _bankIfsc = bankIfscCtrl.text.trim().toUpperCase();
+                                      _bankHolder = bankHolderCtrl.text.trim();
+                                      _bankName = bankNameCtrl.text.trim();
+                                    });
+                                    if (modalCtx.mounted) {
+                                      Navigator.pop(modalCtx);
+                                    }
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text('Payout details linked successfully!', style: GoogleFonts.poppins()),
+                                        backgroundColor: const Color(0xFF00E676),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  setModalState(() => isSaving = false);
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text('Failed: ${e.toString()}', style: GoogleFonts.poppins()),
+                                      backgroundColor: Colors.redAccent,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00E676),
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        child: isSaving
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                            : Text(
+                                'SAVE & LINK DETAILS',
+                                style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showWithdrawalSuccessModal({
     required double amount,
     required double netAmount,
     required bool isDepositBack,
+    required String paymentMode,
+    required String txId,
   }) {
-    final txId = '#991020203322655459';
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -110,7 +470,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Drag Pill
               Center(
                 child: Container(
                   width: 40,
@@ -123,7 +482,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Green Checkmark Icon
               Container(
                 width: 68,
                 height: 68,
@@ -139,9 +497,8 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
               ),
               const SizedBox(height: 18),
 
-              // Title
               Text(
-                'Withdrawal Successful',
+                'Withdrawal Requested',
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 20,
@@ -150,7 +507,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Amount
               Text(
                 '₹${netAmount.toStringAsFixed(2)}',
                 style: GoogleFonts.inter(
@@ -161,11 +517,12 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Subtitle note
               Text(
                 isDepositBack
                     ? 'Added directly to your InGames Deposit balance'
-                    : 'It may take upto 24 hours for it to reflect in\nyour UPI account',
+                    : paymentMode == 'BANK'
+                        ? 'Settlement request received for Bank Account.\nFunds will be credited within 24 hours.'
+                        : 'Settlement request received for UPI ID.\nFunds will be credited within 24 hours.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   color: Colors.white60,
@@ -176,7 +533,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
               ),
               const SizedBox(height: 28),
 
-              // Transaction ID & Need Help Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -184,7 +540,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Transaction ID',
+                        'Withdrawal ID',
                         style: GoogleFonts.poppins(
                           color: Colors.white54,
                           fontSize: 12,
@@ -198,8 +554,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                           color: Colors.white.withValues(alpha: 0.9),
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          decoration: TextDecoration.underline,
-                          decorationColor: Colors.white38,
                         ),
                       ),
                     ],
@@ -208,10 +562,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                     onTap: () {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(
-                            'Support team notified for $txId',
-                            style: GoogleFonts.poppins(),
-                          ),
+                          content: Text('Support team notified for $txId', style: GoogleFonts.poppins()),
                           backgroundColor: const Color(0xFF5E217C),
                           behavior: SnackBarBehavior.floating,
                         ),
@@ -227,19 +578,11 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(
-                            Icons.help_outline_rounded,
-                            color: Colors.white,
-                            size: 18,
-                          ),
+                          const Icon(Icons.help_outline_rounded, color: Colors.white, size: 18),
                           const SizedBox(width: 6),
                           Text(
                             'Need Help',
-                            style: GoogleFonts.poppins(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: GoogleFonts.poppins(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
@@ -250,7 +593,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
               const SizedBox(height: 22),
 
-              // BACK TO MY WALLET Button
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -303,7 +645,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
     return Stack(
       children: [
-        // Watermark floating coin circles background
         Positioned(
           top: -30,
           right: -30,
@@ -331,7 +672,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
         Column(
           children: [
-            // Top Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
               child: Row(
@@ -352,14 +692,13 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 48), // balance spacing
+                  const SizedBox(width: 48),
                 ],
               ),
             ),
 
             const SizedBox(height: 12),
 
-            // WINNINGS BALANCE Header
             Text(
               'WINNINGS BALANCE',
               style: GoogleFonts.poppins(
@@ -381,7 +720,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
             const SizedBox(height: 36),
 
-            // Input Form Section
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -398,7 +736,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                     ),
                     const SizedBox(height: 10),
 
-                    // Input Box
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -448,7 +785,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
                     const SizedBox(height: 8),
 
-                    // Helper limit text
                     Text(
                       'Min ₹25 - Max ₹5000 twice a day',
                       style: GoogleFonts.poppins(
@@ -464,7 +800,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
               ),
             ),
 
-            // Bottom Instant Withdrawals & NEXT Button
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Column(
@@ -479,7 +814,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Instant Withdrawals',
+                        '100% Safe & Instant Settlement',
                         style: GoogleFonts.poppins(
                           color: Colors.white60,
                           fontSize: 13,
@@ -526,19 +861,21 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   }
 
   // --------------------------------------------------------------------------
-  // STEP 2: Select Method
+  // STEP 2: Select Method (UPI, BANK, DEPOSIT BACK)
   // --------------------------------------------------------------------------
   Widget _buildStepSelectMethod() {
     final amountToWithdraw = _enteredAmount > 0 ? _enteredAmount : 25.0;
     final depositBackCashback = (amountToWithdraw * 0.01).clamp(0.0, 500.0);
     final depositBackTotal = amountToWithdraw + depositBackCashback;
 
-    final upiFee = (amountToWithdraw * 0.05).clamp(1.0, 50.0);
-    final upiNetTotal = amountToWithdraw - upiFee;
+    final fee = (amountToWithdraw * 0.05).clamp(1.0, 50.0);
+    final netTotal = amountToWithdraw - fee;
+
+    final hasUpi = _upiId.isNotEmpty;
+    final hasBank = _bankAccount.isNotEmpty && _bankIfsc.isNotEmpty;
 
     return Stack(
       children: [
-        // Watermark floating coin shapes
         Positioned(
           top: -20,
           right: -20,
@@ -566,7 +903,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
         Column(
           children: [
-            // Top Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 8.0),
               child: Row(
@@ -588,38 +924,13 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6B1884),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          'अ',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.chat_bubble_outline_rounded,
-                          color: Colors.white,
-                          size: 13,
-                        ),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(width: 48),
                 ],
               ),
             ),
 
             const SizedBox(height: 12),
 
-            // YOU ARE WITHDRAWING Header
             Text(
               'YOU ARE WITHDRAWING',
               style: GoogleFonts.poppins(
@@ -641,14 +952,331 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
             const SizedBox(height: 24),
 
-            // Option Cards
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 children: [
-                  // --------------------------------------------------------------
-                  // CARD 1: Deposit Back to Rush / InGames Wallet
-                  // --------------------------------------------------------------
+                  // CARD 1: Withdraw via UPI
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF240635),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Withdraw via UPI',
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  InkWell(
+                                    onTap: () => _showEditPayoutModal(focusUpi: true),
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF4F106D),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.5)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.edit_rounded, color: Color(0xFFFFD700), size: 11),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            hasUpi ? 'Edit UPI' : '+ Link UPI',
+                                            style: GoogleFonts.poppins(color: const Color(0xFFFFD700), fontSize: 11, fontWeight: FontWeight.w700),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Withdrawal Fee ',
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white70,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.info_outline_rounded,
+                                        color: Colors.white54,
+                                        size: 14,
+                                      ),
+                                    ],
+                                  ),
+                                  Text(
+                                    '- ₹${fee.toStringAsFixed(2)}',
+                                    style: GoogleFonts.inter(
+                                      color: Colors.white70,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF6B1884),
+                            borderRadius: BorderRadius.vertical(bottom: Radius.circular(17)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: 24,
+                                    height: 18,
+                                    child: CustomPaint(
+                                      painter: UpiLogoPainter(),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'UPI ID',
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      Text(
+                                        hasUpi ? _upiId : 'Tap to link UPI',
+                                        style: GoogleFonts.poppins(
+                                          color: hasUpi ? Colors.white70 : const Color(0xFFFFD700),
+                                          fontSize: 11,
+                                          fontWeight: hasUpi ? FontWeight.w500 : FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              ElevatedButton(
+                                onPressed: _isWithdrawing
+                                    ? null
+                                    : () => _processWithdrawal(paymentMode: 'UPI', isDepositBack: false),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF6436E0),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  elevation: 0,
+                                ),
+                                child: _isWithdrawing
+                                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : Text(
+                                        hasUpi ? 'Get ₹${netTotal.toStringAsFixed(2)}' : 'Link UPI',
+                                        style: GoogleFonts.inter(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // CARD 2: Withdraw via Bank Account
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF240635),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Withdraw via Bank Account',
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  InkWell(
+                                    onTap: () => _showEditPayoutModal(focusUpi: false),
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF4F106D),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.5)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.edit_rounded, color: Color(0xFFFFD700), size: 11),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            hasBank ? 'Edit Bank' : '+ Link Bank',
+                                            style: GoogleFonts.poppins(color: const Color(0xFFFFD700), fontSize: 11, fontWeight: FontWeight.w700),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Withdrawal Fee ',
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white70,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.info_outline_rounded,
+                                        color: Colors.white54,
+                                        size: 14,
+                                      ),
+                                    ],
+                                  ),
+                                  Text(
+                                    '- ₹${fee.toStringAsFixed(2)}',
+                                    style: GoogleFonts.inter(
+                                      color: Colors.white70,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF1E3A8A),
+                            borderRadius: BorderRadius.vertical(bottom: Radius.circular(17)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Color(0xFF3B82F6),
+                                    ),
+                                    child: const Icon(Icons.account_balance_rounded, color: Colors.white, size: 16),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _bankName.isNotEmpty ? _bankName : 'Bank Transfer',
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      Text(
+                                        hasBank
+                                            ? '•••• ${_bankAccount.length > 4 ? _bankAccount.substring(_bankAccount.length - 4) : _bankAccount} ($_bankIfsc)'
+                                            : 'Tap to link Bank A/C',
+                                        style: GoogleFonts.poppins(
+                                          color: hasBank ? Colors.white70 : const Color(0xFFFFD700),
+                                          fontSize: 11,
+                                          fontWeight: hasBank ? FontWeight.w500 : FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              ElevatedButton(
+                                onPressed: _isWithdrawing
+                                    ? null
+                                    : () => _processWithdrawal(paymentMode: 'BANK', isDepositBack: false),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2563EB),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  elevation: 0,
+                                ),
+                                child: _isWithdrawing
+                                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : Text(
+                                        hasBank ? 'Get ₹${netTotal.toStringAsFixed(2)}' : 'Link Bank',
+                                        style: GoogleFonts.inter(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // CARD 3: Deposit Back to Rush / InGames Wallet
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
@@ -746,7 +1374,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                           ),
                         ),
 
-                        // Bottom Strip in Card 1
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           decoration: const BoxDecoration(
@@ -801,7 +1428,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                                 ],
                               ),
                               ElevatedButton(
-                                onPressed: () => _processWithdrawal(isDepositBack: true),
+                                onPressed: () => _processWithdrawal(paymentMode: 'WALLET', isDepositBack: true),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF00E676),
                                   foregroundColor: const Color(0xFF003B15),
@@ -827,152 +1454,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                     ),
                   ),
 
-                  // --------------------------------------------------------------
-                  // CARD 2: Withdraw via UPI
-                  // --------------------------------------------------------------
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF240635),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Withdraw via UPI',
-                                style: GoogleFonts.poppins(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        'Withdrawal Fee ',
-                                        style: GoogleFonts.poppins(
-                                          color: Colors.white70,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      const Icon(
-                                        Icons.info_outline_rounded,
-                                        color: Colors.white54,
-                                        size: 14,
-                                      ),
-                                    ],
-                                  ),
-                                  Text(
-                                    '- ₹${upiFee.toStringAsFixed(2)}',
-                                    style: GoogleFonts.inter(
-                                      color: Colors.white70,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Bottom Strip in Card 2
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF6B1884),
-                            borderRadius: BorderRadius.vertical(bottom: Radius.circular(17)),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  SizedBox(
-                                    width: 24,
-                                    height: 18,
-                                    child: CustomPaint(
-                                      painter: UpiLogoPainter(),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'UPI',
-                                        style: GoogleFonts.poppins(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                      Text(
-                                        _upiIdController.text,
-                                        style: GoogleFonts.poppins(
-                                          color: Colors.white70,
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              ElevatedButton(
-                                onPressed: () => _processWithdrawal(isDepositBack: false),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF6436E0),
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                  elevation: 0,
-                                ),
-                                child: Text(
-                                  'Get ₹${upiNetTotal.toStringAsFixed(2)}',
-                                  style: GoogleFonts.inter(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  Center(
-                    child: TextButton(
-                      onPressed: () {},
-                      child: Text(
-                        'Other methods ›',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white54,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          decoration: TextDecoration.underline,
-                          decorationColor: Colors.white38,
-                        ),
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 20),
                 ],
               ),

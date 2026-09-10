@@ -137,6 +137,34 @@ const PageUsers = (() => {
         ${user.isBlocked ? `<div class="detail-row"><span class="detail-key">Blocked reason</span><span class="detail-val text-dim">${Fmt.esc(user.blockedReason)}</span></div>` : ''}
       </div>
 
+      <div class="font-semi mb-2" style="font-size:13px;display:flex;align-items:center;gap:6px">
+        <span>Linked Payout Methods</span>
+        ${user.payoutMethods?.isBankLinked || user.payoutMethods?.isUpiLinked ? `<span class="badge" style="background:rgba(0,230,118,0.18);color:#00e676;font-size:9px">LINKED</span>` : `<span class="badge" style="background:rgba(255,152,0,0.18);color:#ff9800;font-size:9px">NOT LINKED</span>`}
+      </div>
+      <div class="card card-p2 mb-4">
+        <div class="detail-row">
+          <span class="detail-key">UPI ID</span>
+          <span class="detail-val mono text-xs font-semi" style="color:var(--text-1)">
+            ${user.payoutMethods?.upiId ? `${Fmt.esc(user.payoutMethods.upiId)} <button class="btn btn-ghost btn-xs" style="padding:1px 4px;font-size:10px" onclick="navigator.clipboard.writeText('${user.payoutMethods.upiId}');UI.toast('UPI ID copied!','success')">Copy</button>` : '<span class="text-dim">Not linked</span>'}
+          </span>
+        </div>
+        ${user.payoutMethods?.upiName ? `<div class="detail-row"><span class="detail-key">UPI Name</span><span class="detail-val text-xs">${Fmt.esc(user.payoutMethods.upiName)}</span></div>` : ''}
+        <div class="detail-row">
+          <span class="detail-key">Bank A/C</span>
+          <span class="detail-val mono text-xs font-semi" style="color:var(--text-1)">
+            ${user.payoutMethods?.bankAccountNumber ? `${Fmt.esc(user.payoutMethods.bankAccountNumber)} <button class="btn btn-ghost btn-xs" style="padding:1px 4px;font-size:10px" onclick="navigator.clipboard.writeText('${user.payoutMethods.bankAccountNumber}');UI.toast('Account number copied!','success')">Copy</button>` : '<span class="text-dim">Not linked</span>'}
+          </span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Bank IFSC</span>
+          <span class="detail-val mono text-xs font-semi" style="color:var(--text-1)">
+            ${user.payoutMethods?.bankIfsc ? `${Fmt.esc(user.payoutMethods.bankIfsc)} <button class="btn btn-ghost btn-xs" style="padding:1px 4px;font-size:10px" onclick="navigator.clipboard.writeText('${user.payoutMethods.bankIfsc}');UI.toast('IFSC copied!','success')">Copy</button>` : '<span class="text-dim">Not linked</span>'}
+          </span>
+        </div>
+        ${user.payoutMethods?.bankAccountHolder ? `<div class="detail-row"><span class="detail-key">A/C Holder</span><span class="detail-val text-xs">${Fmt.esc(user.payoutMethods.bankAccountHolder)}</span></div>` : ''}
+        ${user.payoutMethods?.bankName ? `<div class="detail-row"><span class="detail-key">Bank Name</span><span class="detail-val text-xs">${Fmt.esc(user.payoutMethods.bankName)}</span></div>` : ''}
+      </div>
+
       <div class="font-semi mb-4">Recent Transactions</div>
       <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)">
         <table>

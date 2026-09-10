@@ -55,7 +55,7 @@ class GameEngine {
         }
       } else if (res && res.status === 'error') {
         console.warn('Bet rejected by backend:', res.message);
-        alert(res.message || 'Bet failed to place');
+        eventBus.emit('SHOW_TOAST', res.message || 'Bet failed to place');
         this.fetchUserProfile();
       }
     }).catch(err => {

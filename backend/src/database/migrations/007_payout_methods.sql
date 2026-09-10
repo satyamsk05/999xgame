@@ -1,0 +1,14 @@
+-- Migration 007: Add Bank & UPI payout methods to users and withdrawals
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR(50);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_ifsc VARCHAR(20);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_holder VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_name VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS upi_id VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS upi_name VARCHAR(100);
+
+ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR(50);
+ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS bank_ifsc VARCHAR(20);
+ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS bank_account_holder VARCHAR(100);
+ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS bank_name VARCHAR(100);
+ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS upi_name VARCHAR(100);

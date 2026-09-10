@@ -259,7 +259,7 @@
             <tr>
               <th>User</th>
               <th>Amount</th>
-              <th>UPI / Address</th>
+              <th>Payout Details (UPI / Bank)</th>
               <th>Status</th>
               <th>Requested</th>
               <th>Actions</th>
@@ -545,10 +545,11 @@
       <div class="detail-row"><span class="detail-key">Action</span><span id="wdr-modal-q" class="detail-val text-sm"></span></div>
       <div class="detail-row"><span class="detail-key">Amount</span><span id="wdr-modal-amt" class="detail-val amount-neg"></span></div>
       <div class="detail-row"><span class="detail-key">Withdrawal ID</span><span id="wdr-modal-id" class="detail-val mono text-xs text-dim"></span></div>
+      <div id="wdr-modal-payout-info" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);"></div>
     </div>
     <div class="field">
       <label class="field-label">Admin Note (optional)</label>
-      <input class="input" type="text" id="wdr-note" placeholder="e.g. Payment sent via UPI">
+      <input class="input" type="text" id="wdr-note" placeholder="e.g. Settled via IMPS / UPI">
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="UI.closeModal('modal-withdrawal')">Cancel</button>

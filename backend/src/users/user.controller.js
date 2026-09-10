@@ -17,6 +17,8 @@ router.get('/profile', authMiddleware, async (req, res, next) => {
 
     const wallet = await walletRepo.getWalletByUserId(req.user.id);
 
+    const payoutMethods = await userRepo.getPayoutMethods(req.user.id);
+
     return res.status(200).json({
       status: 'success',
       data: {
@@ -28,12 +30,99 @@ router.get('/profile', authMiddleware, async (req, res, next) => {
         winningsBalance: wallet.winningsBalance,
         rewardsBalance: wallet.rewardsBalance,
         totalBalance: wallet.totalBalance,
+        payoutMethods: payoutMethods || {
+          bankAccountNumber: '',
+          bankIfsc: '',
+          bankAccountHolder: '',
+          bankName: '',
+          upiId: '',
+          upiName: '',
+          isBankLinked: false,
+          isUpiLinked: false,
+        },
       },
     });
   } catch (err) {
     next(err);
   }
 });
+
+// GET /payout-methods (User's linked Bank Account & UPI ID)
+router.get('/payout-methods', authMiddleware, async (req, res, next) => {
+  try {
+    const payoutMethods = await userRepo.getPayoutMethods(req.user.id);
+    return res.status(200).json({
+      status: 'success',
+      data: payoutMethods || {
+        bankAccountNumber: '',
+        bankIfsc: '',
+        bankAccountHolder: '',
+        bankName: '',
+        upiId: '',
+        upiName: '',
+        isBankLinked: false,
+        isUpiLinked: false,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /payout-methods (Save/Update Bank Account & UPI ID)
+router.post('/payout-methods', authMiddleware, async (req, res, next) => {
+  try {
+    const { bankAccountNumber, bankIfsc, bankAccountHolder, bankName, upiId, upiName } = req.body;
+
+    const payload = {};
+
+    if (bankAccountNumber !== undefined) {
+      const cleanAcc = String(bankAccountNumber).trim();
+      if (cleanAcc && (cleanAcc.length < 8 || cleanAcc.length > 30 || !/^\d+$/.test(cleanAcc))) {
+        return res.status(400).json({ status: 'error', message: 'Invalid Bank Account Number. Must be 8 to 30 digits.' });
+      }
+      payload.bankAccountNumber = cleanAcc;
+    }
+
+    if (bankIfsc !== undefined) {
+      const cleanIfsc = String(bankIfsc).trim().toUpperCase();
+      if (cleanIfsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(cleanIfsc)) {
+        return res.status(400).json({ status: 'error', message: 'Invalid IFSC code format (e.g. SBIN0001234)' });
+      }
+      payload.bankIfsc = cleanIfsc;
+    }
+
+    if (bankAccountHolder !== undefined) {
+      payload.bankAccountHolder = String(bankAccountHolder).trim();
+    }
+
+    if (bankName !== undefined) {
+      payload.bankName = String(bankName).trim();
+    }
+
+    if (upiId !== undefined) {
+      const cleanUpi = String(upiId).trim();
+      if (cleanUpi && !/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(cleanUpi)) {
+        return res.status(400).json({ status: 'error', message: 'Invalid UPI ID format (e.g. username@bank)' });
+      }
+      payload.upiId = cleanUpi;
+    }
+
+    if (upiName !== undefined) {
+      payload.upiName = String(upiName).trim();
+    }
+
+    const updated = await userRepo.updatePayoutMethods(req.user.id, payload);
+    return res.status(200).json({
+      status: 'success',
+      message: 'Payout methods updated successfully',
+      data: updated,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 // GET /dashboard-header (Full structured response for Flutter dashboard header)
 router.get('/dashboard-header', authMiddleware, async (req, res, next) => {

@@ -14,12 +14,24 @@ function parseExactRupeeAmount(value) {
   return amountPaise / 100;
 }
 
+const userRepo = require('../users/user.repository');
+
 /**
  * POST /api/withdrawals — Initiate Manual Withdrawal Request (Funds Atomically Reserved)
  */
 router.post('/', authMiddleware, withdrawalLimiter, async (req, res, next) => {
   try {
-    const { amount, upiId } = req.body;
+    const {
+      amount,
+      paymentMode = 'UPI',
+      upiId,
+      upiName,
+      bankAccountNumber,
+      bankIfsc,
+      bankAccountHolder,
+      bankName,
+    } = req.body;
+
     const amountRupees = parseExactRupeeAmount(amount);
     if (amountRupees === null) {
       return res.status(400).json({
@@ -28,11 +40,52 @@ router.post('/', authMiddleware, withdrawalLimiter, async (req, res, next) => {
       });
     }
 
-    if (!upiId || typeof upiId !== 'string' || !/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upiId.trim())) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Invalid UPI ID format (e.g. username@bank)',
-      });
+    const normalizedMode = (paymentMode || 'UPI').toUpperCase() === 'BANK' ? 'BANK' : 'UPI';
+
+    // If fields are omitted in request, fallback to user's saved profile payout methods
+    let effectiveUpiId = upiId;
+    let effectiveUpiName = upiName;
+    let effectiveBankAcc = bankAccountNumber;
+    let effectiveIfsc = bankIfsc;
+    let effectiveHolder = bankAccountHolder;
+    let effectiveBankName = bankName;
+
+    if (normalizedMode === 'UPI' && !effectiveUpiId) {
+      const userPayout = await userRepo.getPayoutMethods(req.user.id);
+      if (userPayout && userPayout.upiId) {
+        effectiveUpiId = userPayout.upiId;
+        effectiveUpiName = effectiveUpiName || userPayout.upiName;
+      }
+    } else if (normalizedMode === 'BANK' && (!effectiveBankAcc || !effectiveIfsc)) {
+      const userPayout = await userRepo.getPayoutMethods(req.user.id);
+      if (userPayout && userPayout.bankAccountNumber && userPayout.bankIfsc) {
+        effectiveBankAcc = effectiveBankAcc || userPayout.bankAccountNumber;
+        effectiveIfsc = effectiveIfsc || userPayout.bankIfsc;
+        effectiveHolder = effectiveHolder || userPayout.bankAccountHolder;
+        effectiveBankName = effectiveBankName || userPayout.bankName;
+      }
+    }
+
+    if (normalizedMode === 'UPI') {
+      if (!effectiveUpiId || typeof effectiveUpiId !== 'string' || !/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(effectiveUpiId.trim())) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid UPI ID format (e.g. username@bank). Please link your UPI ID.',
+        });
+      }
+    } else {
+      if (!effectiveBankAcc || typeof effectiveBankAcc !== 'string' || !/^\d{8,30}$/.test(effectiveBankAcc.trim())) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid Bank Account Number (must be 8-30 digits). Please link your Bank Account.',
+        });
+      }
+      if (!effectiveIfsc || typeof effectiveIfsc !== 'string' || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(effectiveIfsc.trim().toUpperCase())) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid IFSC Code (e.g. SBIN0001234). Please check and try again.',
+        });
+      }
     }
 
     const clientRequestId = req.body.clientRequestId
@@ -44,7 +97,13 @@ router.post('/', authMiddleware, withdrawalLimiter, async (req, res, next) => {
     const requestData = await withdrawalRepo.createWithdrawalRequest({
       userId: req.user.id,
       amountRupees,
-      upiId: upiId.trim(),
+      paymentMode: normalizedMode,
+      upiId: effectiveUpiId ? effectiveUpiId.trim() : null,
+      upiName: effectiveUpiName ? effectiveUpiName.trim() : null,
+      bankAccountNumber: effectiveBankAcc ? effectiveBankAcc.trim() : null,
+      bankIfsc: effectiveIfsc ? effectiveIfsc.trim().toUpperCase() : null,
+      bankAccountHolder: effectiveHolder ? effectiveHolder.trim() : null,
+      bankName: effectiveBankName ? effectiveBankName.trim() : null,
       clientRequestId,
     });
 
@@ -63,6 +122,7 @@ router.post('/', authMiddleware, withdrawalLimiter, async (req, res, next) => {
     next(err);
   }
 });
+
 
 /**
  * GET /api/withdrawals/:withdrawalId — Fetch Withdrawal Request Status

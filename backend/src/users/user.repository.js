@@ -171,9 +171,84 @@ async function completeOnboarding(userId, username, dateOfBirth) {
   }
 }
 
+/**
+ * Get User Payout Methods (Bank & UPI)
+ */
+async function getPayoutMethods(userId) {
+  try {
+    const res = await query(
+      `SELECT bank_account_number, bank_ifsc, bank_account_holder, bank_name, upi_id, upi_name
+       FROM users WHERE id = $1`,
+      [userId]
+    );
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+    return {
+      bankAccountNumber: row.bank_account_number || '',
+      bankIfsc: row.bank_ifsc || '',
+      bankAccountHolder: row.bank_account_holder || '',
+      bankName: row.bank_name || '',
+      upiId: row.upi_id || '',
+      upiName: row.upi_name || '',
+      isBankLinked: !!(row.bank_account_number && row.bank_ifsc),
+      isUpiLinked: !!(row.upi_id),
+    };
+  } catch (err) {
+    logger.error('Failed to get payout methods in PostgreSQL DB', { userId, error: err.message });
+    throw err;
+  }
+}
+
+/**
+ * Update User Payout Methods (Bank & UPI)
+ */
+async function updatePayoutMethods(userId, { bankAccountNumber, bankIfsc, bankAccountHolder, bankName, upiId, upiName }) {
+  try {
+    const res = await query(
+      `UPDATE users
+       SET bank_account_number = COALESCE($2, bank_account_number),
+           bank_ifsc = COALESCE($3, bank_ifsc),
+           bank_account_holder = COALESCE($4, bank_account_holder),
+           bank_name = COALESCE($5, bank_name),
+           upi_id = COALESCE($6, upi_id),
+           upi_name = COALESCE($7, upi_name),
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING bank_account_number, bank_ifsc, bank_account_holder, bank_name, upi_id, upi_name`,
+      [
+        userId,
+        bankAccountNumber !== undefined ? bankAccountNumber : null,
+        bankIfsc !== undefined ? bankIfsc : null,
+        bankAccountHolder !== undefined ? bankAccountHolder : null,
+        bankName !== undefined ? bankName : null,
+        upiId !== undefined ? upiId : null,
+        upiName !== undefined ? upiName : null,
+      ]
+    );
+    if (res.rows.length === 0) throw new Error('User not found');
+    const row = res.rows[0];
+    return {
+      bankAccountNumber: row.bank_account_number || '',
+      bankIfsc: row.bank_ifsc || '',
+      bankAccountHolder: row.bank_account_holder || '',
+      bankName: row.bank_name || '',
+      upiId: row.upi_id || '',
+      upiName: row.upi_name || '',
+      isBankLinked: !!(row.bank_account_number && row.bank_ifsc),
+      isUpiLinked: !!(row.upi_id),
+    };
+  } catch (err) {
+    logger.error('Failed to update payout methods in PostgreSQL DB', { userId, error: err.message });
+    throw err;
+  }
+}
+
 module.exports = {
   findOrCreateUserByPhone,
   getUserById,
   updateUserProfile,
   completeOnboarding,
+  getPayoutMethods,
+  updatePayoutMethods,
 };
+

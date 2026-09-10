@@ -13,15 +13,34 @@ function toWithdrawalResponse(row, extra = {}) {
     amountPaise: parseInt(row.amount, 10),
     currency: row.currency,
     status: row.status,
-    payoutMethod: row.payout_method,
-    upiId: row.payout_address_or_upi,
+    payoutMethod: row.payout_method || 'UPI',
+    paymentMode: row.payout_method || 'UPI',
+    upiId: row.upi_id || row.payout_address_or_upi || '',
+    upiName: row.upi_name || '',
+    bankAccountNumber: row.bank_account_number || '',
+    bankIfsc: row.bank_ifsc || '',
+    bankAccountHolder: row.bank_account_holder || '',
+    bankName: row.bank_name || '',
+    payoutAddressOrUpi: row.payout_address_or_upi || '',
     requestedAt: row.requested_at,
     createdAt: row.created_at,
     ...extra,
   };
 }
 
-async function createWithdrawalRequest({ userId, amountRupees, upiId, clientRequestId = null, idempotencyKey = null }) {
+async function createWithdrawalRequest({
+  userId,
+  amountRupees,
+  paymentMode = 'UPI',
+  upiId,
+  upiName,
+  bankAccountNumber,
+  bankIfsc,
+  bankAccountHolder,
+  bankName,
+  clientRequestId = null,
+  idempotencyKey = null,
+}) {
   const amountRupeeNum = Number(amountRupees);
   const amountPaise = Number.isSafeInteger(Math.round(amountRupeeNum * 100)) ? Math.round(amountRupeeNum * 100) : 0;
   if (!Number.isFinite(amountRupeeNum) || amountPaise <= 0) {
@@ -30,7 +49,7 @@ async function createWithdrawalRequest({ userId, amountRupees, upiId, clientRequ
     throw err;
   }
 
-  const minRupees = config.withdrawal.minAmountRupees || 100;
+  const minRupees = config.withdrawal.minAmountRupees || 25;
   const maxRupees = config.withdrawal.maxAmountRupees || 50000;
 
   if (amountPaise < Math.round(minRupees * 100) || amountPaise > Math.round(maxRupees * 100)) {
@@ -39,13 +58,40 @@ async function createWithdrawalRequest({ userId, amountRupees, upiId, clientRequ
     throw err;
   }
 
-  if (!upiId || typeof upiId !== 'string' || !/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upiId.trim())) {
-    const err = new Error('Invalid UPI ID format (e.g. username@bank)');
-    err.statusCode = 400;
-    throw err;
+  const normalizedMode = (paymentMode || 'UPI').toUpperCase() === 'BANK' ? 'BANK' : 'UPI';
+  let payoutAddress = '';
+  let cleanUpi = '';
+  let cleanUpiName = upiName ? String(upiName).trim() : '';
+  let cleanBankAcc = '';
+  let cleanIfsc = '';
+  let cleanHolder = bankAccountHolder ? String(bankAccountHolder).trim() : '';
+  let cleanBankName = bankName ? String(bankName).trim() : '';
+
+  if (normalizedMode === 'UPI') {
+    if (!upiId || typeof upiId !== 'string' || !/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upiId.trim())) {
+      const err = new Error('Invalid UPI ID format (e.g. username@bank)');
+      err.statusCode = 400;
+      throw err;
+    }
+    cleanUpi = upiId.trim();
+    payoutAddress = cleanUpi;
+  } else {
+    // BANK Transfer
+    if (!bankAccountNumber || typeof bankAccountNumber !== 'string' || !/^\d{8,30}$/.test(bankAccountNumber.trim())) {
+      const err = new Error('Invalid Bank Account Number (must be 8-30 digits)');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (!bankIfsc || typeof bankIfsc !== 'string' || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(bankIfsc.trim().toUpperCase())) {
+      const err = new Error('Invalid IFSC Code format (e.g. SBIN0001234)');
+      err.statusCode = 400;
+      throw err;
+    }
+    cleanBankAcc = bankAccountNumber.trim();
+    cleanIfsc = bankIfsc.trim().toUpperCase();
+    payoutAddress = `${cleanBankAcc} (${cleanIfsc})`;
   }
 
-  const cleanUpi = upiId.trim();
   const withdrawalId = `WDR_${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
   const id = `wdr_${crypto.randomUUID()}`;
 
@@ -78,19 +124,60 @@ async function createWithdrawalRequest({ userId, amountRupees, upiId, clientRequ
       referenceType: 'WITHDRAWAL',
       referenceId: withdrawalId,
       idempotencyKey: effectiveIdempKey,
-      metadata: { upiId: cleanUpi },
+      metadata: {
+        paymentMode: normalizedMode,
+        upiId: cleanUpi,
+        upiName: cleanUpiName,
+        bankAccountNumber: cleanBankAcc,
+        bankIfsc: cleanIfsc,
+        bankAccountHolder: cleanHolder,
+        bankName: cleanBankName,
+      },
     });
 
     const res = await client.query(
-      `INSERT INTO withdrawals (id, withdrawal_id, user_id, amount, currency, status, payout_method, payout_address_or_upi, upi_id, idempotency_key, requested_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, 'INR', 'PENDING', 'UPI', $5, $5, $6, NOW(), NOW(), NOW())
+      `INSERT INTO withdrawals (
+         id, withdrawal_id, user_id, amount, currency, status,
+         payout_method, payout_address_or_upi, upi_id, upi_name,
+         bank_account_number, bank_ifsc, bank_account_holder, bank_name,
+         idempotency_key, requested_at, created_at, updated_at
+       )
+       VALUES ($1, $2, $3, $4, 'INR', 'PENDING', $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), NOW())
        RETURNING *`,
-      [id, withdrawalId, userId, amountPaise, cleanUpi, effectiveIdempKey]
+      [
+        id,
+        withdrawalId,
+        userId,
+        amountPaise,
+        normalizedMode,
+        payoutAddress,
+        cleanUpi || null,
+        cleanUpiName || null,
+        cleanBankAcc || null,
+        cleanIfsc || null,
+        cleanHolder || null,
+        cleanBankName || null,
+        effectiveIdempKey,
+      ]
+    );
+
+    // Also auto-sync user profile linked methods so future withdrawals have it remembered
+    await client.query(
+      `UPDATE users
+       SET bank_account_number = COALESCE(NULLIF($2, ''), bank_account_number),
+           bank_ifsc = COALESCE(NULLIF($3, ''), bank_ifsc),
+           bank_account_holder = COALESCE(NULLIF($4, ''), bank_account_holder),
+           bank_name = COALESCE(NULLIF($5, ''), bank_name),
+           upi_id = COALESCE(NULLIF($6, ''), upi_id),
+           upi_name = COALESCE(NULLIF($7, ''), upi_name),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [userId, cleanBankAcc, cleanIfsc, cleanHolder, cleanBankName, cleanUpi, cleanUpiName]
     );
 
     await client.query('COMMIT');
     const row = res.rows[0];
-    logger.info('Created PENDING withdrawal request & reserved funds in PostgreSQL', { userId, withdrawalId: row.withdrawal_id, amountPaise });
+    logger.info('Created PENDING withdrawal request & reserved funds in PostgreSQL', { userId, withdrawalId: row.withdrawal_id, amountPaise, paymentMode: normalizedMode });
 
     const availPaise = parseInt(reserveResult.wallet.available_balance, 10);
     const resvPaise = parseInt(reserveResult.wallet.reserved_balance, 10);
@@ -168,8 +255,15 @@ async function getPendingWithdrawalsForAdmin({ limit = 50, offset = 0 } = {}) {
         amountRupees: amtPaise / 100,
         currency: row.currency,
         status: row.status,
-        payoutMethod: row.payout_method,
-        upiId: row.payout_address_or_upi,
+        payoutMethod: row.payout_method || 'UPI',
+        paymentMode: row.payout_method || 'UPI',
+        upiId: row.upi_id || (row.payout_method === 'UPI' ? row.payout_address_or_upi : ''),
+        upiName: row.upi_name || '',
+        bankAccountNumber: row.bank_account_number || '',
+        bankIfsc: row.bank_ifsc || '',
+        bankAccountHolder: row.bank_account_holder || '',
+        bankName: row.bank_name || '',
+        payoutAddressOrUpi: row.payout_address_or_upi || '',
         payout_address_or_upi: row.payout_address_or_upi,
         requestedAt: row.requested_at,
         createdAt: row.created_at,
@@ -180,6 +274,7 @@ async function getPendingWithdrawalsForAdmin({ limit = 50, offset = 0 } = {}) {
     throw err;
   }
 }
+
 
 async function confirmWithdrawalByAdmin({ withdrawalId, adminId = 'admin_sys', adminNote = '' }) {
   const client = await getClient();

@@ -38,7 +38,17 @@ router.get('/:userId', async (req, res, next) => {
     const reserved = parseInt(w.reserved_balance || 0, 10);
     const txRes = await query(`SELECT id, type, amount, direction, created_at, reference_id FROM wallet_ledger WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`, [userId]);
     const recentTransactions = txRes.rows.map((t) => ({ id: t.id, type: t.type, amount: parseInt(t.amount || 0, 10) / 100, direction: t.direction, createdAt: t.created_at, referenceId: t.reference_id }));
-    res.status(200).json({ status: 'success', data: { user: { id: u.id, username: u.username, phone: u.phone, avatarPath: u.avatar_path, isBlocked: !!u.is_blocked, blockedAt: u.blocked_at, blockedReason: u.blocked_reason, kycStatus: u.kyc_status || 'NOT_SUBMITTED', createdAt: u.created_at }, wallet: { availableBalance: available / 100, reservedBalance: reserved / 100, depositBalance: parseInt(w.deposit_balance || 0, 10) / 100, winningsBalance: parseInt(w.winnings_balance || 0, 10) / 100, rewardsBalance: parseInt(w.rewards_balance || 0, 10) / 100, totalBalance: (available + reserved) / 100 }, recentTransactions, recentBets: [] } });
+    const payoutMethods = {
+      bankAccountNumber: u.bank_account_number || '',
+      bankIfsc: u.bank_ifsc || '',
+      bankAccountHolder: u.bank_account_holder || '',
+      bankName: u.bank_name || '',
+      upiId: u.upi_id || '',
+      upiName: u.upi_name || '',
+      isBankLinked: !!(u.bank_account_number && u.bank_ifsc),
+      isUpiLinked: !!(u.upi_id),
+    };
+    res.status(200).json({ status: 'success', data: { user: { id: u.id, username: u.username, phone: u.phone, avatarPath: u.avatar_path, isBlocked: !!u.is_blocked, blockedAt: u.blocked_at, blockedReason: u.blocked_reason, kycStatus: u.kyc_status || 'NOT_SUBMITTED', createdAt: u.created_at, payoutMethods }, wallet: { availableBalance: available / 100, reservedBalance: reserved / 100, depositBalance: parseInt(w.deposit_balance || 0, 10) / 100, winningsBalance: parseInt(w.winnings_balance || 0, 10) / 100, rewardsBalance: parseInt(w.rewards_balance || 0, 10) / 100, totalBalance: (available + reserved) / 100 }, recentTransactions, recentBets: [] } });
   } catch (err) { logger.error('Admin user detail failed', { userId: req.params.userId, error: err.message }); next(err); }
 });
 

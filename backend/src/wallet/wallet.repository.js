@@ -20,7 +20,7 @@ async function getWalletByUserId(userId) {
       depositBalance: dep / 100, 
       winningsBalance: win / 100, 
       rewardsBalance: rew / 100, 
-      totalBalance: avail / 100, 
+      totalBalance: (avail + resv) / 100, 
       availablePaise: avail, 
       reservedPaise: resv, 
       depositPaise: dep, 

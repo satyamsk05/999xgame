@@ -30,6 +30,10 @@ export class Popup {
       this.showWinToast(winAmount);
     });
 
+    eventBus.on('SHOW_TOAST', ({ message, isError = false }) => {
+      this.showToast(message, isError);
+    });
+
     if (this.mainChipBtnEl) {
       this.mainChipBtnEl.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -106,7 +110,22 @@ export class Popup {
 
   showWinToast(winAmount) {
     if (!this.winToastEl) return;
+    this.winToastEl.style.background = 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)';
+    this.winToastEl.style.borderColor = '#4ade80';
     this.winToastEl.innerText = `🎉 YOU WON ${formatCurrency(winAmount)}!`;
+    this.winToastEl.classList.add('show');
+    setTimeout(() => {
+      this.winToastEl.classList.remove('show');
+    }, 2500);
+  }
+
+  showToast(message, isError = false) {
+    if (!this.winToastEl) return;
+    this.winToastEl.style.background = isError 
+      ? 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)' 
+      : 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)';
+    this.winToastEl.style.borderColor = isError ? '#f87171' : '#c084fc';
+    this.winToastEl.innerText = message;
     this.winToastEl.classList.add('show');
     setTimeout(() => {
       this.winToastEl.classList.remove('show');
