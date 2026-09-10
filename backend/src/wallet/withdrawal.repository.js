@@ -155,13 +155,26 @@ async function getPendingWithdrawalsForAdmin({ limit = 50, offset = 0 } = {}) {
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
-    return res.rows.map((row) => ({
-      id: row.id, withdrawalId: row.withdrawal_id, userId: row.user_id,
-      userPhone: row.user_phone, userUsername: row.user_username,
-      amountRupees: parseInt(row.amount, 10) / 100, amountPaise: parseInt(row.amount, 10),
-      currency: row.currency, status: row.status, payoutMethod: row.payout_method,
-      upiId: row.payout_address_or_upi, requestedAt: row.requested_at, createdAt: row.created_at,
-    }));
+    return res.rows.map((row) => {
+      const amtPaise = parseInt(row.amount, 10);
+      return {
+        id: row.id,
+        withdrawalId: row.withdrawal_id,
+        userId: row.user_id,
+        userPhone: row.user_phone,
+        userUsername: row.user_username,
+        amount: amtPaise,
+        amountPaise: amtPaise,
+        amountRupees: amtPaise / 100,
+        currency: row.currency,
+        status: row.status,
+        payoutMethod: row.payout_method,
+        upiId: row.payout_address_or_upi,
+        payout_address_or_upi: row.payout_address_or_upi,
+        requestedAt: row.requested_at,
+        createdAt: row.created_at,
+      };
+    });
   } catch (err) {
     logger.error('Failed to fetch pending withdrawals for admin', { error: err.message });
     throw err;

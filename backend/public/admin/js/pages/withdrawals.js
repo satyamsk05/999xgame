@@ -21,7 +21,7 @@ const PageWithdrawals = (() => {
     }
 
     tbody.innerHTML = wdrs.map(w => {
-      const amt    = parseInt(w.amount || 0, 10);
+      const amt    = parseInt(w.amount || w.amountPaise || (w.amountRupees ? w.amountRupees * 100 : 0), 10);
       const upi    = w.payout_address_or_upi || w.upi_id || w.metadata?.upiId || '—';
       const uid    = w.user_id || w.userId || '—';
       const status = w.status || 'PENDING';

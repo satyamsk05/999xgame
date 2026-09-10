@@ -190,15 +190,40 @@ async function reserveFunds(clientOrUserId, amountPaise, options = {}) {
     const wallet = await lockWallet(client, uId);
     const beforeAvailable = parseInt(wallet.available_balance || 0, 10);
     const beforeReserved = parseInt(wallet.reserved_balance || 0, 10);
+    const winningsBalance = parseInt(wallet.winnings_balance || 0, 10);
+    const depositBalance = parseInt(wallet.deposit_balance || 0, 10);
+    const rewardsBalance = parseInt(wallet.rewards_balance || 0, 10);
+
     if (beforeAvailable < amount) throw new Error(`Insufficient funds to reserve: available ₹${(beforeAvailable / 100).toFixed(2)}, requested ₹${(amount / 100).toFixed(2)}`);
+    
+    // Deduct from spendable buckets (winnings first, then deposit, then rewards)
+    let remaining = amount;
+    const winningsDebit = Math.min(winningsBalance, remaining);
+    remaining -= winningsDebit;
+    const depositDebit = Math.min(depositBalance, remaining);
+    remaining -= depositDebit;
+    const rewardsDebit = Math.min(rewardsBalance, remaining);
+    remaining -= rewardsDebit;
+
     const afterAvailable = beforeAvailable - amount;
     const afterReserved = beforeReserved + amount;
-    const updateRes = await client.query('UPDATE wallets SET available_balance = $2, reserved_balance = $3, version = version + 1, updated_at = NOW() WHERE id = $1 RETURNING *', [wallet.id, afterAvailable, afterReserved]);
+    const updateRes = await client.query(
+      `UPDATE wallets 
+       SET available_balance = $2, 
+           reserved_balance = $3, 
+           winnings_balance = winnings_balance - $4,
+           deposit_balance = deposit_balance - $5,
+           rewards_balance = rewards_balance - $6,
+           version = version + 1, 
+           updated_at = NOW() 
+       WHERE id = $1 RETURNING *`,
+      [wallet.id, afterAvailable, afterReserved, winningsDebit, depositDebit, rewardsDebit]
+    );
     const ledgerId = `ledg_${crypto.randomUUID()}`;
     const ledgerRes = await client.query(
       `INSERT INTO wallet_ledger (id, user_id, wallet_id, type, amount, direction, reference_type, reference_id, balance_before, balance_after, status, idempotency_key, metadata, created_at)
        VALUES ($1, $2, $3, 'WITHDRAW_RESERVE', $4, 'DEBIT', $5, $6, $7, $8, 'COMPLETED', $9, $10, NOW()) RETURNING *`,
-      [ledgerId, uId, wallet.id, amount, referenceType, referenceId, beforeAvailable, afterAvailable, idempotencyKey, JSON.stringify(metadata)]
+      [ledgerId, uId, wallet.id, amount, referenceType, referenceId, beforeAvailable, afterAvailable, idempotencyKey, JSON.stringify({ ...metadata, bucketDebit: { winnings: winningsDebit, deposit: depositDebit, rewards: rewardsDebit } })]
     );
     return { wallet: updateRes.rows[0], ledger: ledgerRes.rows[0] };
   });
@@ -218,9 +243,20 @@ async function releaseReservedFunds(clientOrUserId, amountPaise, options = {}) {
     const beforeAvailable = parseInt(wallet.available_balance || 0, 10);
     const beforeReserved = parseInt(wallet.reserved_balance || 0, 10);
     if (beforeReserved < amount) throw new Error(`Cannot release funds: reserved balance ₹${(beforeReserved / 100).toFixed(2)} is less than requested ₹${(amount / 100).toFixed(2)}`);
+    
+    // Return released funds back to available and winnings balances
     const afterAvailable = beforeAvailable + amount;
     const afterReserved = beforeReserved - amount;
-    const updateRes = await client.query('UPDATE wallets SET available_balance = $2, reserved_balance = $3, version = version + 1, updated_at = NOW() WHERE id = $1 RETURNING *', [wallet.id, afterAvailable, afterReserved]);
+    const updateRes = await client.query(
+      `UPDATE wallets 
+       SET available_balance = $2, 
+           reserved_balance = $3, 
+           winnings_balance = winnings_balance + $4,
+           version = version + 1, 
+           updated_at = NOW() 
+       WHERE id = $1 RETURNING *`,
+      [wallet.id, afterAvailable, afterReserved, amount]
+    );
     const ledgerId = `ledg_${crypto.randomUUID()}`;
     const ledgerRes = await client.query(
       `INSERT INTO wallet_ledger (id, user_id, wallet_id, type, amount, direction, reference_type, reference_id, balance_before, balance_after, status, idempotency_key, metadata, created_at)
