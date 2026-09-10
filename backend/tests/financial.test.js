@@ -117,12 +117,17 @@ test('Financial Service Reserve, Finalize, & Release Operations', async () => {
 test('Financial Service Idempotency & Duplicate Request Protection', async () => {
   const client = createMockClient();
   const userId = 'usr_fin_test_3';
-  const res1 = await financialService.creditWallet(client, 1000, { userId, idempotencyKey: 'key_unique_100' });
+  const res1 = await financialService.creditWallet(client, 1000, { userId, idempotencyKey: 'key_unique_100', referenceType: 'DEPOSIT', referenceId: 'dep_original' });
   assert.strictEqual(res1.wallet.available_balance, 1000);
   assert.strictEqual(res1.wallet.deposit_balance, 1000);
   assert.strictEqual(res1.duplicate, undefined);
-  const res2 = await financialService.creditWallet(client, 1000, { userId, idempotencyKey: 'key_unique_100' });
+
+  // A retry may reconstruct a different reference after a network timeout. The
+  // idempotency key still represents the same financial operation and must not
+  // apply the credit a second time or fail on the ledger's unique constraint.
+  const res2 = await financialService.creditWallet(client, 1000, { userId, idempotencyKey: 'key_unique_100', referenceType: 'DEPOSIT', referenceId: 'dep_reconstructed' });
   assert.strictEqual(res2.duplicate, true);
+  assert.strictEqual(res2.ledger.reference_id, 'dep_original');
   assert.strictEqual(client.state.wallets[userId].available_balance, 1000);
   assert.strictEqual(client.state.wallets[userId].deposit_balance, 1000);
 });
