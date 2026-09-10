@@ -12,24 +12,10 @@ function parseRedisConfig() {
     try {
       const url = new URL(rawUrl);
       if (!['redis:', 'rediss:'].includes(url.protocol)) throw new Error('REDIS_URL must use redis:// or rediss://');
-      return {
-        url: rawUrl,
-        host: url.hostname,
-        port: parseInt(url.port || '6379', 10),
-        password: decodeURIComponent(url.password || ''),
-        tls: url.protocol === 'rediss:',
-      };
-    } catch (err) {
-      throw new Error(`Invalid REDIS_URL: ${err.message}`);
-    }
+      return { url: rawUrl, host: url.hostname, port: parseInt(url.port || '6379', 10), password: decodeURIComponent(url.password || ''), tls: url.protocol === 'rediss:' };
+    } catch (err) { throw new Error(`Invalid REDIS_URL: ${err.message}`); }
   }
-  return {
-    url: null,
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379', 10),
-    password: process.env.REDIS_PASSWORD || '',
-    tls: false,
-  };
+  return { url: null, host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379', 10), password: process.env.REDIS_PASSWORD || '', tls: false };
 }
 
 const config = {
@@ -42,57 +28,23 @@ const config = {
   maintenanceMode: process.env.MAINTENANCE_MODE === 'true',
   minimumAppVersion: process.env.MINIMUM_APP_VERSION || '1.0.0',
   onlineTickerRingColors: csv(process.env.ONLINE_TICKER_RING_COLORS, ['#FFC107', '#FF9800', '#4FC3F7']),
-  onlineTickerAvatars: csv(process.env.ONLINE_TICKER_AVATARS, [
-    '/avatars/avatar_1.png', '/avatars/avatar_2.png', '/avatars/avatar_3.png',
-    '/avatars/avatar_7.png', '/avatars/avatar_8.png', '/avatars/avatar_9.png',
-  ]),
-  db: {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    name: process.env.DB_NAME || 'ingames_db',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    ssl: process.env.DB_SSL === 'true',
-    sslRejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
-    sslCa: process.env.DB_SSL_CA || '',
-  },
+  onlineTickerAvatars: csv(process.env.ONLINE_TICKER_AVATARS, ['/avatars/avatar_1.png', '/avatars/avatar_2.png', '/avatars/avatar_3.png', '/avatars/avatar_7.png', '/avatars/avatar_8.png', '/avatars/avatar_9.png']),
+  db: { host: process.env.DB_HOST || 'localhost', port: parseInt(process.env.DB_PORT || '5432', 10), name: process.env.DB_NAME || 'ingames_db', user: process.env.DB_USER || 'postgres', password: process.env.DB_PASSWORD || 'postgres', ssl: process.env.DB_SSL === 'true', sslRejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false', sslCa: process.env.DB_SSL_CA || '' },
   redis: parseRedisConfig(),
   jwtSecret: process.env.JWT_SECRET || 'dev_jwt_secret_key_999x',
   adminJwtSecret: process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'dev_admin_jwt_secret_key_999x',
   adminSecret: process.env.ADMIN_SECRET || 'dev_admin_secret_key_999x',
-  jwt: {
-    issuer: process.env.JWT_ISSUER || '999xgame',
-    audience: process.env.JWT_AUDIENCE || '999xgame-app',
-    adminAudience: process.env.ADMIN_JWT_AUDIENCE || '999xgame-admin',
-    algorithm: 'HS256',
-    userTtlSeconds: parseInt(process.env.JWT_TTL_SECONDS || String(7 * 24 * 3600), 10),
-    adminTtlSeconds: parseInt(process.env.ADMIN_JWT_TTL_SECONDS || String(12 * 3600), 10),
-  },
-  adminBreakGlass: {
-    enabled: process.env.ADMIN_BREAK_GLASS_ENABLED === 'true',
-    secret: process.env.ADMIN_BREAK_GLASS_SECRET || '',
-  },
+  jwt: { issuer: process.env.JWT_ISSUER || '999xgame', audience: process.env.JWT_AUDIENCE || '999xgame-app', adminAudience: process.env.ADMIN_JWT_AUDIENCE || '999xgame-admin', algorithm: 'HS256', userTtlSeconds: parseInt(process.env.JWT_TTL_SECONDS || String(7 * 24 * 3600), 10), adminTtlSeconds: parseInt(process.env.ADMIN_JWT_TTL_SECONDS || String(12 * 3600), 10) },
+  adminBreakGlass: { enabled: process.env.ADMIN_BREAK_GLASS_ENABLED === 'true', secret: process.env.ADMIN_BREAK_GLASS_SECRET || '' },
   logginAppKey: process.env.LOGGIN_APP_KEY || 'loggin_app_key_dev',
-  telegram: {
-    botToken: process.env.TELEGRAM_BOT_TOKEN || '',
-    chatId: process.env.TELEGRAM_CHAT_ID || '',
-  },
-  deposit: {
-    minAmountRupees: 10,
-    maxAmountRupees: 100000,
-    upiId: process.env.PAYMENT_UPI_ID || 'pay.ingames@bank',
-    merchantName: process.env.PAYMENT_MERCHANT_NAME || '999x InGames Platform',
-  },
-  withdrawal: {
-    minAmountRupees: 100,
-    maxAmountRupees: 50000,
-  },
+  telegram: { botToken: process.env.TELEGRAM_BOT_TOKEN || '', chatId: process.env.TELEGRAM_CHAT_ID || '' },
+  deposit: { minAmountRupees: 10, maxAmountRupees: 100000, upiId: process.env.PAYMENT_UPI_ID || 'pay.ingames@bank', merchantName: process.env.PAYMENT_MERCHANT_NAME || '999x InGames Platform', webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || '' },
+  withdrawal: { minAmountRupees: 100, maxAmountRupees: 50000 },
 };
 
 function validateConfig() {
   const errors = [];
   const isProd = config.nodeEnv === 'production';
-
   if (isProd) {
     if (!process.env.JWT_SECRET || config.jwtSecret === 'dev_jwt_secret_key_999x') errors.push('JWT_SECRET must be explicitly set to a strong value in production.');
     if (!process.env.ADMIN_JWT_SECRET || config.adminJwtSecret === 'dev_admin_jwt_secret_key_999x') errors.push('ADMIN_JWT_SECRET must be explicitly set to a strong value in production.');
@@ -106,10 +58,10 @@ function validateConfig() {
     if (config.trustProxy !== true) errors.push('TRUST_PROXY=true is required when running behind an AWS load balancer/proxy.');
     if (!process.env.PAYMENT_UPI_ID) errors.push('PAYMENT_UPI_ID must be explicitly configured in production.');
     if (!process.env.PAYMENT_MERCHANT_NAME) errors.push('PAYMENT_MERCHANT_NAME must be explicitly configured in production.');
+    if (!process.env.PAYMENT_WEBHOOK_SECRET || config.deposit.webhookSecret.length < 32) errors.push('PAYMENT_WEBHOOK_SECRET must be at least 32 characters when provider webhooks are enabled in production.');
     if (!process.env.MINIMUM_APP_VERSION) errors.push('MINIMUM_APP_VERSION must be explicitly configured in production.');
     if (!process.env.DB_SSL || config.db.ssl !== true) errors.push('DB_SSL=true is required in production.');
   }
-
   if (errors.length) throw new Error(`FATAL configuration error(s):\n- ${errors.join('\n- ')}`);
 }
 
