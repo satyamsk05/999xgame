@@ -16,8 +16,22 @@ async function initRealtime(socketServer) {
   try {
     publisher = createClient({ url: redisUrl(), socket: { connectTimeout: 3000, reconnectStrategy: (retries) => (retries > 3 ? false : Math.min(retries * 100, 1000)) } });
     subscriber = publisher.duplicate();
+
+    function updateState() {
+      ready = !!(publisher?.isOpen && subscriber?.isOpen);
+    }
+
+    publisher.on('ready', () => { updateState(); logger.info('Realtime Redis publisher ready'); });
+    subscriber.on('ready', () => { updateState(); logger.info('Realtime Redis subscriber ready'); });
+    publisher.on('connect', updateState);
+    subscriber.on('connect', updateState);
+    publisher.on('reconnecting', () => { ready = false; });
+    subscriber.on('reconnecting', () => { ready = false; });
+    publisher.on('end', () => { ready = false; });
+    subscriber.on('end', () => { ready = false; });
     publisher.on('error', (err) => { ready = false; logger.warn('Realtime Redis publisher error', { error: err.message }); });
     subscriber.on('error', (err) => { ready = false; logger.warn('Realtime Redis subscriber error', { error: err.message }); });
+
     await Promise.all([publisher.connect(), subscriber.connect()]);
     await subscriber.subscribe(CHANNEL, (message) => {
       try {
@@ -27,7 +41,7 @@ async function initRealtime(socketServer) {
         else io?.emit(event.name, event.payload);
       } catch (err) { logger.warn('Invalid realtime Redis message ignored', { error: err.message }); }
     });
-    ready = true;
+    updateState();
     logger.info('Realtime Redis fanout enabled');
     return true;
   } catch (err) {
@@ -57,7 +71,13 @@ async function closeRealtime() {
   ready = false;
   const clients = [subscriber, publisher].filter(Boolean);
   subscriber = null; publisher = null;
-  for (const client of clients) { try { if (client.isOpen) await client.quit(); } catch (_) { try { client.disconnect(); } catch (_) {} } }
+  for (const client of clients) {
+    try {
+      if (client.isOpen) await client.quit();
+    } catch (_) {
+      try { if (client?.isOpen) await client.disconnect(); } catch (_) {}
+    }
+  }
 }
 
 module.exports = { initRealtime, emit, emitToUser, closeRealtime, CHANNEL };

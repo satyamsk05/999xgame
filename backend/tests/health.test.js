@@ -31,7 +31,7 @@ test('Health, Readiness & Core API Endpoints Unit Test', async (t) => {
     const gamesBody = await gamesRes.json();
     assert.strictEqual(gamesBody.status, 'success');
     assert.strictEqual(Array.isArray(gamesBody.data), true);
-    assert.strictEqual(gamesBody.data[0].id, 'seven_up_down');
+    assert.strictEqual(gamesBody.data.some((g) => g.id === 'seven_up_down'), true);
 
     // Test /api/wallet with a real user's Bearer token
     const walletRes = await fetch(`${base}/api/wallet`, {

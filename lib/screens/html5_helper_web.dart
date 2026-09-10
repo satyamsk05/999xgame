@@ -12,6 +12,8 @@ void registerIframeViewFactory(String viewId, String gameUrl) {
       iframe.style.border = 'none';
       iframe.style.width = '100%';
       iframe.style.height = '100%';
+      iframe.style.display = 'block';
+      iframe.allow = 'autoplay; fullscreen; clipboard-write';
       return iframe;
     },
   );

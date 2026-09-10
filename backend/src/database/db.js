@@ -25,9 +25,9 @@ const pool = new Pool({
   user: config.db.user,
   password: config.db.password,
   ssl,
-  max: 20,
+  max: 10,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000,
   statement_timeout: parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || '15000', 10),
   query_timeout: parseInt(process.env.DB_QUERY_TIMEOUT_MS || '20000', 10),
 });
@@ -128,7 +128,11 @@ async function query(text, params) {
     logger.debug('Executed DB Query', { duration: Date.now() - start, rows: res.rowCount });
     return res;
   } catch (err) {
-    if (isConnectionError(err)) dbState.ready = false;
+    if (isConnectionError(err)) {
+      dbState.ready = false;
+      logger.warn('DB Query failed with connection error', { error: err.message || String(err), code: err.code });
+      throw databaseUnavailableError(err);
+    }
     logger.warn('DB Query failed', { error: err.message || String(err), code: err.code });
     throw err;
   }

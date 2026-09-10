@@ -28,57 +28,92 @@ class CustomBottomNavBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-          child: SizedBox(
-            height: 64,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Center(
-                    child: _NavBarItem(
-                      index: 0,
-                      isSelected: selectedIndex == 0,
-                      label: 'Home',
-                      size: 27.3,
-                      onTap: () => onItemSelected(0),
+        child: Container(
+          height: 68,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final tabWidth = constraints.maxWidth / 4;
+              const indicatorHeight = 52.0;
+              final indicatorWidth = (tabWidth * 0.88).clamp(42.0, 68.0);
+              final leftOffset = (selectedIndex * tabWidth) + ((tabWidth - indicatorWidth) / 2);
+
+              return Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  // Smooth Sliding Active Indicator Box
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                    left: leftOffset,
+                    top: (68 - indicatorHeight) / 2,
+                    width: indicatorWidth,
+                    height: indicatorHeight,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          width: 1.0,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.12),
+                            blurRadius: 10,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: Center(
-                    child: _NavBarItem(
-                      index: 1,
-                      isSelected: selectedIndex == 1,
-                      label: 'Share',
-                      size: 27.3,
-                      onTap: () => onItemSelected(1),
-                    ),
+
+                  // Nav Items Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _NavBarItem(
+                          index: 0,
+                          isSelected: selectedIndex == 0,
+                          label: 'Home',
+                          size: 24.0,
+                          onTap: () => onItemSelected(0),
+                        ),
+                      ),
+                      Expanded(
+                        child: _NavBarItem(
+                          index: 1,
+                          isSelected: selectedIndex == 1,
+                          label: 'Share',
+                          size: 24.0,
+                          onTap: () => onItemSelected(1),
+                        ),
+                      ),
+                      Expanded(
+                        child: _NavBarItem(
+                          index: 2,
+                          isSelected: selectedIndex == 2,
+                          label: 'Add Cash',
+                          size: 24.0,
+                          onTap: () => onItemSelected(2),
+                        ),
+                      ),
+                      Expanded(
+                        child: _NavBarItem(
+                          index: 3,
+                          isSelected: selectedIndex == 3,
+                          label: 'Profile',
+                          size: 24.0,
+                          onTap: () => onItemSelected(3),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                Expanded(
-                  child: Center(
-                    child: _NavBarItem(
-                      index: 2,
-                      isSelected: selectedIndex == 2,
-                      label: 'Add Cash',
-                      size: 27.3,
-                      onTap: () => onItemSelected(2),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Center(
-                    child: _NavBarItem(
-                      index: 3,
-                      isSelected: selectedIndex == 3,
-                      label: 'Profile',
-                      size: 27.3,
-                      onTap: () => onItemSelected(3),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+                ],
+              );
+            },
           ),
+        ),
       ),
     );
   }
@@ -308,44 +343,34 @@ class _NavBarItemState extends State<_NavBarItem> with SingleTickerProviderState
     return GestureDetector(
       onTap: _handleTap,
       behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        decoration: widget.isSelected
-            ? BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ],
-              )
-            : BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 68,
+        color: Colors.transparent,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Opacity(
+                opacity: widget.isSelected ? 1.0 : 0.55,
+                child: _buildAnimatedSvgIcon(hexColor),
               ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Opacity(
-              opacity: widget.isSelected ? 1.0 : 0.5,
-              child: _buildAnimatedSvgIcon(hexColor),
-            ),
-            const SizedBox(height: 3),
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
-              style: GoogleFonts.poppins(
-                color: color,
-                fontSize: 11,
-                fontWeight: widget.isSelected ? FontWeight.w700 : FontWeight.w500,
+              const SizedBox(height: 2),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 250),
+                style: GoogleFonts.poppins(
+                  color: color,
+                  fontSize: 10.5,
+                  fontWeight: widget.isSelected ? FontWeight.w700 : FontWeight.w500,
+                ),
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              child: Text(widget.label),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

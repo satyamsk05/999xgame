@@ -147,6 +147,25 @@ function validateUpiId(value) {
   return value.trim();
 }
 
+function validateDateOfBirth(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const dateStr = String(value).trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) throw badRequest('dateOfBirth must be a valid date in YYYY-MM-DD format');
+  const [_, yStr, mStr, dStr] = match;
+  const year = parseInt(yStr, 10), month = parseInt(mStr, 10), day = parseInt(dStr, 10);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    throw badRequest('dateOfBirth is an invalid calendar date');
+  }
+  const now = new Date();
+  if (date > now) throw badRequest('dateOfBirth cannot be in the future');
+  const ageYears = (now - date) / (365.25 * 24 * 60 * 60 * 1000);
+  if (ageYears < 18) throw badRequest('You must be at least 18 years old to play');
+  if (ageYears > 120) throw badRequest('dateOfBirth is outside valid range');
+  return dateStr;
+}
+
 /** Crush cashout request: only betId is trusted (server computes the multiplier). */
 function validateCashoutRequest(body = {}) {
   const betId = body && body.betId;
@@ -170,4 +189,5 @@ module.exports = {
   validateUtr,
   validateUpiId,
   validateCashoutRequest,
+  validateDateOfBirth,
 };

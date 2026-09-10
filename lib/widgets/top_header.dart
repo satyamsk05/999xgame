@@ -3,7 +3,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../theme/app_colors.dart';
-import '../screens/add_cash_screen.dart';
 import 'shimmer_loading.dart';
 
 class TopHeader extends StatelessWidget {
@@ -17,10 +16,6 @@ class TopHeader extends StatelessWidget {
 
   static String _cleanPath(String? p) => (p == null || p.isEmpty) ? '/avatars/avatar_1.png' : p;
 
-  void _openDeposit(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => AddCashScreen(currentBalance: balance, onAddCashCompleted: (_) {})));
-  }
-
   @override
   Widget build(BuildContext context) {
     if (isLoading) return Container(padding: const EdgeInsets.only(top:18,bottom:12,left:16,right:16), child: const Row(children:[ShimmerBox(width:58,height:58,borderRadius:29),SizedBox(width:14),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[ShimmerBox(width:110,height:16,borderRadius:8),SizedBox(height:6),ShimmerBox(width:60,height:14,borderRadius:6)])),ShimmerBox(width:135,height:42,borderRadius:12)]));
@@ -29,7 +24,7 @@ class TopHeader extends StatelessWidget {
       GestureDetector(onTap:onProfilePressed, child: Container(width:60,height:60,decoration:BoxDecoration(shape:BoxShape.circle,color:AppColors.avatarBg,border:Border.all(color:ringColor,width:2),boxShadow:[BoxShadow(color:ringColor.withValues(alpha:.4),blurRadius:10,spreadRadius:1)]),child:ClipOval(child:_avatar(path)))),
       const SizedBox(width:14),
       Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisSize:MainAxisSize.min,children:[Text(username,maxLines:1,overflow:TextOverflow.ellipsis,style:GoogleFonts.poppins(color:AppColors.profileName,fontSize:17,fontWeight:FontWeight.w700)),const SizedBox(height:4),GestureDetector(onTap:onProfilePressed,child:Container(padding:const EdgeInsets.symmetric(horizontal:8,vertical:2),decoration:BoxDecoration(color:profileTagBg,borderRadius:BorderRadius.circular(14),border:Border.all(color:Colors.white.withValues(alpha:.15))),child:Row(mainAxisSize:MainAxisSize.min,children:[Text(userTag,style:GoogleFonts.poppins(color:profileTagColor,fontSize:10,fontWeight:FontWeight.w700)),Icon(Icons.play_arrow_rounded,color:profileTagColor,size:10)])))])),
-      Material(color:Colors.transparent,child:InkWell(onTap:()=>_openDeposit(context),borderRadius:BorderRadius.circular(12),child:Container(padding:const EdgeInsets.symmetric(horizontal:14,vertical:8),decoration:BoxDecoration(gradient:LinearGradient(begin:Alignment.topCenter,end:Alignment.bottomCenter,colors:[walletGradientStart,walletGradientEnd]),borderRadius:BorderRadius.circular(12),boxShadow:[BoxShadow(color:walletGradientEnd.withValues(alpha:.5),blurRadius:10,offset:const Offset(0,4))]),child:Row(mainAxisSize:MainAxisSize.min,children:[SvgPicture.asset('Assets/nav_icon/wallet.svg',width:22,height:22,colorFilter:const ColorFilter.mode(Colors.white,BlendMode.srcIn)),const SizedBox(width:8),Text('$currencySymbol${balance.toInt()}',style:GoogleFonts.inter(color:Colors.white,fontSize:17,fontWeight:FontWeight.w800)),const SizedBox(width:10),Container(width:1,height:18,color:Colors.white.withValues(alpha:.35)),const SizedBox(width:10),Text(addCashLabel,style:GoogleFonts.poppins(color:Colors.white,fontSize:18,fontWeight:FontWeight.w800))])))),
+      Material(color:Colors.transparent,child:InkWell(onTap:onAddMoneyPressed,borderRadius:BorderRadius.circular(12),child:Container(padding:const EdgeInsets.symmetric(horizontal:14,vertical:8),decoration:BoxDecoration(gradient:LinearGradient(begin:Alignment.topCenter,end:Alignment.bottomCenter,colors:[walletGradientStart,walletGradientEnd]),borderRadius:BorderRadius.circular(12),boxShadow:[BoxShadow(color:walletGradientEnd.withValues(alpha:.5),blurRadius:10,offset:const Offset(0,4))]),child:Row(mainAxisSize:MainAxisSize.min,children:[SvgPicture.asset('Assets/nav_icon/wallet.svg',width:22,height:22,colorFilter:const ColorFilter.mode(Colors.white,BlendMode.srcIn)),const SizedBox(width:8),Text('$currencySymbol${balance.toInt()}',style:GoogleFonts.inter(color:Colors.white,fontSize:17,fontWeight:FontWeight.w800)),const SizedBox(width:10),Container(width:1,height:18,color:Colors.white.withValues(alpha:.35)),const SizedBox(width:10),Text(addCashLabel,style:GoogleFonts.poppins(color:Colors.white,fontSize:18,fontWeight:FontWeight.w800))])))),
     ]));
   }
 

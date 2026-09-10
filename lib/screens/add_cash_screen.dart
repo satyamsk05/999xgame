@@ -127,9 +127,11 @@ class _AddCashScreenState extends State<AddCashScreen> {
     final hasAmount = _amountController.text.trim().isNotEmpty;
     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+    return Material(
+      color: Colors.transparent,
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -416,6 +418,7 @@ class _AddCashScreenState extends State<AddCashScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

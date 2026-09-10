@@ -183,11 +183,16 @@ async function confirmWithdrawalByAdmin({ withdrawalId, adminId = 'admin_sys', a
       idempotencyKey: `WITHDRAW_CONFIRM:${withdrawal.withdrawal_id}`,
       metadata: { adminId, adminNote, upiId: withdrawal.payout_address_or_upi },
     });
+    if (finalizeResult && finalizeResult.duplicate) {
+      const err = new Error('Withdrawal confirmation already recorded in ledger. Manual reconciliation required.');
+      err.statusCode = 409;
+      throw err;
+    }
     const updateRes = await client.query(`UPDATE withdrawals SET status = 'SUCCESS', completed_at = NOW(), admin_id = $2, admin_note = $3, updated_at = NOW() WHERE id = $1 RETURNING *`, [withdrawal.id, adminId, adminNote]);
     await client.query('COMMIT');
     const row = updateRes.rows[0];
-    const availPaise = parseInt(finalizeResult.wallet.available_balance, 10);
-    const resvPaise = parseInt(finalizeResult.wallet.reserved_balance, 10);
+    const availPaise = parseInt(finalizeResult.wallet?.available_balance || 0, 10);
+    const resvPaise = parseInt(finalizeResult.wallet?.reserved_balance || 0, 10);
     return { ...toWithdrawalResponse(row), completedAt: row.completed_at, adminId: row.admin_id, adminNote: row.admin_note, updatedWallet: { totalBalance: (availPaise + resvPaise) / 100, availableBalance: availPaise / 100, reservedBalance: resvPaise / 100 } };
   } catch (err) {
     await client.query('ROLLBACK'); logger.error('Failed to confirm withdrawal by admin', { withdrawalId, adminId, error: err.message }); throw err;
@@ -209,11 +214,16 @@ async function rejectWithdrawalByAdmin({ withdrawalId, adminId = 'admin_sys', ad
       idempotencyKey: `WITHDRAW_REJECT:${withdrawal.withdrawal_id}`,
       metadata: { adminId, adminNote, upiId: withdrawal.payout_address_or_upi },
     });
+    if (releaseResult && releaseResult.duplicate) {
+      const err = new Error('Withdrawal rejection already recorded in ledger. Manual reconciliation required.');
+      err.statusCode = 409;
+      throw err;
+    }
     const updateRes = await client.query(`UPDATE withdrawals SET status = 'REJECTED', rejected_at = NOW(), admin_id = $2, admin_note = $3, updated_at = NOW() WHERE id = $1 RETURNING *`, [withdrawal.id, adminId, adminNote]);
     await client.query('COMMIT');
     const row = updateRes.rows[0];
-    const availPaise = parseInt(releaseResult.wallet.available_balance, 10);
-    const resvPaise = parseInt(releaseResult.wallet.reserved_balance, 10);
+    const availPaise = parseInt(releaseResult.wallet?.available_balance || 0, 10);
+    const resvPaise = parseInt(releaseResult.wallet?.reserved_balance || 0, 10);
     return { ...toWithdrawalResponse(row), rejectedAt: row.rejected_at, adminId: row.admin_id, adminNote: row.admin_note, updatedWallet: { totalBalance: (availPaise + resvPaise) / 100, availableBalance: availPaise / 100, reservedBalance: resvPaise / 100 } };
   } catch (err) {
     await client.query('ROLLBACK'); logger.error('Failed to reject withdrawal by admin', { withdrawalId, adminId, error: err.message }); throw err;

@@ -287,7 +287,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Material(
       color: const Color(0xFF190226),
       child: SafeArea(
         child: _currentStep == 0 ? _buildStepEnterAmount() : _buildStepSelectMethod(),

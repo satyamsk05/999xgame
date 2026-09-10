@@ -157,8 +157,9 @@ router.post('/dragon_tiger/bets', betLimiter, authMiddleware, async (req, res) =
     const { betType, stake, stakePaise, idempotencyKey } = req.body;
     const computedStakePaise = validation.resolveStakePaise({ stakePaise, stake });
     validation.validateBetType(betType, 'dragon_tiger');
-    validation.validateIdempotencyKey(idempotencyKey);
-    const { bet, wallet } = await dragonTigerEngine.placeBet({ userId, betType, stakePaise: computedStakePaise, idempotencyKey });
+    const clientKey = validation.validateIdempotencyKey(idempotencyKey);
+    const effectiveKey = clientKey || `dt_req_${crypto.randomUUID()}`;
+    const { bet, wallet } = await dragonTigerEngine.placeBet({ userId, betType, stakePaise: computedStakePaise, idempotencyKey: effectiveKey });
     return res.status(200).json({ status: 'success', data: { bet, wallet } });
   } catch (err) {
     const status = err.statusCode || 400;
@@ -173,8 +174,9 @@ router.post('/crush/bets', betLimiter, authMiddleware, async (req, res) => {
     const userId = req.user.id;
     const { stake, stakePaise, autoCashoutMultiplier, idempotencyKey } = req.body;
     const computedStakePaise = validation.resolveStakePaise({ stakePaise, stake });
-    validation.validateIdempotencyKey(idempotencyKey);
-    const { bet, wallet } = await crushEngine.placeBet({ userId, stakePaise: computedStakePaise, autoCashoutMultiplier, idempotencyKey });
+    const clientKey = validation.validateIdempotencyKey(idempotencyKey);
+    const effectiveKey = clientKey || `crush_req_${crypto.randomUUID()}`;
+    const { bet, wallet } = await crushEngine.placeBet({ userId, stakePaise: computedStakePaise, autoCashoutMultiplier, idempotencyKey: effectiveKey });
     return res.status(200).json({ status: 'success', data: { bet, wallet } });
   } catch (err) {
     const status = err.statusCode || 400;

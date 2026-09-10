@@ -7,17 +7,28 @@ let isConnected = false;
 
 function initRedis() {
   if (redisClient) return redisClient;
+  if (process.env.DISABLE_REDIS === 'true') {
+    return null;
+  }
   const url = config.redis.url || `redis://${config.redis.password ? `:${encodeURIComponent(config.redis.password)}@` : ''}${config.redis.host}:${config.redis.port}`;
-  redisClient = createClient({ url });
+  redisClient = createClient({
+    url,
+    socket: {
+      connectTimeout: 2000,
+      reconnectStrategy: (retries) => (retries > 3 ? false : Math.min(retries * 200, 1000)),
+    },
+  });
 
   redisClient.on('connect', () => { isConnected = true; logger.info('Connected to Redis server'); });
   redisClient.on('ready', () => { isConnected = true; logger.info('Redis client ready'); });
-  redisClient.on('end', () => { isConnected = false; logger.warn('Redis connection ended'); });
-  redisClient.on('error', (err) => { isConnected = false; logger.warn('Redis client error - operating in degraded mode', { error: err.message }); });
+  redisClient.on('end', () => { isConnected = false; });
+  redisClient.on('error', (err) => {
+    if (isConnected) logger.warn('Redis client error - operating in degraded mode', { error: err.message });
+    isConnected = false;
+  });
 
   redisClient.connect().catch((err) => {
     isConnected = false;
-    logger.warn('Redis initial connection failed - operating in degraded mode', { error: err.message });
   });
   return redisClient;
 }

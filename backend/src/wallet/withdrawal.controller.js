@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
+const { withdrawalLimiter } = require('../middleware/rateLimit');
 const withdrawalRepo = require('./withdrawal.repository');
 
 function parseExactRupeeAmount(value) {
@@ -16,7 +17,7 @@ function parseExactRupeeAmount(value) {
 /**
  * POST /api/withdrawals — Initiate Manual Withdrawal Request (Funds Atomically Reserved)
  */
-router.post('/', authMiddleware, async (req, res, next) => {
+router.post('/', authMiddleware, withdrawalLimiter, async (req, res, next) => {
   try {
     const { amount, upiId } = req.body;
     const amountRupees = parseExactRupeeAmount(amount);

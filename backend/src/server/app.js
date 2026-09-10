@@ -28,7 +28,21 @@ if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 
 if (process.env.DISABLE_REDIS !== 'true') initRedis();
 
-app.use(cors({ origin: config.corsOrigin, credentials: true }));
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (config.nodeEnv === 'development') {
+      if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || origin.startsWith('http://10.0.2.2')) {
+        return callback(null, true);
+      }
+    }
+    if (config.corsOrigin.includes(origin)) return callback(null, true);
+    return callback(new Error(`Not allowed by CORS: ${origin}`));
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({
   limit: config.bodyLimit,
   verify: (req, _res, buf) => {
@@ -88,10 +102,10 @@ app.use('/api/user', userController);
 app.use('/api/app', userController);
 app.use('/api/games', gameController);
 app.use('/api/wallet', walletController);
-app.use('/api/deposits', depositLimiter, depositController);
+app.use('/api/deposits', depositController);
 app.use('/api/admin/auth', adminAuthLimiter, adminAuthController);
 app.use('/api/admin/deposits', adminDepositController);
-app.use('/api/withdrawals', withdrawalLimiter, withdrawalController);
+app.use('/api/withdrawals', withdrawalController);
 app.use('/api/admin/withdrawals', adminWithdrawalController);
 app.use('/api/admin/stats', adminStatsController);
 app.use('/api/admin/users', adminUserController);

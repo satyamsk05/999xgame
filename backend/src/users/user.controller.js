@@ -120,6 +120,8 @@ router.post('/update-profile', authMiddleware, async (req, res, next) => {
   }
 });
 
+const { validateDateOfBirth } = require('../utils/validation');
+
 // Complete Onboarding — save name + DOB and mark user as onboarded (first login only)
 router.post('/complete-onboarding', authMiddleware, async (req, res, next) => {
   try {
@@ -129,10 +131,12 @@ router.post('/complete-onboarding', authMiddleware, async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'Name must be at least 2 characters.' });
     }
 
+    const validatedDob = validateDateOfBirth(dateOfBirth);
+
     const updatedUser = await userRepo.completeOnboarding(
       req.user.id,
       username.trim(),
-      dateOfBirth || null
+      validatedDob
     );
 
     return res.status(200).json({

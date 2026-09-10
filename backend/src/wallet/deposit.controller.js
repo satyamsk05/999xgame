@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
+const { depositLimiter } = require('../middleware/rateLimit');
 const { signPaymentToken, verifyPaymentToken } = require('../auth/jwt');
 const depositRepo = require('./deposit.repository');
 const telegramService = require('../services/telegram.service');
@@ -32,7 +33,7 @@ router.post('/webhook', async (req, res, next) => {
   }
 });
 
-router.post('/', authMiddleware, async (req, res, next) => {
+router.post('/', authMiddleware, depositLimiter, async (req, res, next) => {
   try {
     const { amount, paymentMethod } = req.body;
     if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) return res.status(400).json({ status: 'error', message: 'Valid numeric deposit amount is required' });

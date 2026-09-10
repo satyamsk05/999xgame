@@ -16,8 +16,9 @@ class SocketClient {
       if (window.io) {
         let token = null;
         try {
-          const urlParams = new URLSearchParams(window.location.search);
-          token = urlParams.get('token') || window.IN_GAMES_AUTH_TOKEN || localStorage.getItem('ingames_token');
+          const searchParams = new URLSearchParams(window.location.search);
+          const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+          token = searchParams.get('token') || hashParams.get('token') || window.IN_GAMES_AUTH_TOKEN || localStorage.getItem('ingames_token');
         } catch (_) {
           token = window.IN_GAMES_AUTH_TOKEN || null;
         }

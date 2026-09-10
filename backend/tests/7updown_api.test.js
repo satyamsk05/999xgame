@@ -4,6 +4,8 @@ const http = require('http');
 const app = require('../src/server/app');
 const userRepo = require('../src/users/user.repository');
 const walletRepo = require('../src/wallet/wallet.repository');
+const { getClient, query } = require('../src/database/db');
+const financialService = require('../src/services/financial.service');
 const { signToken } = require('../src/auth/jwt');
 const { gameManager } = require('../src/games/game.manager');
 const { sevenUpDownEngine } = require('../src/games/seven-up-down/engine');
@@ -23,12 +25,27 @@ test('7 Up Down Game Controller API Tests', (t, done) => {
     const port = server.address().port;
 
     try {
-      await gameManager.init(null);
-      await waitForCurrentRound();
+      await query("UPDATE games SET status = 'LIVE' WHERE id = 'seven_up_down'");
+      await sevenUpDownEngine.getOrStartCurrentRound();
 
       // 1. Setup authenticated user
       const { user } = await userRepo.findOrCreateUserByPhone('+919876543210');
-      await walletRepo.addCash(user.id, 500, 'TEST_DEPOSIT');
+      const client = await getClient();
+      try {
+        await client.query('BEGIN');
+        await financialService.creditWallet(client, 50000, {
+          userId: user.id,
+          type: 'DEPOSIT',
+          referenceType: 'TEST',
+          referenceId: `test_${Date.now()}`,
+          idempotencyKey: `test_dep_${user.id}_${Date.now()}`,
+        });
+        await client.query('COMMIT');
+      } catch (_) {
+        await client.query('ROLLBACK');
+      } finally {
+        client.release();
+      }
       const token = signToken({ userId: user.id, phone: '+919876543210' });
 
       // Helper for HTTP requests

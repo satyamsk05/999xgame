@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { adminMiddleware } = require('../middleware/admin_auth.middleware');
+const { adminMiddleware, requireRole } = require('../middleware/admin_auth.middleware');
 const { query } = require('../database/db');
 const logger = require('../utils/logger');
 const reconciliationService = require('../services/reconciliation.service');
@@ -8,7 +8,7 @@ const reconciliationService = require('../services/reconciliation.service');
 router.use(adminMiddleware);
 
 /** GET /api/admin/reports/summary?from=&to= */
-router.get('/summary', async (req, res, next) => {
+router.get('/summary', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN'), async (req, res, next) => {
   try {
     const { from, to } = req.query;
     const fromDate = from ? new Date(from) : (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d; })();
@@ -68,25 +68,27 @@ router.get('/summary', async (req, res, next) => {
 });
 
 /** GET /api/admin/reports/daily?days=7 — Day-by-day breakdown */
-router.get('/daily', async (req, res, next) => {
+router.get('/daily', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN'), async (req, res, next) => {
   try {
-    const days = Math.min(parseInt(req.query.days || '7', 10), 90);
+    const days = Math.min(Math.max(parseInt(req.query.days || '7', 10) || 7, 1), 90);
 
     const [depDaily, betDaily] = await Promise.all([
       query(
         `SELECT DATE(confirmed_at) AS day,
                 COUNT(*) AS count, COALESCE(SUM(amount),0) AS total
          FROM deposits WHERE status = 'CONFIRMED'
-           AND confirmed_at >= NOW() - INTERVAL '${days} days'
-         GROUP BY DATE(confirmed_at) ORDER BY day ASC`
+           AND confirmed_at >= NOW() - ($1 * INTERVAL '1 day')
+         GROUP BY DATE(confirmed_at) ORDER BY day ASC`,
+        [days]
       ),
       query(
         `SELECT DATE(created_at) AS day,
                 COUNT(*) AS count,
                 COALESCE(SUM(stake),0)      AS staked,
                 COALESCE(SUM(win_amount),0) AS paid_out
-         FROM bets WHERE created_at >= NOW() - INTERVAL '${days} days'
-         GROUP BY DATE(created_at) ORDER BY day ASC`
+         FROM bets WHERE created_at >= NOW() - ($1 * INTERVAL '1 day')
+         GROUP BY DATE(created_at) ORDER BY day ASC`,
+        [days]
       ),
     ]);
 
@@ -115,7 +117,7 @@ router.get('/daily', async (req, res, next) => {
  * Read-only financial drift report (sec 48). Detects — never repairs — mismatches
  * between wallets, the wallet_ledger, deposits, withdrawals and settlements.
  */
-router.get('/reconciliation', async (req, res, next) => {
+router.get('/reconciliation', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN'), async (req, res, next) => {
   try {
     const report = await reconciliationService.runReconciliation({
       userId: req.query.userId || null,

@@ -557,26 +557,30 @@ class _ShareScreenState extends State<ShareScreen> {
           ),
         ),
         const SizedBox(height: 2),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                color: Colors.white54,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            if (showInfo) ...[
-              const SizedBox(width: 3),
-              const Icon(
-                Icons.info_outline_rounded,
-                color: Colors.white38,
-                size: 11,
-              ),
+              if (showInfo) ...[
+                const SizedBox(width: 3),
+                const Icon(
+                  Icons.info_outline_rounded,
+                  color: Colors.white38,
+                  size: 11,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
         const SizedBox(height: 12),
         iconWidget,

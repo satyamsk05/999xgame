@@ -54,8 +54,8 @@ function readMigrationFiles() {
     .filter((f) => f.endsWith('.sql'))
     .sort();
 
-  if (files.length === 0 && process.env.NODE_ENV === 'production') {
-    throw new Error('No database migrations found; refusing production startup');
+  if (files.length === 0) {
+    throw new Error('No database migrations found in migrations directory; refusing startup');
   }
 
   return files;

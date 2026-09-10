@@ -12,13 +12,6 @@ async function getWalletByUserId(userId) {
   } catch (err) { logger.error('PostgreSQL wallet lookup error', { userId, error: err.message }); throw err; }
 }
 
-async function addCash(userId, amountRupees, paymentMethod) {
-  const amountPaise = Math.round(amountRupees * 100);
-  const result = await financialService.creditWallet(userId, amountPaise, { type: 'DEPOSIT', referenceType: 'DEPOSIT', referenceId: `DEP_${paymentMethod}_${Date.now()}`, idempotencyKey: `idemp_dep_${userId}_${Date.now()}`, metadata: { paymentMethod } });
-  const avail = parseInt(result.wallet.available_balance || 0, 10), resv = parseInt(result.wallet.reserved_balance || 0, 10), dep = parseInt(result.wallet.deposit_balance || 0, 10), win = parseInt(result.wallet.winnings_balance || 0, 10), rew = parseInt(result.wallet.rewards_balance || 0, 10);
-  return { depositBalance: dep / 100, winningsBalance: win / 100, rewardsBalance: rew / 100, totalBalance: (avail + resv) / 100 };
-}
-
 async function getTransactionsByUserId(userId, category = 'All') {
   try {
     const normalizedCategory = String(category || 'All').trim().toLowerCase();
@@ -94,4 +87,4 @@ function mapLedgerCategory(type) {
   return 'Reward';
 }
 
-module.exports = { getWalletByUserId, addCash, getTransactionsByUserId };
+module.exports = { getWalletByUserId, getTransactionsByUserId };

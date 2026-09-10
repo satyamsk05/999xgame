@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { SevenUpDownEngine, BetTypes } = require('../src/games/seven-up-down/engine');
 const userRepo = require('../src/users/user.repository');
-const walletRepo = require('../src/wallet/wallet.repository');
+const { getClient } = require('../src/database/db');
+const financialService = require('../src/services/financial.service');
 
 test('7 Up Down Game Engine Unit Test', async () => {
   const engine = new SevenUpDownEngine();
@@ -14,9 +15,24 @@ test('7 Up Down Game Engine Unit Test', async () => {
   } catch (_) {}
 
   try {
-    await walletRepo.addCash(testUserId, 100, 'TEST_CARD');
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      await financialService.creditWallet(client, 10000, {
+        userId: testUserId,
+        type: 'DEPOSIT',
+        referenceType: 'TEST',
+        referenceId: `test_${Date.now()}`,
+        idempotencyKey: `test_dep_${testUserId}_${Date.now()}`,
+      });
+      await client.query('COMMIT');
+    } catch (_) {
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+    }
   } catch (err) {
-    console.error('engine.test.js addCash failed:', err.message);
+    console.error('engine.test.js creditWallet failed:', err.message);
   }
 
   const round = await engine.createRound();

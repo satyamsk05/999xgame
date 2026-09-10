@@ -72,7 +72,8 @@ test('Payment webhook requires valid HMAC signature and atomically credits once'
     const create = await makeRequest({ hostname: 'localhost', port, path: '/api/deposits', method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } }, JSON.stringify({ amount: 250, paymentMethod: 'UPI' }));
     assert.strictEqual(create.statusCode, 201);
     const depositId = create.body.data.depositId;
-    const event = { provider: 'test-provider', eventId: 'evt-test-atomic-001', depositId, status: 'SUCCESS', amountPaise: 25000, currency: 'INR', utr: '123456789012' };
+    const utr = String(Date.now()).slice(-12).padStart(12, '1');
+    const event = { provider: 'test-provider', eventId: `evt-test-${Date.now()}`, depositId, status: 'SUCCESS', amountPaise: 25000, currency: 'INR', utr };
     const payload = JSON.stringify(event);
     const invalid = await makeRequest({ hostname: 'localhost', port, path: '/api/deposits/webhook', method: 'POST', headers: { 'Content-Type': 'application/json', 'x-payment-event-id': event.eventId, 'x-payment-signature': 'sha256=' + '0'.repeat(64) } }, payload);
     assert.strictEqual(invalid.statusCode, 401);

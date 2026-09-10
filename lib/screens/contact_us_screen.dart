@@ -19,7 +19,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Material(
       color: AppColors.backgroundStart,
       child: SafeArea(
         child: Column(

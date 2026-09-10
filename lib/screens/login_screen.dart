@@ -394,15 +394,21 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   child: Container(
                     height: 53,
                     decoration: BoxDecoration(color: _isLoading ? Colors.black.withValues(alpha: 0.5) : Colors.black, borderRadius: BorderRadius.circular(26.5), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 15, spreadRadius: 1)]),
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const SizedBox(width: 24),
-                        if (_isLoading)
-                          const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        else
-                          Text('Continue with WhatsApp', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                        const SizedBox(width: 22),
+                        Expanded(
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: _isLoading
+                                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : Text('Continue with WhatsApp', style: GoogleFonts.poppins(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                            ),
+                          ),
+                        ),
                         _buildWhatsAppIcon(size: 22, color: Colors.white),
                       ],
                     ),

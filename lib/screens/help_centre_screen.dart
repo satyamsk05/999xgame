@@ -43,7 +43,7 @@ class _HelpCentreScreenState extends State<HelpCentreScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Material(
       color: AppColors.backgroundStart,
       child: SafeArea(
         child: Column(

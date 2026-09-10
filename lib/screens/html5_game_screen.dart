@@ -26,10 +26,11 @@ class Html5GameScreen extends StatefulWidget {
 }
 
 class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingObserver {
-  final String _viewId = 'html5_game_iframe_${DateTime.now().millisecondsSinceEpoch}';
+  final String _viewId = 'html5_game_iframe_${DateTime.now().microsecondsSinceEpoch}';
   bool _isLoading = true;
   bool _hasWebError = false;
   bool _isInitializing = false;
+  bool _isIframeRegistered = false;
   int _initializationGeneration = 0;
   WebViewController? _webViewController;
   StreamSubscription? _msgSubscription;
@@ -88,10 +89,12 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
   }
 
   Future<void> _initializeGameView(String sessionToken, int generation) async {
-    final fullUrl = widget.gameUrl.startsWith('http') ? widget.gameUrl : '${ApiService.serverDomain}${widget.gameUrl.startsWith('/') ? '' : '/'}${widget.gameUrl}';
+    final fullUrl = widget.gameUrl.startsWith('http')
+        ? widget.gameUrl
+        : '${ApiService.serverDomain}${widget.gameUrl.startsWith('/') ? '' : '/'}${widget.gameUrl}';
     final trustedUri = Uri.parse(fullUrl);
-    final separator = fullUrl.contains('#') ? '&' : '#';
-    final formattedUrl = '$fullUrl${separator}token=${Uri.encodeComponent(sessionToken)}';
+    final separator = fullUrl.contains('?') ? '&' : '?';
+    final formattedUrl = '$fullUrl${separator}token=${Uri.encodeComponent(sessionToken)}#token=${Uri.encodeComponent(sessionToken)}';
 
     if (kIsWeb) {
       if (!mounted || generation != _initializationGeneration) return;
@@ -115,7 +118,12 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
           }
         } catch (_) {}
       });
-      if (mounted && generation == _initializationGeneration) setState(() => _isLoading = false);
+      if (mounted && generation == _initializationGeneration) {
+        setState(() {
+          _isIframeRegistered = true;
+          _isLoading = false;
+        });
+      }
       return;
     }
 
@@ -197,13 +205,99 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(statusBarColor: Colors.transparent, statusBarIconBrightness: Brightness.light, statusBarBrightness: Brightness.dark));
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+    ));
+
+    Widget content;
+    if (_hasWebError) {
+      content = NetworkErrorWidget(
+        customTitle: "Couldn't Load Game",
+        customMessage: 'There was a problem trying to connect to ${widget.gameTitle}',
+        onRetry: () {
+          unawaited(_initializeGame());
+        },
+      );
+    } else if (kIsWeb) {
+      content = _isIframeRegistered
+          ? buildPlatformIframe(_viewId)
+          : const SizedBox.shrink();
+    } else if (_webViewController != null) {
+      content = WebViewWidget(controller: _webViewController!);
+    } else {
+      content = Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.sports_esports_rounded, size: 72, color: Color(0xFF00E676)),
+            const SizedBox(height: 16),
+            Text(
+              '${widget.gameTitle} (HTML5 Engine)',
+              style: GoogleFonts.poppins(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF20084B),
-      body: Stack(children: [
-        Positioned.fill(child: _hasWebError ? NetworkErrorWidget(customTitle: "Couldn't Load", customMessage: 'There was a problem trying to load the screen', onRetry: () { unawaited(_initializeGame()); }) : (kIsWeb ? buildPlatformIframe(_viewId) : (_webViewController != null ? WebViewWidget(controller: _webViewController!) : Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Icons.sports_esports_rounded, size: 72, color: Color(0xFF00E676)), const SizedBox(height: 16), Text('${widget.gameTitle} (HTML5 Engine)', style: GoogleFonts.poppins(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700))]))))),
-        if (_isLoading) Container(color: const Color(0xFF20084B), child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFF6C20E0).withValues(alpha: 0.3), border: Border.all(color: const Color(0xFF00E676), width: 2)), child: const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00E676)))), const SizedBox(height: 20), Text('Loading ${widget.gameTitle}...', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)), const SizedBox(height: 6), Text('Connecting to live game engine...', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 13))]))),
-      ]),
+      body: Stack(
+        children: [
+          Positioned.fill(child: content),
+          if (_isLoading)
+            Container(
+              color: const Color(0xFF20084B),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF6C20E0).withValues(alpha: 0.3),
+                        border: Border.all(color: const Color(0xFF00E676), width: 2),
+                      ),
+                      child: const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00E676)),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Loading ${widget.gameTitle}...',
+                      style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Connecting to live game engine...',
+                      style: GoogleFonts.poppins(color: Colors.white54, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          // Floating Exit / Back Button Overlay
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 12,
+            child: Material(
+              color: Colors.black.withValues(alpha: 0.55),
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: _exitGame,
+                child: const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

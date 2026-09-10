@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { adminMiddleware } = require('../middleware/admin_auth.middleware');
+const { adminMiddleware, requireRole } = require('../middleware/admin_auth.middleware');
 const { query } = require('../database/db');
 const logger = require('../utils/logger');
 
 router.use(adminMiddleware);
 
-router.get('/dashboard', async (req, res, next) => {
+router.get('/dashboard', requireRole('SUPER_ADMIN', 'FINANCE_ADMIN', 'SUPPORT_ADMIN', 'GAME_ADMIN'), async (req, res, next) => {
   try {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -34,7 +34,7 @@ router.get('/dashboard', async (req, res, next) => {
   } catch(err) { logger.error('Failed to aggregate admin dashboard stats',{error:err.message}); next(err); }
 });
 
-router.get('/audit-logs', async (req,res,next)=>{
+router.get('/audit-logs', requireRole('SUPER_ADMIN'), async (req,res,next)=>{
   try {
     const rawLimit=Number.parseInt(req.query.limit||'50',10); const rawOffset=Number.parseInt(req.query.offset||'0',10);
     const limit=Number.isFinite(rawLimit)?Math.max(1,Math.min(rawLimit,200)):50; const offset=Number.isFinite(rawOffset)?Math.max(0,rawOffset):0; const action=String(req.query.action||'');

@@ -65,6 +65,9 @@ function verifyToken(token) {
 async function assertTokenNotRevoked(decoded) {
   if (!decoded || decoded.type !== 'USER' || !decoded.jti) throw authError('Invalid user token');
   if (!isRedisReady()) {
+    if (config.nodeEnv !== 'production' || process.env.DISABLE_REDIS === 'true') {
+      return;
+    }
     const err = new Error('Authentication service temporarily unavailable');
     err.statusCode = 503;
     err.code = 'AUTH_REDIS_UNAVAILABLE';
@@ -77,6 +80,9 @@ async function assertTokenNotRevoked(decoded) {
 async function revokeToken(decoded) {
   if (!decoded || decoded.type !== 'USER' || !decoded.jti) throw authError('Invalid user token');
   if (!isRedisReady()) {
+    if (config.nodeEnv !== 'production' || process.env.DISABLE_REDIS === 'true') {
+      return;
+    }
     const err = new Error('Authentication service temporarily unavailable');
     err.statusCode = 503;
     err.code = 'AUTH_REDIS_UNAVAILABLE';
