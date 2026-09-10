@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.ingames.ingames"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -17,7 +17,7 @@ android {
     defaultConfig {
         applicationId = "com.ingames.ingames"
         minSdk = 21
-        targetSdk = 35
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -32,7 +32,6 @@ android {
             enableV1Signing = true
             enableV2Signing = true
             enableV3Signing = true
-            enableV4Signing = false
         }
     }
 
