@@ -18,9 +18,9 @@ class TopHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) return Container(padding: const EdgeInsets.only(top:18,bottom:12,left:16,right:16), child: const Row(children:[ShimmerBox(width:58,height:58,borderRadius:29),SizedBox(width:14),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[ShimmerBox(width:110,height:16,borderRadius:8),SizedBox(height:6),ShimmerBox(width:60,height:14,borderRadius:6)])),ShimmerBox(width:135,height:42,borderRadius:12)]));
+    if (isLoading) return Container(padding: const EdgeInsets.only(top:10,bottom:8,left:16,right:16), child: const Row(children:[ShimmerBox(width:58,height:58,borderRadius:29),SizedBox(width:14),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[ShimmerBox(width:110,height:16,borderRadius:8),SizedBox(height:6),ShimmerBox(width:60,height:14,borderRadius:6)])),ShimmerBox(width:135,height:42,borderRadius:12)]));
     final path = _cleanPath(avatarPath);
-    return Container(padding: const EdgeInsets.only(top:18,bottom:12,left:16,right:16), child: Row(children:[
+    return Container(padding: const EdgeInsets.only(top:10,bottom:8,left:16,right:16), child: Row(children:[
       GestureDetector(onTap:onProfilePressed, child: Container(width:60,height:60,decoration:BoxDecoration(shape:BoxShape.circle,color:AppColors.avatarBg,border:Border.all(color:ringColor,width:2),boxShadow:[BoxShadow(color:ringColor.withValues(alpha:.4),blurRadius:10,spreadRadius:1)]),child:ClipOval(child:_avatar(path)))),
       const SizedBox(width:14),
       Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisSize:MainAxisSize.min,children:[Text(username,maxLines:1,overflow:TextOverflow.ellipsis,style:GoogleFonts.poppins(color:AppColors.profileName,fontSize:17,fontWeight:FontWeight.w700)),const SizedBox(height:4),GestureDetector(onTap:onProfilePressed,child:Container(padding:const EdgeInsets.symmetric(horizontal:8,vertical:2),decoration:BoxDecoration(color:profileTagBg,borderRadius:BorderRadius.circular(14),border:Border.all(color:Colors.white.withValues(alpha:.15))),child:Row(mainAxisSize:MainAxisSize.min,children:[Text(userTag,style:GoogleFonts.poppins(color:profileTagColor,fontSize:10,fontWeight:FontWeight.w700)),Icon(Icons.play_arrow_rounded,color:profileTagColor,size:10)])))])),
