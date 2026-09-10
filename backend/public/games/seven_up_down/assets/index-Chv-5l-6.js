@@ -8,10 +8,8 @@
   const token = (() => {
     try {
       const hashToken = new URLSearchParams(location.hash.replace(/^#/, '')).get('token');
-      const queryToken = new URLSearchParams(location.search).get('token');
-      if (queryToken) { localStorage.setItem('ingames_token', queryToken); return queryToken; }
-      return hashToken || window.IN_GAMES_AUTH_TOKEN || localStorage.getItem('ingames_token');
-    } catch (_) { return window.IN_GAMES_AUTH_TOKEN || null; }
+      return hashToken || null;
+    } catch (_) { return null; }
   })();
 
   const base = (window.IN_GAMES_SERVER_URL || '').replace(/\/$/, '');
