@@ -133,12 +133,12 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     }
 
     int attempts = 0;
-    const maxAttempts = 30;
+    const maxAttempts = 60;
 
     while (attempts < maxAttempts && mounted && _currentStep == 2) {
       attempts++;
       try {
-        final verifyRes = await AuthApi.verifyLogginToken(token, timeout: const Duration(seconds: 12));
+        final verifyRes = await AuthApi.verifyLogginToken(token, timeout: const Duration(seconds: 4));
         final appToken = verifyRes['token']?.toString() ?? '';
         final dataMap = verifyRes['data'] as Map<String, dynamic>? ?? verifyRes;
         final user = (dataMap['user'] as Map<String, dynamic>?) ??
@@ -193,9 +193,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
             return;
           }
         }
-        debugPrint('[LoginVerify] transient error: $e');
-        await Future.delayed(const Duration(milliseconds: 1500));
+        debugPrint('[LoginVerify] transient poll check: $e');
       }
+      await Future.delayed(const Duration(milliseconds: 500));
     }
 
     _isVerifyingActive = false;
@@ -245,7 +245,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }
 
   void _startWelcomeTransition() {
-    Timer(const Duration(milliseconds: 1800), () {
+    Timer(const Duration(milliseconds: 350), () {
       if (mounted) {
         widget.onLoginSuccess(_sessionData);
       }

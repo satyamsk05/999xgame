@@ -174,16 +174,38 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
     _isInitializing = false;
     WidgetsBinding.instance.removeObserver(this);
     _msgSubscription?.cancel();
+    if (!kIsWeb && _webViewController != null) {
+      try {
+        _webViewController?.runJavaScript(
+          "if (window.soundManager) { window.soundManager.destroy(); } "
+          "document.querySelectorAll('audio, video').forEach(function(el){ el.pause(); el.src = ''; });",
+        );
+        _webViewController?.loadRequest(Uri.parse('about:blank'));
+      } catch (_) {}
+    }
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final isBackground = state == AppLifecycleState.paused || state == AppLifecycleState.inactive || state == AppLifecycleState.detached || state == AppLifecycleState.hidden;
+    final isBackground = state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden;
+
     if (isBackground && !kIsWeb && _webViewController != null) {
-      try { _webViewController?.runJavaScript("if (window.soundManager) window.soundManager.stopAll();"); } catch (_) {}
+      try {
+        _webViewController?.runJavaScript(
+          "if (window.soundManager) { window.soundManager.stopAll(); } "
+          "document.querySelectorAll('audio, video').forEach(function(el){ el.pause(); });",
+        );
+      } catch (_) {}
     } else if (state == AppLifecycleState.resumed && !kIsWeb && _webViewController != null) {
-      try { _webViewController?.runJavaScript("if (window.soundManager) window.soundManager.resume();"); } catch (_) {}
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      try {
+        _webViewController?.runJavaScript("if (window.soundManager) { window.soundManager.resume(); }");
+      } catch (_) {}
     }
   }
 
@@ -200,15 +222,31 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
   void _exitGame() {
     if (!mounted) return;
     _msgSubscription?.cancel();
-    Future.microtask(() { if (mounted) widget.onBackPressed(); });
+    if (!kIsWeb && _webViewController != null) {
+      try {
+        _webViewController?.runJavaScript(
+          "if (window.soundManager) { window.soundManager.destroy(); } "
+          "document.querySelectorAll('audio, video').forEach(function(el){ el.pause(); el.src = ''; });",
+        );
+        _webViewController?.loadRequest(Uri.parse('about:blank'));
+      } catch (_) {}
+    }
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    Future.microtask(() {
+      if (mounted) widget.onBackPressed();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
       statusBarBrightness: Brightness.dark,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.light,
+      systemNavigationBarDividerColor: Colors.transparent,
     ));
 
     Widget content;

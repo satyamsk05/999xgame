@@ -4,6 +4,29 @@ class SoundManager {
   constructor() {
     this.enabled = getStoredSoundPreference();
     this.ctx = null;
+    this.activeTimeouts = [];
+    this._setupLifecycleListeners();
+  }
+
+  _setupLifecycleListeners() {
+    if (typeof window === 'undefined') return;
+    
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        this.stopAll();
+      } else if (this.enabled) {
+        this.resume();
+      }
+    });
+
+    window.addEventListener('pagehide', () => this.stopAll());
+    window.addEventListener('beforeunload', () => this.destroy());
+    window.addEventListener('blur', () => this.stopAll());
+    window.addEventListener('focus', () => {
+      if (this.enabled && !document.hidden) {
+        this.resume();
+      }
+    });
   }
 
   initContext() {
@@ -13,7 +36,7 @@ class SoundManager {
         this.ctx = new AudioCtx();
       }
     }
-    if (this.ctx && this.ctx.state === 'suspended' && this.enabled) {
+    if (this.ctx && this.ctx.state === 'suspended' && this.enabled && !document.hidden) {
       try {
         this.ctx.resume();
       } catch (_) {}
@@ -22,7 +45,7 @@ class SoundManager {
 
   unlockAudio() {
     this.initContext();
-    if (this.ctx && this.ctx.state === 'suspended') {
+    if (this.ctx && this.ctx.state === 'suspended' && !document.hidden) {
       try {
         this.ctx.resume();
       } catch (_) {}
@@ -41,6 +64,10 @@ class SoundManager {
   }
 
   stopAll() {
+    // Clear any pending sound timer callbacks
+    this.activeTimeouts.forEach(id => clearTimeout(id));
+    this.activeTimeouts = [];
+
     if (this.ctx && typeof this.ctx.suspend === 'function') {
       try {
         if (this.ctx.state !== 'suspended') {
@@ -50,7 +77,18 @@ class SoundManager {
     }
   }
 
+  destroy() {
+    this.stopAll();
+    if (this.ctx && typeof this.ctx.close === 'function') {
+      try {
+        this.ctx.close();
+      } catch (_) {}
+      this.ctx = null;
+    }
+  }
+
   resume() {
+    if (document.hidden) return;
     if (this.ctx && this.enabled && typeof this.ctx.resume === 'function') {
       try {
         if (this.ctx.state === 'suspended') {
@@ -61,7 +99,7 @@ class SoundManager {
   }
 
   playClick() {
-    if (!this.enabled) return;
+    if (!this.enabled || document.hidden) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -83,7 +121,7 @@ class SoundManager {
   }
 
   playDiceRoll() {
-    if (!this.enabled) return;
+    if (!this.enabled || document.hidden) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -158,28 +196,31 @@ class SoundManager {
   }
 
   playWin() {
-    if (!this.enabled) return;
+    if (!this.enabled || document.hidden) return;
     this.initContext();
     if (!this.ctx) return;
 
     try {
       const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
       notes.forEach((freq, idx) => {
-        setTimeout(() => {
-          if (!this.ctx) return;
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        const timeoutId = setTimeout(() => {
+          if (!this.ctx || document.hidden || !this.enabled) return;
+          try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
 
-          gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+            gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
 
-          osc.connect(gain);
-          gain.connect(this.ctx.destination);
-          osc.start();
-          osc.stop(this.ctx.currentTime + 0.25);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.25);
+          } catch (_) {}
         }, idx * 120);
+        this.activeTimeouts.push(timeoutId);
       });
     } catch (e) {}
   }

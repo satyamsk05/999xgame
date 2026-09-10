@@ -31,7 +31,6 @@ import 'services/supabase_service.dart';
 import 'services/dashboard_sync_manager.dart';
 import 'core/storage/token_manager.dart';
 import 'features/wallet/data/wallet_api.dart';
-import 'widgets/network_error_widget.dart';
 
 class CustomMouseScrollBehavior extends MaterialScrollBehavior {
   const CustomMouseScrollBehavior();
@@ -49,10 +48,15 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SupabaseService.initialize();
   await TokenManager.init();
+  
+  // Enable immersive sticky fullscreen mode
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
       systemNavigationBarColor: Colors.transparent,
       systemNavigationBarIconBrightness: Brightness.light,
       systemNavigationBarDividerColor: Colors.transparent,
