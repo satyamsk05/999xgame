@@ -68,7 +68,10 @@ class CrushEngine {
       if (autoTarget > CRUSH_MAX_MULTIPLIER) autoTarget = CRUSH_MAX_MULTIPLIER;
     }
     const stakeLimits = await crushRepo.getStakeLimits('crush', DEFAULT_STAKE_LIMITS_PAISE);
-    return crushRepo.placeBetInDb({ userId, roundId: this.currentRound.roundId, stakePaise, autoCashoutMultiplier: autoTarget, idempotencyKey, stakeLimits });
+    const scopedIdempotencyKey = idempotencyKey
+      ? crypto.createHash('sha256').update(`${userId}:${String(idempotencyKey)}`).digest('hex')
+      : null;
+    return crushRepo.placeBetInDb({ userId, roundId: this.currentRound.roundId, stakePaise, autoCashoutMultiplier: autoTarget, idempotencyKey: scopedIdempotencyKey, stakeLimits });
   }
 
   computeMultiplier(elapsedMs) {
