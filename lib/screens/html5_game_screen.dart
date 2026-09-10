@@ -79,14 +79,22 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
     } catch (_) {}
   }
 
+  bool _isTrustedGameOrigin(String url, Uri trustedUri) {
+    final candidate = Uri.tryParse(url);
+    if (candidate == null || candidate.scheme.isEmpty || candidate.host.isEmpty) return false;
+    return candidate.scheme == trustedUri.scheme &&
+        candidate.host == trustedUri.host &&
+        candidate.port == trustedUri.port;
+  }
+
   Future<void> _initializeGameView(String sessionToken) async {
     final fullUrl = widget.gameUrl.startsWith('http')
         ? widget.gameUrl
         : '${ApiService.serverDomain}${widget.gameUrl.startsWith('/') ? '' : '/'}${widget.gameUrl}';
+    final trustedUri = Uri.parse(fullUrl);
 
-    // Use a URL fragment instead of a query parameter. Fragments are not sent to the
-    // server in HTTP requests/referrers, so the short-lived credential is not exposed
-    // as part of the resource URL. The game client reads the fragment locally.
+    // Keep the short-lived credential in the URL fragment. Fragments are not sent in
+    // HTTP requests or referrers, and the game reads it locally from location.hash.
     final separator = fullUrl.contains('#') ? '&' : '#';
     final formattedUrl = '$fullUrl${separator}token=${Uri.encodeComponent(sessionToken)}';
 
@@ -98,7 +106,7 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
           final dynamic json = jsonDecode(msgStr);
           if (json is Map<String, dynamic>) {
             final source = json['source']?.toString() ?? '';
-            final version = (json['version'] as num?)?.toInt() ?? 1;
+            final version = (json['version'] as num?)?.toInt() ?? 0;
             final type = json['type']?.toString() ?? '';
             if (source == 'ingames-game' && version >= 1) {
               if (type == 'EXIT_GAME' || type == 'EXIT_MATCH') {
@@ -118,19 +126,16 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (_) {
-            try {
-              _webViewController?.runJavaScript("""
-                window.IN_GAMES_AUTH_TOKEN = '$sessionToken';
-                window.IN_GAMES_SERVER_URL = '${ApiService.baseUrl}';
-              """);
-            } catch (_) {}
+          onNavigationRequest: (NavigationRequest request) {
+            return _isTrustedGameOrigin(request.url, trustedUri)
+                ? NavigationDecision.navigate
+                : NavigationDecision.prevent;
           },
-          onPageFinished: (_) {
+          onPageFinished: (url) {
             if (mounted) setState(() => _isLoading = false);
+            if (!_isTrustedGameOrigin(url, trustedUri)) return;
             try {
               _webViewController?.runJavaScript("""
-                window.IN_GAMES_AUTH_TOKEN = '$sessionToken';
                 window.IN_GAMES_SERVER_URL = '${ApiService.baseUrl}';
               """);
             } catch (_) {}
@@ -152,7 +157,10 @@ class _Html5GameScreenState extends State<Html5GameScreen> with WidgetsBindingOb
           try {
             final dynamic json = jsonDecode(message.message);
             if (json is Map<String, dynamic>) {
+              final source = json['source']?.toString() ?? '';
+              final version = (json['version'] as num?)?.toInt() ?? 0;
               final type = json['type']?.toString() ?? '';
+              if (source != 'ingames-game' || version < 1) return;
               if (type == 'EXIT_GAME' || type == 'EXIT_MATCH') {
                 _exitGame();
               } else if (type == 'WALLET_UPDATED' || type == 'ROUND_RESULT') {
