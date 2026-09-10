@@ -29,6 +29,9 @@ services:
       - REDIS_PORT=6379
     ports:
       - "5050:5050"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
       redis:
         condition: service_healthy
